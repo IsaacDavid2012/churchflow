@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  app:
+    image: servesync_app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: servesync_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3030}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-servesync}
+      DB_PASSWORD: ${DB_PASSWORD:-servesync_secret}
+      DB_NAME: ${DB_NAME:-servesync}
+      JWT_SECRET: ${JWT_SECRET:-servesync_jwt_production_secret_key_change_me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-servesync_jwt_refresh_secret_key_change_me}
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - servesync_net
+
+  db:
+    image: postgres:16-alpine
+    container_name: servesync_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-servesync}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-servesync_secret}
+      POSTGRES_DB: ${DB_NAME:-servesync}
+    volumes:
+      - servesync_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-servesync} -d ${DB_NAME:-servesync}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - servesync_net
+
+volumes:
+  servesync_pgdata:
+    name: servesync_pgdata
+
+networks:
+  servesync_net:
+    name: servesync_net

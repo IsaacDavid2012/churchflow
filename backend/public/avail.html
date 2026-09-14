@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#dc2626">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ChurchFlow">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>ChurchFlow — Volunteer Attendance Confirmation</title>
+  <link rel="icon" type="image/png" href="/churchflow-logo.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --card-inner: #f1f5f9;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --primary: #dc2626;
+      --primary-hover: #b91c1c;
+      --primary-light: #fef2f2;
+      --primary-border: #fecaca;
+      --success: #16a34a;
+      --success-hover: #15803d;
+      --success-light: #f0fdf4;
+      --success-border: #bbf7d0;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --danger-light: #fef2f2;
+      --danger-border: #fecaca;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --amber-border: #fde68a;
+      --text: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+      --badge-bg: #f1f5f9;
+      --badge-text: #334155;
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #090d16;
+      --card-bg: #131b2e;
+      --card-inner: #1c2640;
+      --border: #233052;
+      --border-strong: #334155;
+      --primary: #ef4444;
+      --primary-hover: #dc2626;
+      --primary-light: rgba(239, 68, 68, 0.15);
+      --primary-border: rgba(239, 68, 68, 0.35);
+      --success: #10b981;
+      --success-hover: #059669;
+      --success-light: rgba(16, 185, 129, 0.15);
+      --success-border: rgba(16, 185, 129, 0.35);
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --danger-light: rgba(239, 68, 68, 0.15);
+      --danger-border: rgba(239, 68, 68, 0.35);
+      --amber: #f59e0b;
+      --amber-light: rgba(245, 158, 11, 0.15);
+      --amber-border: rgba(245, 158, 11, 0.35);
+      --text: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+      --badge-bg: #1e293b;
+      --badge-text: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 14px 60px 14px;
+      transition: background-color 0.25s, color 0.25s;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 580px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Top Bar with Logo & Theme Switcher */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 2px;
+    }
+
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .logo-img {
+      height: 36px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+
+    .brand-text {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .brand-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+      padding: 2px 7px;
+      border-radius: 9999px;
+      margin-left: 6px;
+    }
+
+    .theme-toggle-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--primary);
+      transform: scale(1.05);
+    }
+
+    /* Service Banner Card */
+    .header-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s;
+    }
+
+    .header-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, #dc2626, #ef4444, #f43f5e);
+    }
+
+    .church-name {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .service-date {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
+
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .meta-pill.highlight {
+      background: var(--primary-light);
+      border-color: var(--primary-border);
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    /* Reshuffle alert notice */
+    .reshuffle-alert {
+      background: var(--amber-light);
+      border: 1px solid var(--amber-border);
+      color: var(--amber);
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    /* Section Instructions Header */
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      margin-bottom: 2px;
+    }
+
+    /* Lineup Cards Container */
+    .lineup-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Individual Position Card */
+    .position-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: all 0.2s;
+    }
+
+    .position-card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .position-card.is-confirmed {
+      border-color: var(--success-border);
+      background: var(--card-bg);
+    }
+
+    .position-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .position-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .position-icon-bubble {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: var(--primary-light);
+      border: 1px solid var(--primary-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      shrink-0: 0;
+    }
+
+    .position-titles {
+      min-width: 0;
+    }
+
+    .position-role-name {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--primary);
+    }
+
+    .musician-assigned-name {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-badge.confirmed {
+      background: var(--success-light);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+    }
+
+    .status-badge.declined {
+      background: var(--danger-light);
+      color: var(--danger);
+      border: 1px solid var(--danger-border);
+    }
+
+    .status-badge.pending {
+      background: var(--amber-light);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+
+    /* Action Buttons within Card */
+    .card-actions-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-confirm {
+      background: var(--success);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+    }
+
+    .btn-confirm:hover {
+      background: var(--success-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-confirm:active {
+      transform: translateY(0);
+    }
+
+    .btn-decline {
+      background: var(--danger);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+    }
+
+    .btn-decline:hover {
+      background: var(--danger-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-decline:active {
+      transform: translateY(0);
+    }
+
+    .btn-disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 14px 22px;
+      border-radius: 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+      z-index: 999;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 90vw;
+      text-align: center;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success { background: #15803d; border: 1px solid #22c55e; }
+    .toast.error { background: #b91c1c; border: 1px solid #ef4444; }
+    .toast.info { background: #1e3a8a; border: 1px solid #3b82f6; }
+
+    .loading-box {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .error-card {
+      background: var(--danger-light);
+      border: 1px solid var(--danger-border);
+      color: var(--danger);
+      padding: 24px;
+      border-radius: 18px;
+      text-align: center;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="container" id="app">
+    <div class="loading-box">
+      <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
+      Loading ChurchFlow service schedule...
+    </div>
+  </div>
+
+  <script>
+    const token = window.location.pathname.split('/').pop();
+    let serviceData = null;
+    let assignmentsList = [];
+    let churchData = null;
+    let activeSubmittingPosId = null;
+    let latestReshuffleMsg = null;
+
+    // Theme switcher logic
+    function getStoredTheme() {
+      return localStorage.getItem('churchflow_theme') || 'light';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('churchflow_theme', theme);
+      const btn = document.getElementById('theme-toggle-icon');
+      if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      setTheme(current === 'light' ? 'dark' : 'light');
+    }
+
+    // Initialize theme
+    setTheme(getStoredTheme());
+
+    const iconMap = {
+      'Worship Leader': '🎤',
+      'Guitar': '🎸',
+      'Second Guitar': '🎸',
+      'Bass': '🎸',
+      'Lead Keyboard': '🎹',
+      'Second Keyboard': '🎹',
+      'Keyboard': '🎹',
+      'Drums': '🥁',
+      'Backup Singer': '🎙️',
+      'Vocals': '🎙️',
+      'Sound (FOH)': '🎚️',
+      'Sound': '🎚️'
+    };
+
+    function getPositionIcon(name) {
+      for (const [key, icon] of Object.entries(iconMap)) {
+        if (name.toLowerCase().includes(key.toLowerCase())) return icon;
+      }
+      return '🎵';
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast show ${type}`;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 4500);
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const clean = typeof dateStr === 'string' ? dateStr.split('T')[0] : '';
+      const d = new Date(clean + 'T00:00:00');
+      if (isNaN(d.getTime())) {
+        const fallback = new Date(dateStr);
+        return isNaN(fallback.getTime()) ? dateStr : fallback.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      }
+      return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch(`/api/public/avail/${token}`);
+        if (!res.ok) {
+          throw new Error(res.status === 404 ? 'Service link is invalid or expired.' : 'Failed to load details.');
+        }
+        const data = await res.json();
+        serviceData = data.service;
+        assignmentsList = data.assignments || [];
+        churchData = data.church;
+        render();
+      } catch (err) {
+        document.getElementById('app').innerHTML = `
+          <div class="error-card">
+            <h2 style="font-size: 20px; margin-bottom: 8px;">⚠️ Link Not Found</h2>
+            <p>${err.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    async function handleConfirm(musicianId, musicianName, positionName, status) {
+      if (!musicianId) {
+        showToast('No volunteer assigned to this position yet.', 'error');
+        return;
+      }
+
+      activeSubmittingPosId = musicianId;
+      render();
+
+      try {
+        const res = await fetch(`/api/public/avail/${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            musician_id: musicianId,
+            status: status
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to submit response.');
+
+        if (data.reShuffle && data.reShuffle.notifications && data.reShuffle.notifications.length > 0) {
+          latestReshuffleMsg = data.reShuffle.notifications[0];
+          showToast(`🔄 ${latestReshuffleMsg}`, 'info');
+        } else {
+          showToast(status === 'available' ? `✅ Attendance Confirmed for ${musicianName}!` : `❌ Marked as Not Available / Declined`, 'success');
+        }
+
+        await loadData();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        activeSubmittingPosId = null;
+        render();
+      }
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+
+      // Group assignments uniquely by position
+      const grouped = {};
+      for (const a of assignmentsList) {
+        const name = a.position_name || 'Position';
+        if (!grouped[name]) {
+          grouped[name] = {
+            position_name: name,
+            musician_id: a.musician_id || null,
+            musician: a.musician_name || null,
+            status: a.status || (a.musician_name ? 'pending' : 'vacant')
+          };
+        } else if (a.musician_name && !grouped[name].musician) {
+          grouped[name].musician_id = a.musician_id;
+          grouped[name].musician = a.musician_name;
+          grouped[name].status = a.status || 'pending';
+        }
+      }
+
+      // Sync Worship Leader
+      if (serviceData && serviceData.worship_leader_name) {
+        if (grouped['Worship Leader']) {
+          grouped['Worship Leader'].musician_id = serviceData.worship_leader_id;
+          grouped['Worship Leader'].musician = serviceData.worship_leader_name;
+          grouped['Worship Leader'].status = 'confirmed';
+        } else {
+          grouped['Worship Leader'] = {
+            position_name: 'Worship Leader',
+            musician_id: serviceData.worship_leader_id,
+            musician: serviceData.worship_leader_name,
+            status: 'confirmed'
+          };
+        }
+      }
+
+      const rows = Object.values(grouped);
+
+      let html = `
+        <!-- Top Bar with Brand & Theme Switcher -->
+        <div class="top-bar">
+          <div class="logo-badge">
+            <img src="/churchflow-logo.png" alt="ChurchFlow" class="logo-img" onerror="this.style.display='none'" />
+            <span class="brand-text">ChurchFlow</span>
+            <span class="brand-tag">Live</span>
+          </div>
+
+          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
+            <span id="theme-toggle-icon">${currentTheme === 'light' ? '🌙' : '☀️'}</span>
+          </button>
+        </div>
+
+        <!-- Service Header Card -->
+        <div class="header-card">
+          <div class="church-name">${churchData?.church_name || 'JESUS MY ROCK CHURCH'}</div>
+          <div class="service-date">${formatDate(serviceData.service_date)}</div>
+          
+          <div class="meta-pills">
+            <span class="meta-pill">⏰ ${serviceData.service_time || '10:00 AM'}</span>
+            ${serviceData.campus_name ? `<span class="meta-pill">📍 ${serviceData.campus_name}</span>` : ''}
+            ${serviceData.theme ? `<span class="meta-pill">📖 ${serviceData.theme}</span>` : ''}
+            ${serviceData.worship_leader_name ? `<span class="meta-pill highlight">🎤 WL: ${serviceData.worship_leader_name}</span>` : ''}
+          </div>
+        </div>
+
+        ${latestReshuffleMsg ? `
+          <div class="reshuffle-alert">
+            <span style="font-size: 18px;">🔄</span>
+            <div>
+              <strong>Auto-Replacement:</strong> ${latestReshuffleMsg}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Lineup Section Header -->
+        <div class="section-title">
+          <span>🎸 Tap Your Position To Confirm Attendance</span>
+        </div>
+
+        <!-- Position Cards List -->
+        <div class="lineup-container">
+          ${rows.map(r => {
+            const icon = getPositionIcon(r.position_name);
+            const isAssigned = Boolean(r.musician && r.musician_id);
+            const isSubmitting = activeSubmittingPosId === r.musician_id;
+            const pStatus = isAssigned ? (r.status || 'pending') : 'vacant';
+            const isConfirmed = pStatus === 'confirmed';
+            const isDeclined = pStatus === 'declined';
+
+            return `
+              <div class="position-card ${isConfirmed ? 'is-confirmed' : ''}">
+                <div class="position-card-header">
+                  <div class="position-info">
+                    <div class="position-icon-bubble">
+                      ${icon}
+                    </div>
+                    <div class="position-titles">
+                      <div class="position-role-name">${r.position_name}</div>
+                      <div class="musician-assigned-name">
+                        ${isAssigned ? r.musician : '<span style="color:var(--text-muted); font-weight:500; font-style:italic;">Vacant / Unassigned</span>'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span class="status-badge ${pStatus}">
+                    ${isConfirmed ? '✓ Confirmed' : isDeclined ? '✕ Declined' : '⏳ Pending'}
+                  </span>
+                </div>
+
+                ${isAssigned ? `
+                  <div class="card-actions-row">
+                    <button 
+                      class="btn-confirm ${isSubmitting ? 'btn-disabled' : ''}" 
+                      onclick="handleConfirm('${r.musician_id}', '${r.musician}', '${r.position_name}', 'available')"
+                    >
+                      ${isSubmitting ? 'Saving...' : (isConfirmed ? '✓ I\'m Playing' : '✅ I\'m Playing')}
+                    </button>
+                    <button 
+                      class="btn-decline ${isSubmitting ? 'btn-disabled' : ''}" 
+                      onclick="handleConfirm('${r.musician_id}', '${r.musician}', '${r.position_name}', 'declined')"
+                    >
+                      ${isSubmitting ? 'Saving...' : (isDeclined ? '✕ Declined' : '❌ Can\'t Make It')}
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      app.innerHTML = html;
+    }
+
+    loadData();
+  </script>
+  <footer style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--text-muted);">
+    <strong style="color: var(--primary);">Jesus My Rock Church</strong> • ChurchFlow
+  </footer>
+</body>
+</html>

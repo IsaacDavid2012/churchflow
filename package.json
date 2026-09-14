@@ -1,0 +1,14 @@
+{
+  "name": "servesync-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ServeSync - Self-Hosted Worship Team Scheduling & Auto-Rostering Tool",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build:frontend": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "npm --prefix backend test"
+  }
+}

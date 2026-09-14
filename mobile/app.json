@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "ServeSync",
+    "slug": "servesync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "servesync",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "art.creativeclicks.servesync"
+    },
+    "android": {
+      "package": "art.creativeclicks.servesync",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "servesync.creativeclicks.art",
+              "pathPrefix": "/avail"
+            },
+            {
+              "scheme": "servesync",
+              "host": "avail"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "servesync-jesus-my-rock"
+      }
+    }
+  }
+}
