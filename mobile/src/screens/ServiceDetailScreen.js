@@ -6,80 +6,115 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
+  Alert,
   Linking,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
 export default function ServiceDetailScreen({ service, onBack, user, isDark = false }) {
-  const [detail, setDetail] = useState(null);
+  const [activeTab, setActiveTab] = useState('lineup'); // 'lineup' | 'runsheet' | 'availability' | 'logs'
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('lineup'); // 'lineup' | 'plan' | 'avail' | 'audit'
-  const [shuffling, setShuffling] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  const [detail, setDetail] = useState(null);
+  const [candidates, setCandidates] = useState([]);
+  const [planItems, setPlanItems] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [worshipLeaders, setWorshipLeaders] = useState([]);
 
   // Modals
-  const [isWlModalOpen, setIsWlModalOpen] = useState(false);
-  const [musicians, setMusicians] = useState([]);
-  const [selectedLeaderId, setSelectedLeaderId] = useState('');
-
-  // Add Plan Item Modal
-  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
-  const [planTitle, setPlanTitle] = useState('');
-  const [planDuration, setPlanDuration] = useState('5');
-  const [planLeader, setPlanLeader] = useState('');
-  const [planKey, setPlanKey] = useState('C');
-  const [planNotes, setPlanNotes] = useState('');
-
-  // Override Modal
-  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [candidates, setCandidates] = useState([]);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isWorshipLeaderModalOpen, setIsWorshipLeaderModalOpen] = useState(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
 
-  const fetchDetail = async () => {
+  // Plan Item Form State
+  const [planTitle, setPlanTitle] = useState('');
+  const [planType, setPlanType] = useState('song');
+  const [planDuration, setPlanDuration] = useState('5');
+  const [planPresenter, setPlanPresenter] = useState('');
+  const [planNotes, setPlanNotes] = useState('');
+  const [savingPlan, setSavingPlan] = useState(false);
+
+  const fetchServiceData = async () => {
     try {
-      const [data, notifs, musList] = await Promise.all([
-        api.getServiceDetail(service.id),
-        api.getNotifications({ limit: 20 }).catch(() => []),
-        api.getMusicians({ active: 'true' }).catch(() => []),
+      setLoading(true);
+      const [svcData, planData, logsData, musiciansData] = await Promise.all([
+        api.getServiceById(service.id),
+        api.getPlanItems(service.id).catch(() => []),
+        api.getAuditLogs(service.id).catch(() => []),
+        api.getMusicians().catch(() => []),
       ]);
-      setDetail(data);
-      setNotifications(notifs || []);
-      setMusicians(musList || []);
-      if (data?.service?.worship_leader_id) {
-        setSelectedLeaderId(data.service.worship_leader_id);
-      }
+
+      setDetail(svcData || service);
+      setPlanItems(planData || []);
+      setAuditLogs(logsData || []);
+      setWorshipLeaders((musiciansData || []).filter((m) => m.primary_instrument === 'Worship Leader' || m.can_lead_worship));
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to load service detail');
+      console.error('Fetch service detail error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDetail();
+    fetchServiceData();
   }, [service.id]);
 
-  const handleAutoShuffle = async () => {
+  const handleOpenAssignModal = async (slot) => {
+    setSelectedSlot(slot);
+    setIsAssignModalOpen(true);
+    try {
+      const cList = await api.getCandidates(service.id, slot.role_name);
+      setCandidates(cList || []);
+    } catch (err) {
+      console.error('Fetch candidates error:', err);
+      setCandidates([]);
+    }
+  };
+
+  const handleAssignCandidate = async (musicianId) => {
+    if (!selectedSlot) return;
+    try {
+      await api.manualAssignSlot(service.id, selectedSlot.id, musicianId);
+      setIsAssignModalOpen(false);
+      fetchServiceData();
+      Alert.alert('Roster Updated', 'Volunteer assigned successfully.');
+    } catch (err) {
+      Alert.alert('Assignment Error', err.response?.data?.error || 'Could not assign volunteer');
+    }
+  };
+
+  const handleSelectWorshipLeader = async (musicianId) => {
+    try {
+      await api.setWorshipLeader(service.id, musicianId);
+      setIsWorshipLeaderModalOpen(false);
+      fetchServiceData();
+      Alert.alert('Worship Leader Updated', 'Leader set and lineup updated.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not update leader');
+    }
+  };
+
+  const handleAutoSchedule = async () => {
     Alert.alert(
-      'Fairness Auto-Roster',
-      'Run 100% conflict-free fairness algorithm. Never-served volunteers are prioritized.',
+      'Auto-Fill Lineup',
+      'Generate smart volunteer rotation based on availability, skill, and attendance history?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Auto-Roster Now',
+          text: 'Generate Lineup',
           onPress: async () => {
-            setShuffling(true);
             try {
-              const res = await api.autoShuffle(service.id, 'auto');
-              Alert.alert('Success', res.message || 'Lineup generated successfully');
-              fetchDetail();
+              setLoading(true);
+              await api.autoSchedule(service.id);
+              fetchServiceData();
+              Alert.alert('Success', 'Lineup roster filled based on fair rotation rules!');
             } catch (err) {
-              Alert.alert('Roster Failed', err.message);
-            } finally {
-              setShuffling(false);
+              Alert.alert('Scheduling Error', err.response?.data?.error || 'Failed to auto-schedule');
+              setLoading(false);
             }
           },
         },
@@ -87,279 +122,296 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     );
   };
 
-  const handleConfirmLineup = async () => {
-    try {
-      await api.confirmLineup(service.id);
-      Alert.alert('Lineup Confirmed', 'All primary assignments are locked in.');
-      fetchDetail();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // Simulate volunteer decline & test auto-promotion
-  const handleSimulateDecline = async (slot) => {
-    if (!slot.primary?.musicianId) return;
-    try {
-      await api.submitPublicAvailability(service.token, slot.primary.musicianId, 'declined');
-      Alert.alert(
-        'Decline Processed',
-        `${slot.primary.name} declined. Backup volunteer was instantly auto-promoted!`
-      );
-      fetchDetail();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // Save Worship Leader
-  const handleSaveWorshipLeader = async () => {
-    try {
-      await api.setWorshipLeader(service.id, selectedLeaderId || null);
-      setIsWlModalOpen(false);
-      fetchDetail();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // Open Override Modal
-  const handleOpenOverride = async (slot) => {
-    setSelectedSlot(slot);
-    try {
-      const data = await api.getCandidates(service.id, slot.positionId);
-      setCandidates(data.candidates || []);
-      setIsOverrideModalOpen(true);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to load candidates');
-    }
-  };
-
-  const handleApplyOverride = async (musicianId) => {
-    if (!selectedSlot) return;
-    try {
-      await api.manualOverride(service.id, selectedSlot.positionId, 'primary', musicianId);
-      setIsOverrideModalOpen(false);
-      fetchDetail();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // Add Plan Item
-  const handleAddPlanItem = async () => {
-    if (!planTitle.trim()) {
-      Alert.alert('Required', 'Item title is required');
-      return;
-    }
-    try {
-      await api.addPlanItem(service.id, {
-        item_type: 'song',
-        title: planTitle,
-        duration_minutes: parseInt(planDuration, 10) || 5,
-        leader: planLeader,
-        song_key: planKey,
-        notes: planNotes,
-      });
-      setIsPlanModalOpen(false);
-      setPlanTitle('');
-      fetchDetail();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  // WhatsApp Share
   const handleShareWhatsApp = () => {
-    const s = detail?.service || service;
-    const url = `https://serve.creativeclicks.art/avail/${s.token}`;
-    const text = `🎸 *ChurchFlow — Jesus My Rock Church*\n📅 *${s.service_date}* • ${s.service_time}\n📖 Theme: ${s.theme || 'Sunday Service'}\n\n👉 *Tap to confirm availability:*\n${url}`;
-    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(text)}`).catch(() => {
-      Alert.alert('WhatsApp Link', `Share link:\n${url}`);
+    const lines = [
+      `⛪ *ChurchFlow Lineup - ${detail?.type || 'Sunday Service'}*`,
+      `📅 *Date:* ${detail?.date} at ${detail?.time || '10:00 AM'}`,
+      `🏛️ *Campus:* ${detail?.campus?.name || 'Main Sanctuary'}`,
+      detail?.theme ? `📖 *Theme:* "${detail.theme}"` : '',
+      `\n👥 *Stage Roster:*`,
+    ];
+
+    detail?.slots?.forEach((s) => {
+      const name = s.musician?.name || 'Unassigned';
+      const statusIcon = s.status === 'confirmed' ? '✅' : s.status === 'declined' ? '❌' : '⏳';
+      lines.push(`• *${s.role_name}:* ${name} ${statusIcon}`);
+    });
+
+    lines.push(`\n🔗 Confirm your serving status: https://serve.creativeclicks.art`);
+
+    const text = encodeURIComponent(lines.filter(Boolean).join('\n'));
+    Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
+      Linking.openURL(`https://api.whatsapp.com/send?text=${text}`);
     });
   };
 
-  const bg = isDark ? '#020617' : '#f8fafc';
-  const cardBg = isDark ? '#0f172a' : '#ffffff';
-  const border = isDark ? '#1e293b' : '#e2e8f0';
-  const textPrimary = isDark ? '#ffffff' : '#0f172a';
-  const textSecondary = isDark ? '#94a3b8' : '#64748b';
-  const inputBg = isDark ? '#1e293b' : '#f1f5f9';
+  const handleAddPlanItem = async () => {
+    if (!planTitle.trim()) {
+      Alert.alert('Missing Title', 'Please enter an item title (e.g. Song name, Sermon).');
+      return;
+    }
+
+    setSavingPlan(true);
+    try {
+      await api.addPlanItem(service.id, {
+        title: planTitle.trim(),
+        item_type: planType,
+        duration_minutes: parseInt(planDuration, 10) || 5,
+        presenter: planPresenter.trim() || undefined,
+        notes: planNotes.trim() || undefined,
+        sequence_order: planItems.length + 1,
+      });
+
+      setIsPlanModalOpen(false);
+      setPlanTitle('');
+      setPlanPresenter('');
+      setPlanNotes('');
+      fetchServiceData();
+      Alert.alert('Item Added', 'Order of service run sheet updated.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Failed to add run sheet item');
+    } finally {
+      setSavingPlan(false);
+    }
+  };
+
+  const colors = {
+    bg: isDark ? '#020617' : '#f8fafc',
+    card: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#1e293b' : '#e2e8f0',
+    text: isDark ? '#ffffff' : '#0f172a',
+    subText: isDark ? '#94a3b8' : '#64748b',
+    primary: '#dc2626',
+    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
+    inputBg: isDark ? '#1e293b' : '#f1f5f9',
+    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+  };
+
+  const getRoleIcon = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r.includes('worship') || r.includes('lead vocal')) return 'mic';
+    if (r.includes('guitar')) return 'musical-note';
+    if (r.includes('keys') || r.includes('piano') || r.includes('synth')) return 'keypad';
+    if (r.includes('drum')) return 'disc';
+    if (r.includes('bass')) return 'pulse';
+    if (r.includes('media') || r.includes('visual') || r.includes('slides')) return 'tv';
+    if (r.includes('sound') || r.includes('audio')) return 'volume-high';
+    return 'person';
+  };
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator size="large" color="#dc2626" />
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.subText }]}>Loading service roster...</Text>
       </View>
     );
   }
 
-  const { service: s = service, lineup = [], planItems = [], availability = {} } = detail || {};
-  const serviceNotifs = notifications.filter(
-    (n) => n.service_id === s.id || (n.service_date && n.service_date === s.service_date)
-  );
+  const confirmedCount = detail?.slots?.filter((s) => s.status === 'confirmed').length || 0;
+  const totalSlots = detail?.slots?.length || 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Top Bar */}
-      <View style={[styles.topBar, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Services</Text>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Top Header App Bar */}
+      <View style={[styles.topBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.topBarTitle, { color: textPrimary }]} numberOfLines={1}>
-          {s.service_date}
-        </Text>
-        <TouchableOpacity onPress={handleShareWhatsApp} style={styles.shareIconBtn}>
-          <Text style={styles.shareIconText}>🔗 Share</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Main Service Info Header Card */}
-      <View style={[styles.serviceHeader, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <Text style={[styles.serviceTheme, { color: textPrimary }]}>
-          {s.theme || 'Sunday Morning Celebration'}
-        </Text>
-        <Text style={[styles.serviceMeta, { color: textSecondary }]}>
-          🕒 {s.service_time} • 📍 {s.campus_name || 'Main Sanctuary'}
-        </Text>
-
-        <View style={styles.wlRow}>
-          <Text style={[styles.wlLabel, { color: textSecondary }]}>
-            🎤 Leader: <Text style={{ color: textPrimary, fontWeight: '800' }}>{s.worship_leader_name || 'Unassigned'}</Text>
+        <View style={styles.topBarCenter}>
+          <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>
+            {detail?.type || 'Service Roster'}
           </Text>
-          <TouchableOpacity
-            style={[styles.wlPickBtn, { backgroundColor: isDark ? '#1e293b' : '#fef2f2' }]}
-            onPress={() => setIsWlModalOpen(true)}
-          >
-            <Text style={styles.wlPickText}>Change</Text>
-          </TouchableOpacity>
+          <Text style={[styles.topBarSub, { color: colors.subText }]}>
+            {detail?.date} • {detail?.time || '10:00 AM'}
+          </Text>
         </View>
 
-        {/* Quick Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.shuffleBtn]}
-            onPress={handleAutoShuffle}
-            disabled={shuffling}
-          >
-            <Text style={styles.actionBtnText}>{shuffling ? 'Shuffling...' : '⚡ Auto-Roster'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.confirmBtn]}
-            onPress={handleConfirmLineup}
-          >
-            <Text style={styles.actionBtnText}>✓ Confirm</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.shareBtn]}
-            onPress={handleShareWhatsApp}
-          >
-            <Text style={styles.actionBtnText}>💬 WhatsApp</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.shareIconBtn} onPress={handleShareWhatsApp}>
+          <Ionicons name="logo-whatsapp" size={22} color="#16a34a" />
+        </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
-      <View style={[styles.tabContainer, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        {[
-          { id: 'lineup', label: `Roster (${lineup.length})` },
-          { id: 'plan', label: `Run Sheet (${planItems.length})` },
-          { id: 'avail', label: `Availability (${availability.available?.length || 0})` },
-          { id: 'audit', label: `Audit Trail` },
-        ].map((t) => (
-          <TouchableOpacity
-            key={t.id}
-            style={[styles.tab, activeTab === t.id && styles.activeTab]}
-            onPress={() => setActiveTab(t.id)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                { color: textSecondary },
-                activeTab === t.id && styles.activeTabText,
-              ]}
-            >
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Segmented Tabs */}
+      <View style={[styles.segmentedBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'lineup' && { borderBottomColor: colors.primary, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab('lineup')}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'lineup' ? colors.primary : colors.subText, fontWeight: activeTab === 'lineup' ? '800' : '600' }]}>
+            Roster ({confirmedCount}/{totalSlots})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'runsheet' && { borderBottomColor: colors.primary, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab('runsheet')}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'runsheet' ? colors.primary : colors.subText, fontWeight: activeTab === 'runsheet' ? '800' : '600' }]}>
+            Run Sheet ({planItems.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'availability' && { borderBottomColor: colors.primary, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab('availability')}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'availability' ? colors.primary : colors.subText, fontWeight: activeTab === 'availability' ? '800' : '600' }]}>
+            Responses
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'logs' && { borderBottomColor: colors.primary, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab('logs')}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'logs' ? colors.primary : colors.subText, fontWeight: activeTab === 'logs' ? '800' : '600' }]}>
+            History
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Tab Contents */}
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 50 }}>
-        {/* TAB 1: Roster */}
+      {/* Tab Content */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* TAB 1: LINEUP / ROSTER */}
         {activeTab === 'lineup' && (
           <View>
-            <View style={styles.tabHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: textPrimary }]}>Stage Lineup & Positions</Text>
-              <Text style={[styles.sectionSub, { color: textSecondary }]}>
-                {lineup.filter((s) => s.primary).length}/{lineup.length} Slots Filled
-              </Text>
+            {/* Service Summary Card */}
+            <View style={[styles.heroSummaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.heroRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.heroTheme, { color: colors.text }]}>
+                    {detail?.theme ? `"${detail.theme}"` : detail?.type}
+                  </Text>
+                  <Text style={[styles.heroCampus, { color: colors.subText }]}>
+                    📍 {detail?.campus?.name || 'Sanctuary Campus'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.autoFillBtn, { backgroundColor: colors.primary }]}
+                  onPress={handleAutoSchedule}
+                >
+                  <Ionicons name="sparkles" size={14} color="#fff" />
+                  <Text style={styles.autoFillBtnText}>Auto-Fill</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Worship Leader Tile */}
+              <TouchableOpacity
+                style={[styles.leaderBanner, { backgroundColor: colors.primaryLight }]}
+                onPress={() => setIsWorshipLeaderModalOpen(true)}
+              >
+                <View style={styles.crownCircle}>
+                  <Text style={{ fontSize: 16 }}>👑</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.leaderTag, { color: colors.primary }]}>Assigned Worship Leader</Text>
+                  <Text style={[styles.leaderName, { color: colors.text }]}>
+                    {detail?.worship_leader?.name || 'Tap to assign Worship Leader'}
+                  </Text>
+                </View>
+                <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
+              </TouchableOpacity>
             </View>
 
-            {lineup.map((slot) => {
-              const hasPrimary = !!slot.primary;
-              const hasBackup = !!slot.backup;
+            {/* Lineup Slots List */}
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>
+              Stage Positions & Ministry Roles
+            </Text>
+
+            {detail?.slots?.map((slot) => {
+              const isConfirmed = slot.status === 'confirmed';
+              const isDeclined = slot.status === 'declined';
+              const hasMusician = !!slot.musician;
+
               return (
                 <View
-                  key={slot.positionId}
-                  style={[styles.slotCard, { backgroundColor: cardBg, borderColor: border }]}
+                  key={slot.id}
+                  style={[
+                    styles.slotCard,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
                 >
-                  <View style={styles.slotHeader}>
-                    <Text style={[styles.positionTitle, { color: textPrimary }]}>{slot.positionName}</Text>
-                    <TouchableOpacity
-                      style={styles.changeSlotBtn}
-                      onPress={() => handleOpenOverride(slot)}
+                  <View style={styles.slotRow}>
+                    {/* Role Icon Circle */}
+                    <View
+                      style={[
+                        styles.roleIconCircle,
+                        {
+                          backgroundColor: isConfirmed
+                            ? '#dcfce7'
+                            : isDeclined
+                            ? '#fee2e2'
+                            : colors.inputBg,
+                        },
+                      ]}
                     >
-                      <Text style={styles.changeSlotText}>Assign</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Primary Row */}
-                  <View style={styles.assignmentBlock}>
-                    <View style={styles.avatarInitial}>
-                      <Text style={styles.avatarText}>
-                        {slot.primary?.name ? slot.primary.name[0] : '?'}
-                      </Text>
+                      <Ionicons
+                        name={getRoleIcon(slot.role_name)}
+                        size={18}
+                        color={isConfirmed ? '#16a34a' : isDeclined ? '#dc2626' : colors.primary}
+                      />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.rowBetween}>
-                        <Text style={[styles.assigneeName, { color: textPrimary }]}>
-                          {slot.primary?.name || 'Vacant Slot'}
+
+                    {/* Volunteer Info */}
+                    <View style={styles.slotInfo}>
+                      <View style={styles.roleTitleRow}>
+                        <Text style={[styles.roleNameText, { color: colors.text }]}>
+                          {slot.role_name}
                         </Text>
-                        <Text
+                        <View
                           style={[
-                            styles.slotRoleTag,
-                            hasPrimary ? styles.tagConfirmed : styles.tagVacant,
+                            styles.statusChip,
+                            isConfirmed
+                              ? styles.statusConfirmed
+                              : isDeclined
+                              ? styles.statusDeclined
+                              : styles.statusPending,
                           ]}
                         >
-                          {slot.primary?.status || 'VACANT'}
-                        </Text>
+                          <Text
+                            style={[
+                              styles.statusChipText,
+                              {
+                                color: isConfirmed
+                                  ? '#15803d'
+                                  : isDeclined
+                                  ? '#b91c1c'
+                                  : '#b45309',
+                              },
+                            ]}
+                          >
+                            {isConfirmed ? '✓ Confirmed' : isDeclined ? '✕ Declined' : '⏳ Pending'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={[styles.serveHistory, { color: textSecondary }]}>
-                        {slot.primary?.lastServedDate
-                          ? `Last served: ${slot.primary.lastServedDate}`
-                          : '⚡ Never served (Highest priority)'}
-                      </Text>
-                    </View>
-                  </View>
 
-                  {/* Backup / Decline actions */}
-                  <View style={[styles.slotActionsRow, { borderTopColor: border }]}>
-                    <Text style={[styles.backupText, { color: textSecondary }]}>
-                      Backup: <Text style={{ color: textPrimary, fontWeight: '600' }}>{slot.backup?.name || 'Auto-fallback'}</Text>
-                    </Text>
-
-                    {hasPrimary && (
-                      <TouchableOpacity
-                        style={styles.declineSimBtn}
-                        onPress={() => handleSimulateDecline(slot)}
+                      <Text
+                        style={[
+                          styles.volunteerNameText,
+                          { color: hasMusician ? colors.text : colors.subText },
+                        ]}
                       >
-                        <Text style={styles.declineSimText}>✕ Simulate Decline</Text>
-                      </TouchableOpacity>
-                    )}
+                        {hasMusician ? slot.musician.name : 'Open Position (Not filled)'}
+                      </Text>
+
+                      {hasMusician && slot.musician.phone ? (
+                        <Text style={[styles.volunteerContact, { color: colors.subText }]}>
+                          📞 {slot.musician.phone}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* Swap / Assign Action */}
+                    <TouchableOpacity
+                      style={[styles.assignBtn, { borderColor: colors.border }]}
+                      onPress={() => handleOpenAssignModal(slot)}
+                    >
+                      <Text style={[styles.assignBtnText, { color: colors.text }]}>
+                        {hasMusician ? 'Swap' : '+ Assign'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               );
@@ -367,53 +419,57 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           </View>
         )}
 
-        {/* TAB 2: Order of Service Plan */}
-        {activeTab === 'plan' && (
+        {/* TAB 2: ORDER OF SERVICE RUN SHEET */}
+        {activeTab === 'runsheet' && (
           <View>
-            <View style={styles.tabHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: textPrimary }]}>Order of Service Run Sheet</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionHeading, { color: colors.text }]}>
+                Service Flow & Run Sheet
+              </Text>
               <TouchableOpacity
-                style={styles.addItemBtn}
+                style={[styles.miniActionBtn, { backgroundColor: colors.primary }]}
                 onPress={() => setIsPlanModalOpen(true)}
               >
-                <Text style={styles.addItemBtnText}>+ Add Item</Text>
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.miniActionBtnText}>Add Item</Text>
               </TouchableOpacity>
             </View>
 
             {planItems.length === 0 ? (
-              <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: border }]}>
-                <Text style={[styles.emptySub, { color: textSecondary }]}>
-                  No items in run sheet yet. Tap "+ Add Item" above.
+              <View style={styles.emptyState}>
+                <Ionicons name="list-outline" size={40} color={colors.subText} />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No Run Sheet Items</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
+                  Add songs, prayers, scripture readings, and sermon segments.
                 </Text>
               </View>
             ) : (
               planItems.map((item, idx) => (
                 <View
-                  key={item.id}
-                  style={[styles.planCard, { backgroundColor: cardBg, borderColor: border }]}
+                  key={item.id || idx}
+                  style={[styles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
-                  <View style={styles.planNumBadge}>
-                    <Text style={styles.planNumText}>{idx + 1}</Text>
+                  <View style={[styles.stepNumberBadge, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.stepNumberText, { color: colors.primary }]}>{idx + 1}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.rowBetween}>
-                      <Text style={[styles.planItemTitle, { color: textPrimary }]}>{item.title}</Text>
-                      <Text style={styles.planDuration}>{item.duration_minutes} min</Text>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={styles.itemHeaderRow}>
+                      <Text style={[styles.itemTitleText, { color: colors.text }]}>{item.title}</Text>
+                      <Text style={[styles.durationBadge, { backgroundColor: colors.badgeBg, color: colors.subText }]}>
+                        ⏱️ {item.duration_minutes || 5} min
+                      </Text>
                     </View>
-                    <View style={styles.planBadgeRow}>
-                      <Text style={styles.planCategoryTag}>{item.item_type?.toUpperCase()}</Text>
-                      {item.song_key && (
-                        <Text style={styles.planKeyTag}>Key: {item.song_key}</Text>
-                      )}
-                      {item.leader && (
-                        <Text style={[styles.planLeaderText, { color: textSecondary }]}>
-                          Leader: {item.leader}
-                        </Text>
-                      )}
-                    </View>
+                    <Text style={[styles.itemTypeTag, { color: colors.primary }]}>
+                      {(item.item_type || 'segment').toUpperCase()}
+                    </Text>
+                    {item.presenter ? (
+                      <Text style={[styles.itemPresenter, { color: colors.subText }]}>
+                        Lead: {item.presenter}
+                      </Text>
+                    ) : null}
                     {item.notes ? (
-                      <Text style={[styles.planNotesText, { color: textSecondary }]}>
-                        "{item.notes}"
+                      <Text style={[styles.itemNotes, { color: colors.subText }]}>
+                        {item.notes}
                       </Text>
                     ) : null}
                   </View>
@@ -423,66 +479,104 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           </View>
         )}
 
-        {/* TAB 3: Availability */}
-        {activeTab === 'avail' && (
+        {/* TAB 3: RESPONSES & AVAILABILITY */}
+        {activeTab === 'availability' && (
           <View>
-            <Text style={[styles.sectionTitle, { color: textPrimary, marginBottom: 12 }]}>
-              Team Availability Responses
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>
+              Volunteer Availability Responses
             </Text>
 
-            <View style={[styles.availCard, { backgroundColor: cardBg, borderColor: border }]}>
-              <Text style={styles.availSectionHeader}>✓ AVAILABLE ({availability.available?.length || 0})</Text>
-              {availability.available?.map((m) => (
-                <View key={m.musician_id} style={[styles.availItem, { borderBottomColor: border }]}>
-                  <Text style={[styles.availPersonName, { color: textPrimary }]}>{m.name}</Text>
-                  <Text style={[styles.availRolesTag, { color: textSecondary }]}>
-                    {m.roles?.join(', ')}
-                  </Text>
-                </View>
-              ))}
+            <View style={styles.statsSummaryGrid}>
+              <View style={[styles.statBox, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                <Text style={[styles.statBoxNum, { color: '#15803d' }]}>{confirmedCount}</Text>
+                <Text style={[styles.statBoxLabel, { color: '#15803d' }]}>Confirmed</Text>
+              </View>
+              <View style={[styles.statBox, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}>
+                <Text style={[styles.statBoxNum, { color: '#b45309' }]}>
+                  {totalSlots - confirmedCount}
+                </Text>
+                <Text style={[styles.statBoxLabel, { color: '#b45309' }]}>Pending</Text>
+              </View>
             </View>
 
-            <View style={[styles.availCard, { backgroundColor: cardBg, borderColor: border, marginTop: 14 }]}>
-              <Text style={[styles.availSectionHeader, { color: '#dc2626' }]}>
-                ✕ DECLINED ({availability.declined?.length || 0})
-              </Text>
-              {availability.declined?.map((m) => (
-                <View key={m.musician_id} style={[styles.availItem, { borderBottomColor: border }]}>
-                  <Text style={[styles.availPersonName, { color: textPrimary }]}>{m.name}</Text>
-                  <Text style={[styles.availRolesTag, { color: textSecondary }]}>
-                    Auto-promoted backup
+            {detail?.slots?.map((slot) => (
+              <View
+                key={slot.id}
+                style={[styles.availRowCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <View style={styles.availAvatar}>
+                  <Text style={styles.availAvatarText}>
+                    {(slot.musician?.name || 'U').slice(0, 2).toUpperCase()}
                   </Text>
                 </View>
-              ))}
-            </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.availName, { color: colors.text }]}>
+                    {slot.musician?.name || 'Open Position'}
+                  </Text>
+                  <Text style={[styles.availRole, { color: colors.subText }]}>
+                    Role: {slot.role_name}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusChip,
+                    slot.status === 'confirmed'
+                      ? styles.statusConfirmed
+                      : slot.status === 'declined'
+                      ? styles.statusDeclined
+                      : styles.statusPending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusChipText,
+                      {
+                        color: slot.status === 'confirmed'
+                          ? '#15803d'
+                          : slot.status === 'declined'
+                          ? '#b91c1c'
+                          : '#b45309',
+                      },
+                    ]}
+                  >
+                    {slot.status === 'confirmed' ? 'Accepted' : slot.status === 'declined' ? 'Declined' : 'No Reply'}
+                  </Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
-        {/* TAB 4: Audit Logs */}
-        {activeTab === 'audit' && (
+        {/* TAB 4: AUDIT LOGS / HISTORY */}
+        {activeTab === 'logs' && (
           <View>
-            <Text style={[styles.sectionTitle, { color: textPrimary, marginBottom: 12 }]}>
-              Audit Trail & Event Feed
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>
+              Service Audit Trail & Activity
             </Text>
-            {serviceNotifs.length === 0 ? (
-              <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: border }]}>
-                <Text style={[styles.emptySub, { color: textSecondary }]}>
-                  No events logged for this service yet.
-                </Text>
+
+            {auditLogs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="time-outline" size={40} color={colors.subText} />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity Recorded</Text>
               </View>
             ) : (
-              serviceNotifs.map((n) => (
+              auditLogs.map((log, index) => (
                 <View
-                  key={n.id}
-                  style={[styles.auditCard, { backgroundColor: cardBg, borderColor: border }]}
+                  key={log.id || index}
+                  style={[styles.logRow, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.auditTypeTag}>{n.type?.toUpperCase()}</Text>
-                    <Text style={[styles.auditTime, { color: textSecondary }]}>
-                      {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <Ionicons name="information-circle" size={18} color={colors.primary} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.logActionText, { color: colors.text }]}>
+                      {log.action || 'Roster modified'}
+                    </Text>
+                    <Text style={[styles.logDetailsText, { color: colors.subText }]}>
+                      {log.details || log.notes}
+                    </Text>
+                    <Text style={[styles.logTimestamp, { color: colors.subText }]}>
+                      {new Date(log.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </View>
-                  <Text style={[styles.auditMsg, { color: textPrimary }]}>{n.message}</Text>
                 </View>
               ))
             )}
@@ -490,70 +584,73 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
         )}
       </ScrollView>
 
-      {/* Worship Leader Picker Modal */}
-      <Modal visible={isWlModalOpen} animationType="slide" transparent>
+      {/* Candidate / Swap Volunteer Modal */}
+      <Modal visible={isAssignModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>Pick Worship Leader</Text>
-              <TouchableOpacity onPress={() => setIsWlModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Assign {selectedSlot?.role_name}
+              </Text>
+              <TouchableOpacity onPress={() => setIsAssignModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody}>
-              {musicians.map((m) => (
-                <TouchableOpacity
-                  key={m.id}
-                  style={[
-                    styles.candidateRow,
-                    { borderBottomColor: border },
-                    selectedLeaderId === m.id && styles.candidateRowSelected,
-                  ]}
-                  onPress={() => setSelectedLeaderId(m.id)}
-                >
-                  <Text style={[styles.candidateName, { color: textPrimary }]}>{m.name}</Text>
-                  <Text style={[styles.candidateRoles, { color: textSecondary }]}>
-                    {m.roles?.join(', ')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={styles.submitBtn}
-                onPress={handleSaveWorshipLeader}
-              >
-                <Text style={styles.submitBtnText}>Save Worship Leader</Text>
-              </TouchableOpacity>
+
+            <ScrollView style={{ maxHeight: 340 }}>
+              {candidates.length === 0 ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: colors.subText }}>No candidates available for this role.</Text>
+                </View>
+              ) : (
+                candidates.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.candidateRow, { borderColor: colors.border }]}
+                    onPress={() => handleAssignCandidate(c.id)}
+                  >
+                    <View style={styles.candAvatar}>
+                      <Text style={styles.candAvatarText}>{(c.name || 'U').slice(0, 2).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={[styles.candName, { color: colors.text }]}>{c.name}</Text>
+                      <Text style={[styles.candSub, { color: colors.subText }]}>
+                        {c.primary_instrument || 'Musician'} • {c.serving_status || 'Available'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.subText} />
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Override Slot Modal */}
-      <Modal visible={isOverrideModalOpen} animationType="slide" transparent>
+      {/* Worship Leader Picker Modal */}
+      <Modal visible={isWorshipLeaderModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>
-                Assign: {selectedSlot?.positionName}
-              </Text>
-              <TouchableOpacity onPress={() => setIsOverrideModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Worship Leader</Text>
+              <TouchableOpacity onPress={() => setIsWorshipLeaderModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody}>
-              {candidates.map((c) => (
+
+            <ScrollView style={{ maxHeight: 320 }}>
+              {worshipLeaders.map((wl) => (
                 <TouchableOpacity
-                  key={c.id}
-                  style={[styles.candidateRow, { borderBottomColor: border }]}
-                  onPress={() => handleApplyOverride(c.id)}
+                  key={wl.id}
+                  style={[styles.candidateRow, { borderColor: colors.border }]}
+                  onPress={() => handleSelectWorshipLeader(wl.id)}
                 >
-                  <View>
-                    <Text style={[styles.candidateName, { color: textPrimary }]}>{c.name}</Text>
-                    <Text style={[styles.candidateRoles, { color: textSecondary }]}>
-                      {c.availability_status ? `Status: ${c.availability_status}` : 'Qualified volunteer'}
-                    </Text>
+                  <Text style={{ fontSize: 18, marginRight: 10 }}>👑</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.candName, { color: colors.text }]}>{wl.name}</Text>
+                    <Text style={[styles.candSub, { color: colors.subText }]}>{wl.primary_instrument}</Text>
                   </View>
-                  <Text style={styles.assignActionText}>Assign →</Text>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -564,53 +661,93 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       {/* Add Plan Item Modal */}
       <Modal visible={isPlanModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>Add Order of Service Item</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Run Sheet Item</Text>
               <TouchableOpacity onPress={() => setIsPlanModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody}>
-              <Text style={[styles.formLabel, { color: textPrimary }]}>TITLE / SONG NAME *</Text>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Item Title *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={planTitle}
                 onChangeText={setPlanTitle}
-                placeholder="e.g. Firm Foundation (He Won't)"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Song: Way Maker"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>DURATION (MINUTES)</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Item Type</Text>
+              <View style={styles.pillsWrap}>
+                {['song', 'sermon', 'welcome', 'prayer', 'announcement'].map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.choicePill,
+                      {
+                        backgroundColor: planType === t ? colors.primaryLight : colors.inputBg,
+                        borderColor: planType === t ? colors.primary : colors.border,
+                      },
+                    ]}
+                    onPress={() => setPlanType(t)}
+                  >
+                    <Text style={[styles.choicePillText, { color: planType === t ? colors.primary : colors.text }]}>
+                      {t.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Duration (Minutes)</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={planDuration}
                 onChangeText={setPlanDuration}
                 keyboardType="numeric"
+                placeholder="5"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>LEADER / SPEAKER</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Presenter / Leader</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={planLeader}
-                onChangeText={setPlanLeader}
-                placeholder="e.g. Marcus Reed"
-                placeholderTextColor="#94a3b8"
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={planPresenter}
+                onChangeText={setPlanPresenter}
+                placeholder="e.g. Pastor Marcus"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>KEY</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Notes</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={planKey}
-                onChangeText={setPlanKey}
-                placeholder="e.g. Bb or G"
-                placeholderTextColor="#94a3b8"
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={planNotes}
+                onChangeText={setPlanNotes}
+                placeholder="e.g. Key of G, transition directly into chorus"
+                placeholderTextColor={colors.subText}
               />
-
-              <TouchableOpacity style={styles.submitBtn} onPress={handleAddPlanItem}>
-                <Text style={styles.submitBtnText}>Add to Run Sheet</Text>
-              </TouchableOpacity>
             </ScrollView>
+
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsPlanModalOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary }]}
+                onPress={handleAddPlanItem}
+                disabled={savingPlan}
+              >
+                {savingPlan ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Add Item</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -622,170 +759,367 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+  },
   topBar: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
   },
-  backButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+  backBtn: {
+    padding: 6,
   },
-  backButtonText: {
-    color: '#dc2626',
-    fontSize: 14,
-    fontWeight: '800',
+  topBarCenter: {
+    flex: 1,
+    marginLeft: 8,
   },
   topBarTitle: {
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  topBarSub: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   shareIconBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: '#dcfce7',
-    borderRadius: 8,
+    padding: 8,
   },
-  shareIconText: {
-    color: '#16a34a',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  serviceHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  serviceTheme: {
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  serviceMeta: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  wlRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingVertical: 6,
-  },
-  wlLabel: {
-    fontSize: 12,
-  },
-  wlPickBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  wlPickText: {
-    color: '#dc2626',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  shuffleBtn: {
-    backgroundColor: '#dc2626',
-  },
-  confirmBtn: {
-    backgroundColor: '#16a34a',
-  },
-  shareBtn: {
-    backgroundColor: '#059669',
-  },
-  actionBtnText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  tabContainer: {
+  segmentedBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
   },
-  tab: {
+  segmentTab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#dc2626',
+  segmentText: {
+    fontSize: 12,
   },
-  tabText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  activeTabText: {
-    color: '#dc2626',
-    fontWeight: '900',
-  },
-  content: {
-    flex: 1,
+  scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
-  tabHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  sectionSub: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  slotCard: {
+  heroSummaryCard: {
     borderRadius: 16,
     borderWidth: 1,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  slotHeader: {
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroTheme: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  heroCampus: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  autoFillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  autoFillBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  leaderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  crownCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaderTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  leaderName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  positionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  changeSlotBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 6,
-  },
-  changeSlotText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  assignmentBlock: {
+  miniActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  avatarInitial: {
+  miniActionBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  slotCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+  },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  roleIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  roleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 6,
+  },
+  roleNameText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  statusChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  statusConfirmed: {
+    backgroundColor: '#dcfce7',
+  },
+  statusDeclined: {
+    backgroundColor: '#fee2e2',
+  },
+  statusPending: {
+    backgroundColor: '#fef3c7',
+  },
+  statusChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  volunteerNameText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  volunteerContact: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  assignBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  assignBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  timelineCard: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  stepNumberBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  itemHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  itemTitleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  durationBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  itemTypeTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  itemPresenter: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  itemNotes: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  statsSummaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  statBox: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  statBoxNum: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  statBoxLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  availRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  availAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  availAvatarText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#dc2626',
+  },
+  availName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  availRole: {
+    fontSize: 11,
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  logActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  logDetailsText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  logTimestamp: {
+    fontSize: 10,
+    marginTop: 4,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  candidateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  candAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -793,277 +1127,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    color: '#dc2626',
-    fontWeight: '900',
-    fontSize: 14,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  assigneeName: {
-    fontSize: 14,
+  candAvatarText: {
+    fontSize: 12,
     fontWeight: '800',
-  },
-  slotRoleTag: {
-    fontSize: 9,
-    fontWeight: '900',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  tagConfirmed: {
-    backgroundColor: '#dcfce7',
-    color: '#16a34a',
-  },
-  tagVacant: {
-    backgroundColor: '#fee2e2',
     color: '#dc2626',
   },
-  serveHistory: {
-    fontSize: 11,
-    marginTop: 2,
+  candName: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  slotActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
+  candSub: {
+    fontSize: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
     marginTop: 10,
-    paddingTop: 8,
   },
-  backupText: {
-    fontSize: 11,
-  },
-  declineSimBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-    borderWidth: 1,
-    borderRadius: 6,
-  },
-  declineSimText: {
-    color: '#dc2626',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  addItemBtn: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  input: {
+    height: 42,
     borderRadius: 8,
-  },
-  addItemBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  planCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 10,
-    gap: 10,
-  },
-  planNumBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#dc2626',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  planNumText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  planItemTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  planDuration: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#dc2626',
-  },
-  planBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-  },
-  planCategoryTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 4,
-    color: '#475569',
-  },
-  planKeyTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    borderRadius: 4,
-  },
-  planLeaderText: {
-    fontSize: 11,
-  },
-  planNotesText: {
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  availCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-  },
-  availSectionHeader: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#16a34a',
-    marginBottom: 8,
-  },
-  availItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  availPersonName: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  availRolesTag: {
-    fontSize: 11,
-  },
-  auditCard: {
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  auditTypeTag: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#dc2626',
-    backgroundColor: '#fee2e2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  auditTime: {
-    fontSize: 10,
-  },
-  auditMsg: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  emptyCard: {
-    padding: 24,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  emptySub: {
-    fontSize: 12,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    maxHeight: '80%',
-    paddingBottom: 30,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  closeBtn: {
-    fontSize: 18,
-    color: '#94a3b8',
-    padding: 4,
-  },
-  modalBody: {
-    padding: 16,
-  },
-  formLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-    marginTop: 8,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  pillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  choicePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  choicePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 13,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   submitBtn: {
-    backgroundColor: '#dc2626',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   submitBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  candidateRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  candidateRowSelected: {
-    backgroundColor: '#fee2e2',
-  },
-  candidateName: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  candidateRoles: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  assignActionText: {
-    color: '#dc2626',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

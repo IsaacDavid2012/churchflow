@@ -11,7 +11,9 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
 const SERVICE_TYPES = [
@@ -20,7 +22,7 @@ const SERVICE_TYPES = [
   'Midweek Encounter & Prayer',
   'Youth Revolution (Friday)',
   'Night of Worship & Prophetic',
-  'Special Holiday Gathering',
+  'Special Gathering',
 ];
 
 export default function ServicesScreen({ onSelectService, user, isDark = false }) {
@@ -69,13 +71,13 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   };
 
   const handleOpenCreateModal = () => {
-    // Default next Sunday
-    const d = new Date();
-    d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7));
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    setServiceDate(`${yyyy}-${mm}-${dd}`);
+    const nextSun = new Date();
+    const dayOfWeek = nextSun.getDay();
+    const daysUntilNextSunday = (7 - dayOfWeek) % 7 || 7;
+    nextSun.setDate(nextSun.getDate() + daysUntilNextSunday);
+    const dateStr = nextSun.toISOString().split('T')[0];
+
+    setServiceDate(dateStr);
     setServiceTime('10:00 AM');
     setServiceType('Sunday Morning Celebration');
     setTheme('');
@@ -85,125 +87,122 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
 
   const handleCreateService = async () => {
     if (!serviceDate) {
-      Alert.alert('Required', 'Please specify a service date');
+      Alert.alert('Missing Date', 'Please specify a service date (YYYY-MM-DD)');
       return;
     }
 
     setCreating(true);
     try {
-      const newService = await api.createService({
-        service_date: serviceDate,
-        service_time: serviceTime,
-        service_type: serviceType,
-        campus_id: campusId || null,
-        theme,
-        notes,
-        deadline_hours_before: 48,
+      await api.createService({
+        date: serviceDate,
+        time: serviceTime,
+        type: serviceType,
+        theme: theme.trim() || undefined,
+        notes: notes.trim() || undefined,
+        campus_id: campusId || undefined,
       });
+
       setIsModalOpen(false);
-      await fetchServices();
-      if (newService?.id) {
-        onSelectService(newService);
-      }
+      fetchServices();
+      Alert.alert('Success', 'Service scheduled successfully!');
     } catch (err) {
-      Alert.alert('Create Error', err.message || 'Failed to create service');
+      console.error('Create service failed:', err);
+      Alert.alert('Error', err.response?.data?.error || 'Failed to create service');
     } finally {
       setCreating(false);
     }
   };
 
-  const bg = isDark ? '#020617' : '#f8fafc';
-  const cardBg = isDark ? '#0f172a' : '#ffffff';
-  const border = isDark ? '#1e293b' : '#e2e8f0';
-  const textPrimary = isDark ? '#ffffff' : '#0f172a';
-  const textSecondary = isDark ? '#94a3b8' : '#64748b';
-  const inputBg = isDark ? '#1e293b' : '#f1f5f9';
+  const colors = {
+    bg: isDark ? '#020617' : '#f8fafc',
+    card: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#1e293b' : '#e2e8f0',
+    text: isDark ? '#ffffff' : '#0f172a',
+    subText: isDark ? '#94a3b8' : '#64748b',
+    primary: '#dc2626',
+    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
+    inputBg: isDark ? '#1e293b' : '#f1f5f9',
+    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+    cardBorder: isDark ? '#1e293b' : '#e2e8f0',
+  };
 
-  const renderServiceItem = ({ item }) => {
-    const isConfirmed = item.status === 'confirmed';
-    const isRostered = item.status === 'rostered';
+  const parseDateBox = (dateStr) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return { day: '15', month: 'SEP', weekday: 'SUN' };
+      const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+      const day = d.getDate();
+      const weekday = d.toLocaleString('en-US', { weekday: 'short' }).toUpperCase();
+      return { day, month, weekday };
+    } catch {
+      return { day: '15', month: 'SEP', weekday: 'SUN' };
+    }
+  };
 
-    // Parse date for calendar badge
-    const parts = (item.service_date || '').split('-');
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const month = parts[1] ? monthNames[parseInt(parts[1], 10) - 1] : 'SUN';
-    const day = parts[2] || '01';
+  const renderServiceCard = ({ item }) => {
+    const { day, month, weekday } = parseDateBox(item.date);
+    const slotsCount = item.slots?.length || 0;
+    const filledCount = item.slots?.filter((s) => s.status === 'confirmed' || s.musician_id).length || 0;
+    const isFullyFilled = slotsCount > 0 && filledCount >= slotsCount;
 
     return (
       <TouchableOpacity
-        style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}
-        onPress={() => onSelectService(item)}
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
         activeOpacity={0.7}
+        onPress={() => onSelectService(item)}
       >
-        <View style={styles.cardMainRow}>
-          {/* Calendar date badge */}
-          <View style={[styles.calendarBadge, { backgroundColor: isDark ? '#1e293b' : '#fef2f2' }]}>
-            <Text style={styles.calMonth}>{month}</Text>
-            <Text style={[styles.calDay, { color: textPrimary }]}>{day}</Text>
+        <View style={styles.cardHeader}>
+          {/* Calendar Badge */}
+          <View style={[styles.calendarBox, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.calWeekday, { color: colors.primary }]}>{weekday}</Text>
+            <Text style={[styles.calDay, { color: colors.primary }]}>{day}</Text>
+            <Text style={[styles.calMonth, { color: colors.primary }]}>{month}</Text>
           </View>
 
-          {/* Info */}
-          <View style={styles.cardInfo}>
-            <View style={styles.topMeta}>
-              <Text style={[styles.typeText, { color: textSecondary }]}>
-                {item.service_type || 'Sunday Service'}
+          {/* Main Info */}
+          <View style={styles.cardMainInfo}>
+            <View style={styles.typeBadgeRow}>
+              <Text style={[styles.campusBadge, { backgroundColor: colors.badgeBg, color: colors.subText }]}>
+                {item.campus?.name || 'Main Sanctuary'}
               </Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  isConfirmed
-                    ? styles.badgeConfirmed
-                    : isRostered
-                    ? styles.badgeRostered
-                    : styles.badgeDraft,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    isConfirmed
-                      ? styles.textConfirmed
-                      : isRostered
-                      ? styles.textRostered
-                      : styles.textDraft,
-                  ]}
-                >
-                  {item.status ? item.status.toUpperCase() : 'DRAFT'}
-                </Text>
-              </View>
+              <Text style={[styles.timeBadge, { color: colors.subText }]}>
+                🕒 {item.time || '10:00 AM'}
+              </Text>
             </View>
 
-            <Text style={[styles.themeText, { color: textPrimary }]} numberOfLines={1}>
-              {item.theme || 'Sunday Morning Celebration'}
+            <Text style={[styles.serviceTitle, { color: colors.text }]} numberOfLines={1}>
+              {item.type || 'Sunday Service'}
             </Text>
 
-            <Text style={[styles.metaDetail, { color: textSecondary }]}>
-              🕒 {item.service_time} • 📍 {item.campus_name || 'Main Sanctuary'}
-            </Text>
+            {item.theme ? (
+              <Text style={[styles.serviceTheme, { color: colors.primary }]} numberOfLines={1}>
+                "{item.theme}"
+              </Text>
+            ) : null}
 
-            <Text style={[styles.leaderText, { color: textSecondary }]}>
-              🎤 Leader: <Text style={{ color: textPrimary, fontWeight: '700' }}>{item.worship_leader_name || 'TBD'}</Text>
-            </Text>
-          </View>
-        </View>
+            {/* Lineup Capacity Bar */}
+            <View style={styles.capacityRow}>
+              <View style={[styles.slotPill, isFullyFilled ? styles.slotPillFilled : styles.slotPillPartial]}>
+                <Ionicons
+                  name={isFullyFilled ? 'checkmark-circle' : 'time'}
+                  size={12}
+                  color={isFullyFilled ? '#15803d' : '#b45309'}
+                />
+                <Text
+                  style={[
+                    styles.slotPillText,
+                    { color: isFullyFilled ? '#15803d' : '#b45309' },
+                  ]}
+                >
+                  {filledCount}/{slotsCount || 9} Roster
+                </Text>
+              </View>
 
-        {/* Stats footer */}
-        <View style={[styles.statsRow, { borderTopColor: border }]}>
-          <View style={styles.statCol}>
-            <Text style={[styles.statVal, { color: textPrimary }]}>{item.total_assignments_count || 0}</Text>
-            <Text style={[styles.statLbl, { color: textSecondary }]}>Roster Slots</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Text style={[styles.statVal, { color: '#16a34a' }]}>{item.available_count || 0}</Text>
-            <Text style={[styles.statLbl, { color: textSecondary }]}>Available</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Text style={[styles.statVal, { color: '#dc2626' }]}>{item.declined_count || 0}</Text>
-            <Text style={[styles.statLbl, { color: textSecondary }]}>Declined</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Text style={[styles.statVal, { color: textPrimary }]}>{item.plan_items_count || 0}</Text>
-            <Text style={[styles.statLbl, { color: textSecondary }]}>Run Sheet</Text>
+              <View style={styles.chevronWrap}>
+                <Text style={[styles.openDetailText, { color: colors.subText }]}>Details</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.subText} />
+              </View>
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -211,130 +210,170 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header bar */}
-      <View style={[styles.headerBar, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: textPrimary }]}>Services & Plans</Text>
-          <Text style={[styles.headerSub, { color: textSecondary }]}>
-            Sunday Worship Rosters & Run Sheets
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.createBtn} onPress={handleOpenCreateModal} activeOpacity={0.8}>
-          <Text style={styles.createBtnText}>+ Plan Service</Text>
-        </TouchableOpacity>
-      </View>
-
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Services List */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#dc2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.subText }]}>Loading services...</Text>
         </View>
       ) : (
         <FlatList
           data={services}
-          keyExtractor={(item) => item.id}
-          renderItem={renderServiceItem}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#dc2626" />
-          }
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderServiceCard}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyIcon]}>📅</Text>
-              <Text style={[styles.emptyTitle, { color: textPrimary }]}>No service plans yet</Text>
-              <Text style={[styles.emptySub, { color: textSecondary }]}>
-                Tap "+ Plan Service" above to schedule Sunday worship.
+            <View style={styles.emptyState}>
+              <Ionicons name="calendar-outline" size={48} color={colors.subText} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Services Scheduled</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
+                Tap the + button below to plan your next worship service.
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Create Service Modal */}
+      {/* Floating Action Button (FAB) */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        activeOpacity={0.85}
+        onPress={handleOpenCreateModal}
+      >
+        <Ionicons name="add" size={26} color="#ffffff" />
+        <Text style={styles.fabText}>Plan Service</Text>
+      </TouchableOpacity>
+
+      {/* Plan Service Modal Bottom Sheet */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>Create New Church Service</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Ionicons name="calendar" size={20} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Plan New Service</Text>
+              </View>
               <TouchableOpacity onPress={() => setIsModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={[styles.formLabel, { color: textPrimary }]}>SERVICE DATE (YYYY-MM-DD) *</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Date (YYYY-MM-DD) *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={serviceDate}
                 onChangeText={setServiceDate}
                 placeholder="2026-09-20"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>SERVICE TIME</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Time *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={serviceTime}
                 onChangeText={setServiceTime}
                 placeholder="10:00 AM"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>SERVICE TYPE</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeSelector}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Type *</Text>
+              <View style={styles.typesPillsWrap}>
                 {SERVICE_TYPES.map((t) => (
                   <TouchableOpacity
                     key={t}
                     style={[
-                      styles.typeChip,
-                      { borderColor: border, backgroundColor: isDark ? '#1e293b' : '#f1f5f9' },
-                      serviceType === t && styles.typeChipActive,
+                      styles.typeChoice,
+                      {
+                        borderColor: serviceType === t ? colors.primary : colors.border,
+                        backgroundColor: serviceType === t ? colors.primaryLight : colors.inputBg,
+                      },
                     ]}
                     onPress={() => setServiceType(t)}
                   >
                     <Text
                       style={[
-                        styles.typeChipText,
-                        { color: textSecondary },
-                        serviceType === t && styles.typeChipTextActive,
+                        styles.typeChoiceText,
+                        { color: serviceType === t ? colors.primary : colors.text },
                       ]}
                     >
                       {t}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>THEME / SERMON TITLE</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Sermon / Service Theme</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={theme}
                 onChangeText={setTheme}
-                placeholder="e.g. Firm Foundation: Standing Unshaken"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Unshakable Faith"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>NOTES & DETAILS</Text>
+              {campuses.length > 0 ? (
+                <>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Campus</Text>
+                  <View style={styles.typesPillsWrap}>
+                    {campuses.map((c) => (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[
+                          styles.typeChoice,
+                          {
+                            borderColor: campusId === c.id ? colors.primary : colors.border,
+                            backgroundColor: campusId === c.id ? colors.primaryLight : colors.inputBg,
+                          },
+                        ]}
+                        onPress={() => setCampusId(c.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.typeChoiceText,
+                            { color: campusId === c.id ? colors.primary : colors.text },
+                          ]}
+                        >
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Notes & Instructions</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, styles.textArea, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="e.g. Communion after worship set"
-                placeholderTextColor="#94a3b8"
+                multiline
+                numberOfLines={3}
+                placeholderTextColor={colors.subText}
               />
+            </ScrollView>
 
+            <View style={styles.modalActionRow}>
               <TouchableOpacity
-                style={[styles.submitBtn, creating && styles.buttonDisabled]}
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsModalOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary }]}
                 onPress={handleCreateService}
                 disabled={creating}
               >
                 {creating ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Create Service Plan</Text>
+                  <Text style={styles.submitBtnText}>Create Service</Text>
                 )}
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -346,255 +385,255 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerBar: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  createBtn: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  createBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  list: {
+  listContent: {
     padding: 16,
-  },
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    overflow: 'hidden',
-  },
-  cardMainRow: {
-    flexDirection: 'row',
-    padding: 14,
-  },
-  calendarBadge: {
-    width: 48,
-    height: 52,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  calMonth: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#dc2626',
-    textTransform: 'uppercase',
-  },
-  calDay: {
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: -2,
-  },
-  cardInfo: {
-    flex: 1,
-  },
-  topMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  typeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  badgeConfirmed: {
-    backgroundColor: '#dcfce7',
-  },
-  badgeRostered: {
-    backgroundColor: '#eff6ff',
-  },
-  badgeDraft: {
-    backgroundColor: '#f1f5f9',
-  },
-  statusBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  textConfirmed: {
-    color: '#16a34a',
-  },
-  textRostered: {
-    color: '#2563eb',
-  },
-  textDraft: {
-    color: '#64748b',
-  },
-  themeText: {
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  metaDetail: {
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  leaderText: {
-    fontSize: 12,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  statCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statVal: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  statLbl: {
-    fontSize: 10,
-    marginTop: 1,
-    fontWeight: '500',
+    paddingBottom: 90,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyContainer: {
-    padding: 40,
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: 10,
+  calendarBox: {
+    width: 62,
+    height: 68,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  calWeekday: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  calDay: {
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 26,
+  },
+  calMonth: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cardMainInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  typeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  campusBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timeBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  serviceTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  serviceTheme: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  capacityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  slotPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  slotPillFilled: {
+    backgroundColor: '#dcfce7',
+  },
+  slotPillPartial: {
+    backgroundColor: '#fef3c7',
+  },
+  slotPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chevronWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  openDetailText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '800',
+    marginTop: 12,
   },
-  emptySub: {
-    fontSize: 12,
+  emptySubtitle: {
+    fontSize: 13,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 6,
+    maxWidth: 260,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 26,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#dc2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  fabText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalSheet: {
+  modalCard: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    maxHeight: '85%',
+    padding: 20,
     paddingBottom: 30,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 18,
-    borderBottomWidth: 1,
+    marginBottom: 16,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
   },
-  closeBtn: {
-    fontSize: 18,
-    color: '#94a3b8',
-    padding: 4,
-  },
-  modalBody: {
-    padding: 18,
-  },
-  formLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
     marginBottom: 6,
     marginTop: 10,
   },
-  modalInput: {
+  input: {
+    height: 44,
+    borderRadius: 10,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 13,
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    marginVertical: 4,
-  },
-  typeChip: {
     paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  textArea: {
+    height: 72,
+    paddingVertical: 8,
+    textAlignVertical: 'top',
+  },
+  typesPillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  typeChoice: {
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    marginRight: 8,
   },
-  typeChipActive: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
-  },
-  typeChipText: {
-    fontSize: 11,
+  typeChoiceText: {
+    fontSize: 12,
     fontWeight: '600',
   },
-  typeChipTextActive: {
-    color: '#ffffff',
-    fontWeight: '800',
+  modalActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   submitBtn: {
-    backgroundColor: '#dc2626',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   submitBtnText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '800',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    fontWeight: '700',
   },
 });

@@ -1,4 +1,4 @@
-package art.creativeclicks.servesync
+package art.creativeclicks.churchflow
 
 import android.app.Application
 import android.content.res.Configuration

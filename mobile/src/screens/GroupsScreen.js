@@ -5,50 +5,43 @@ import {
   View,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
+  TextInput,
   ActivityIndicator,
   Modal,
-  TextInput,
-  ScrollView,
   Alert,
+  Linking,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
-const CATEGORIES = [
-  'Bible Study',
-  'Youth & Young Adults',
-  'Men of Valor',
-  'Women of Grace',
-  'Couples & Family',
-  'Prayer & Intercession',
-  'Worship & Creative',
-];
+const CATEGORIES = ['All', 'Young Adults', 'Families', 'Men', 'Women', 'Prayer & Intercession'];
 
-export default function GroupsScreen({ isDark = false }) {
+export default function GroupsScreen({ user, isDark = false }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   // Add Group Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('Bible Study');
-  const [leaderName, setLeaderName] = useState('');
-  const [meetingDay, setMeetingDay] = useState('Wednesday');
-  const [meetingTime, setMeetingTime] = useState('7:30 PM');
+  const [category, setCategory] = useState('Young Adults');
+  const [leader, setLeader] = useState('');
+  const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
+  const [meetingDay, setMeetingDay] = useState('Friday');
+  const [meetingTime, setMeetingTime] = useState('8:00 PM');
   const [saving, setSaving] = useState(false);
 
   const fetchGroups = async () => {
     try {
+      setLoading(true);
       const data = await api.getGroups();
       setGroups(data || []);
     } catch (err) {
       console.error('Fetch groups error:', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -56,240 +49,276 @@ export default function GroupsScreen({ isDark = false }) {
     fetchGroups();
   }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchGroups();
-  };
-
-  const handleCreateGroup = async () => {
-    if (!name.trim()) {
-      Alert.alert('Required', 'Group name is required');
+  const handleAddGroup = async () => {
+    if (!name.trim() || !leader.trim()) {
+      Alert.alert('Required Fields', 'Please enter Group Name and Leader Name.');
       return;
     }
 
     setSaving(true);
     try {
       await api.createGroup({
-        name,
-        category,
-        leader_name: leaderName,
+        name: name.trim(),
+        category: category,
+        leader_name: leader.trim(),
+        leader_phone: phone.trim() || undefined,
+        location: location.trim() || undefined,
         meeting_day: meetingDay,
         meeting_time: meetingTime,
-        location,
       });
+
       setIsModalOpen(false);
       setName('');
-      setLeaderName('');
+      setLeader('');
+      setPhone('');
       setLocation('');
       fetchGroups();
-      Alert.alert('Group Created', `"${name}" life group has been registered.`);
+      Alert.alert('Group Created', `"${name}" has been registered.`);
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to create group');
+      Alert.alert('Error', err.response?.data?.error || 'Could not create small group');
     } finally {
       setSaving(false);
     }
   };
 
+  const colors = {
+    bg: isDark ? '#020617' : '#f8fafc',
+    card: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#1e293b' : '#e2e8f0',
+    text: isDark ? '#ffffff' : '#0f172a',
+    subText: isDark ? '#94a3b8' : '#64748b',
+    primary: '#dc2626',
+    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
+    inputBg: isDark ? '#1e293b' : '#f1f5f9',
+    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+  };
+
   const filteredGroups = groups.filter((g) => {
-    const q = search.toLowerCase();
-    return (
-      g.name?.toLowerCase().includes(q) ||
-      g.category?.toLowerCase().includes(q) ||
-      g.leader_name?.toLowerCase().includes(q)
-    );
+    if (selectedCategory === 'All') return true;
+    return (g.category || '').toLowerCase() === selectedCategory.toLowerCase();
   });
 
-  const bg = isDark ? '#020617' : '#f8fafc';
-  const cardBg = isDark ? '#0f172a' : '#ffffff';
-  const border = isDark ? '#1e293b' : '#e2e8f0';
-  const textPrimary = isDark ? '#ffffff' : '#0f172a';
-  const textSecondary = isDark ? '#94a3b8' : '#64748b';
-  const inputBg = isDark ? '#1e293b' : '#f1f5f9';
-
-  const renderGroup = ({ item }) => (
-    <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.badgeRow}>
-            <View style={[styles.categoryBadge, { backgroundColor: isDark ? '#1e293b' : '#fee2e2' }]}>
-              <Text style={styles.categoryText}>{item.category || 'Life Group'}</Text>
+  const renderGroupCard = ({ item }) => {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.cardHeaderRow}>
+          <View style={[styles.groupIconBox, { backgroundColor: colors.primaryLight }]}>
+            <Ionicons name="people" size={22} color={colors.primary} />
+          </View>
+          <View style={styles.groupInfo}>
+            <View style={styles.catBadgeRow}>
+              <View style={[styles.catBadge, { backgroundColor: colors.badgeBg }]}>
+                <Text style={[styles.catBadgeText, { color: colors.primary }]}>
+                  {item.category || 'Life Group'}
+                </Text>
+              </View>
             </View>
-            <Text style={[styles.memberCountText, { color: textSecondary }]}>
-              👥 {item.member_count || 0} members
+            <Text style={[styles.groupTitle, { color: colors.text }]}>{item.name}</Text>
+            <Text style={[styles.groupLeader, { color: colors.subText }]}>
+              Leader: {item.leader_name}
             </Text>
           </View>
-          <Text style={[styles.groupName, { color: textPrimary }]}>{item.name}</Text>
-          <Text style={[styles.groupMeta, { color: textSecondary }]}>
-            🕒 {item.meeting_day}s at {item.meeting_time}
-          </Text>
-          {item.location ? (
-            <Text style={[styles.locationText, { color: textSecondary }]}>📍 {item.location}</Text>
-          ) : null}
         </View>
-      </View>
 
-      <View style={[styles.cardFooter, { borderTopColor: border }]}>
-        <Text style={[styles.leaderText, { color: textSecondary }]}>
-          Leader: <Text style={{ color: textPrimary, fontWeight: '700' }}>{item.leader_name || 'Ministry Team'}</Text>
-        </Text>
+        <View style={styles.metaSection}>
+          <View style={styles.metaRow}>
+            <Ionicons name="calendar-outline" size={14} color={colors.subText} />
+            <Text style={[styles.metaText, { color: colors.text }]}>
+              {item.meeting_day || 'Friday'} • {item.meeting_time || '8:00 PM'}
+            </Text>
+          </View>
+
+          <View style={styles.metaRow}>
+            <Ionicons name="location-outline" size={14} color={colors.subText} />
+            <Text style={[styles.metaText, { color: colors.text }]}>
+              {item.location || 'Church Annex / Member Home'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Contact Leader Actions */}
+        {item.leader_phone ? (
+          <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.contactBtn}
+              onPress={() => Linking.openURL(`tel:${item.leader_phone}`)}
+            >
+              <Ionicons name="call-outline" size={15} color={colors.primary} />
+              <Text style={[styles.contactBtnText, { color: colors.primary }]}>Call Leader</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.contactBtn}
+              onPress={() =>
+                Linking.openURL(`https://wa.me/${item.leader_phone.replace(/[^0-9]/g, '')}`)
+              }
+            >
+              <Ionicons name="logo-whatsapp" size={15} color="#16a34a" />
+              <Text style={[styles.contactBtnText, { color: '#16a34a' }]}>WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header bar */}
-      <View style={[styles.headerBar, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: textPrimary }]}>Small Groups</Text>
-          <Text style={[styles.headerSub, { color: textSecondary }]}>
-            {groups.length} Discipleship & Life Groups
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setIsModalOpen(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addBtnText}>+ New Group</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Input */}
-      <View style={[styles.searchBarContainer, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-          placeholder="Search groups by name, category, or leader..."
-          placeholderTextColor="#94a3b8"
-          value={search}
-          onChangeText={setSearch}
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Category Pills */}
+      <View style={styles.categorySection}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={CATEGORIES}
+          keyExtractor={(item) => item}
+          contentContainerStyle={styles.categoryList}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.categoryPill,
+                {
+                  backgroundColor: selectedCategory === item ? colors.primary : colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => setSelectedCategory(item)}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  { color: selectedCategory === item ? '#ffffff' : colors.text },
+                ]}
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          )}
         />
       </View>
 
+      {/* Groups List */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#dc2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
           data={filteredGroups}
-          keyExtractor={(item) => item.id}
-          renderItem={renderGroup}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#dc2626" />
-          }
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderGroupCard}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🤝</Text>
-              <Text style={[styles.emptyTitle, { color: textPrimary }]}>No groups created yet</Text>
-              <Text style={[styles.emptySub, { color: textSecondary }]}>
-                Register small groups, Bible studies, and fellowships above.
+            <View style={styles.emptyState}>
+              <Ionicons name="planet-outline" size={48} color={colors.subText} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Small Groups Found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
+                Add a new life group or fellowship team.
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Add Group Modal */}
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        activeOpacity={0.85}
+        onPress={() => setIsModalOpen(true)}
+      >
+        <Ionicons name="add" size={24} color="#ffffff" />
+        <Text style={styles.fabText}>New Group</Text>
+      </TouchableOpacity>
+
+      {/* Add Group Bottom Sheet Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>Create Small Group</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add New Small Group</Text>
               <TouchableOpacity onPress={() => setIsModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={[styles.formLabel, { color: textPrimary }]}>GROUP NAME *</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Group Name *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={name}
                 onChangeText={setName}
-                placeholder="e.g. Young Adults Fellowship"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Damascus Young Adults"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>CATEGORY</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 4 }}>
-                {CATEGORIES.map((c) => (
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Category</Text>
+              <View style={styles.categoryPillWrap}>
+                {['Young Adults', 'Families', 'Men', 'Women', 'Prayer & Intercession'].map((c) => (
                   <TouchableOpacity
                     key={c}
                     style={[
-                      styles.catChip,
-                      { borderColor: border, backgroundColor: isDark ? '#1e293b' : '#f1f5f9' },
-                      category === c && styles.catChipActive,
+                      styles.choicePill,
+                      {
+                        backgroundColor: category === c ? colors.primaryLight : colors.inputBg,
+                        borderColor: category === c ? colors.primary : colors.border,
+                      },
                     ]}
                     onPress={() => setCategory(c)}
                   >
-                    <Text
-                      style={[
-                        styles.catChipText,
-                        { color: textSecondary },
-                        category === c && styles.catChipTextActive,
-                      ]}
-                    >
+                    <Text style={[styles.choicePillText, { color: category === c ? colors.primary : colors.text }]}>
                       {c}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
-
-              <Text style={[styles.formLabel, { color: textPrimary }]}>GROUP LEADER</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={leaderName}
-                onChangeText={setLeaderName}
-                placeholder="e.g. Marcus & Chloe"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <View style={styles.rowTwoCols}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.formLabel, { color: textPrimary }]}>MEETING DAY</Text>
-                  <TextInput
-                    style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                    value={meetingDay}
-                    onChangeText={setMeetingDay}
-                    placeholder="Wednesday"
-                    placeholderTextColor="#94a3b8"
-                  />
-                </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={[styles.formLabel, { color: textPrimary }]}>TIME</Text>
-                  <TextInput
-                    style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                    value={meetingTime}
-                    onChangeText={setMeetingTime}
-                    placeholder="7:30 PM"
-                    placeholderTextColor="#94a3b8"
-                  />
-                </View>
               </View>
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>LOCATION / HOST ADDRESS</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Leader Name *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="Sanctuary Room 204 or North Campus"
-                placeholderTextColor="#94a3b8"
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={leader}
+                onChangeText={setLeader}
+                placeholder="e.g. Jason & Lisa"
+                placeholderTextColor={colors.subText}
               />
 
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Leader Phone / WhatsApp</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="+60176001484"
+                placeholderTextColor={colors.subText}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Location / Venue</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="e.g. Main Sanctuary / Online Zoom"
+                placeholderTextColor={colors.subText}
+              />
+            </ScrollView>
+
+            <View style={styles.modalActionRow}>
               <TouchableOpacity
-                style={[styles.submitBtn, saving && styles.buttonDisabled]}
-                onPress={handleCreateGroup}
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsModalOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary }]}
+                onPress={handleAddGroup}
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Create Life Group</Text>
+                  <Text style={styles.submitBtnText}>Create Group</Text>
                 )}
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -301,203 +330,230 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerBar: {
+  categorySection: {
+    paddingVertical: 12,
+  },
+  categoryList: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  addBtn: {
-    backgroundColor: '#dc2626',
+  categoryPill: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  addBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    fontSize: 13,
-  },
-  list: {
-    padding: 16,
-  },
-  card: {
+    paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
   },
-  cardHeader: {
-    flexDirection: 'row',
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  categoryText: {
-    color: '#dc2626',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  memberCountText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  groupName: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  groupMeta: {
+  categoryPillText: {
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: '700',
   },
-  locationText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  cardFooter: {
-    borderTopWidth: 1,
-    marginTop: 10,
-    paddingTop: 8,
-  },
-  leaderText: {
-    fontSize: 11,
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 90,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyContainer: {
-    padding: 40,
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: 10,
+  groupIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  catBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 2,
+  },
+  catBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  catBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  groupTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  groupLeader: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  metaSection: {
+    marginTop: 10,
+    gap: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 10,
+    gap: 16,
+  },
+  contactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  contactBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 50,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '800',
+    marginTop: 10,
   },
-  emptySub: {
-    fontSize: 12,
+  emptySubtitle: {
+    fontSize: 13,
     textAlign: 'center',
     marginTop: 4,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 26,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#dc2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  fabText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalSheet: {
+  modalCard: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    maxHeight: '85%',
+    padding: 20,
     paddingBottom: 30,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
   },
-  closeBtn: {
-    fontSize: 18,
-    color: '#94a3b8',
-    padding: 4,
-  },
-  modalBody: {
-    padding: 16,
-  },
-  formLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
     marginTop: 8,
   },
-  modalInput: {
+  input: {
+    height: 42,
+    borderRadius: 10,
     borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
+    fontSize: 14,
   },
-  catChip: {
+  categoryPillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  choicePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 6,
     borderWidth: 1,
-    marginRight: 6,
   },
-  catChipActive: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
-  },
-  catChipText: {
+  choicePillText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  catChipTextActive: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  rowTwoCols: {
+  modalActionRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   submitBtn: {
-    backgroundColor: '#dc2626',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 22,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   submitBtnText: {
-    color: '#ffffff',
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '800',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    fontWeight: '700',
   },
 });

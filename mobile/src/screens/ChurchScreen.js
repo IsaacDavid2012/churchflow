@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   Linking,
   Switch,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
 export default function ChurchScreen({ user, onLogout, isDark = false, onToggleTheme }) {
@@ -98,7 +100,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       setUserName('');
       setUserEmail('');
       setUserPassword('');
-      Alert.alert('User Created', `Added ${userName} with role ${userRole}`);
+      Alert.alert('Staff Account Created', `Added ${userName} (${userRole})`);
       fetchData();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || err.message || 'Could not create user');
@@ -112,7 +114,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       Alert.alert('Forbidden', 'You cannot delete your own logged-in account.');
       return;
     }
-    Alert.alert('Delete User', `Are you sure you want to remove ${u.name}?`, [
+    Alert.alert('Delete Account', `Are you sure you want to remove ${u.name}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -122,7 +124,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
             await api.deleteUser(u.id);
             fetchData();
           } catch (err) {
-            Alert.alert('Error', err.response?.data?.error || err.message || 'Could not delete user');
+            Alert.alert('Error', err.response?.data?.error || 'Could not delete user');
           }
         },
       },
@@ -140,10 +142,10 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         address: churchAddress.trim(),
       });
       setIsEditChurchModalOpen(false);
-      Alert.alert('Profile Saved', 'Church information updated successfully.');
+      Alert.alert('Profile Saved', 'Church profile updated successfully.');
       fetchData();
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || err.message || 'Could not update church');
+      Alert.alert('Error', err.response?.data?.error || 'Could not update church');
     } finally {
       setSavingChurch(false);
     }
@@ -170,47 +172,50 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Church Banner / Header */}
-      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} showsVerticalScrollIndicator={false}>
+      {/* Church Profile Card */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.profileHeader}>
-          <View style={styles.churchAvatar}>
-            <Text style={styles.churchAvatarText}>⛪</Text>
+          <View style={[styles.churchAvatar, { backgroundColor: colors.primaryLight }]}>
+            <Ionicons name="business" size={24} color={colors.primary} />
           </View>
-          <View style={{ flex: 1, marginLeft: 14 }}>
+          <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.churchName, { color: colors.text }]}>
               {church?.name || 'Jesus My Rock Church'}
             </Text>
             <Text style={[styles.churchTagline, { color: colors.subText }]}>
-              Senior Pastors • Marcus & Sarah Reed
+              Senior Pastors Marcus & Sarah Reed
             </Text>
           </View>
           <TouchableOpacity
-            style={[styles.editBtn, { borderColor: colors.border }]}
+            style={[styles.editProfileBtn, { borderColor: colors.border }]}
             onPress={() => setIsEditChurchModalOpen(true)}
           >
-            <Text style={[styles.editBtnText, { color: colors.text }]}>✎ Edit</Text>
+            <Ionicons name="pencil" size={14} color={colors.text} />
+            <Text style={[styles.editProfileBtnText, { color: colors.text }]}>Edit</Text>
           </TouchableOpacity>
         </View>
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <View style={styles.infoRow}>
-          <Text style={[styles.infoLabel, { color: colors.subText }]}>📍 Address:</Text>
+          <Ionicons name="location-outline" size={16} color={colors.subText} />
           <Text style={[styles.infoValue, { color: colors.text }]}>
             {church?.address || '123 Grace Avenue, Sanctuary Hall'}
           </Text>
         </View>
+
         <View style={styles.infoRow}>
-          <Text style={[styles.infoLabel, { color: colors.subText }]}>📞 Contact:</Text>
+          <Ionicons name="call-outline" size={16} color={colors.subText} />
           <TouchableOpacity onPress={() => Linking.openURL(`tel:${church?.phone || '+60176001484'}`)}>
             <Text style={[styles.infoValue, { color: colors.primary }]}>
               {church?.phone || '+60 17-600 1484'}
             </Text>
           </TouchableOpacity>
         </View>
+
         <View style={styles.infoRow}>
-          <Text style={[styles.infoLabel, { color: colors.subText }]}>🌐 Website:</Text>
+          <Ionicons name="globe-outline" size={16} color={colors.subText} />
           <TouchableOpacity
             onPress={() => Linking.openURL(church?.website || 'https://creativeclicks.art')}
           >
@@ -221,7 +226,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         </View>
       </View>
 
-      {/* Stats Grid */}
+      {/* Stats Summary Tiles */}
       <View style={styles.statsGrid}>
         <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.statNum, { color: colors.primary }]}>{stats.services}</Text>
@@ -237,48 +242,51 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         </View>
         <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.statNum, { color: '#9333ea' }]}>{stats.groups}</Text>
-          <Text style={[styles.statLabel, { color: colors.subText }]}>Life Groups</Text>
+          <Text style={[styles.statLabel, { color: colors.subText }]}>Groups</Text>
         </View>
       </View>
 
-      {/* Settings / Theme & Preferences */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {/* App Preferences */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>⚙️ App Preferences</Text>
 
         <View style={styles.prefRow}>
           <View>
-            <Text style={[styles.prefLabel, { color: colors.text }]}>Dark Mode</Text>
+            <Text style={[styles.prefLabel, { color: colors.text }]}>Dark Theme</Text>
             <Text style={[styles.prefSub, { color: colors.subText }]}>
-              {isDark ? 'Dark theme active' : 'Crisp light mode active'}
+              {isDark ? 'Dark mode enabled' : 'Clean light mode enabled'}
             </Text>
           </View>
           <Switch
             value={isDark}
             onValueChange={onToggleTheme}
             trackColor={{ false: '#cbd5e1', true: '#dc2626' }}
-            thumbColor={isDark ? '#ffffff' : '#ffffff'}
+            thumbColor="#ffffff"
           />
         </View>
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <View style={styles.prefRow}>
-          <View>
-            <Text style={[styles.prefLabel, { color: colors.text }]}>Logged in as</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.prefLabel, { color: colors.text }]}>Account</Text>
             <Text style={[styles.prefSub, { color: colors.primary, fontWeight: '700' }]}>
               {user?.name} ({user?.role || 'Admin'})
             </Text>
             <Text style={[styles.prefSub, { color: colors.subText }]}>{user?.email}</Text>
           </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
-            <Text style={styles.logoutBtnText}>Sign Out</Text>
+          <TouchableOpacity style={styles.signOutBtn} onPress={onLogout}>
+            <Ionicons name="log-out-outline" size={16} color="#dc2626" />
+            <Text style={styles.signOutBtnText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Campuses & Ministry Teams */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>📍 Campuses ({campuses.length})</Text>
+      {/* Campuses Section */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          🏛️ Campuses ({campuses.length})
+        </Text>
         {campuses.map((c) => (
           <View key={c.id} style={[styles.itemRow, { borderColor: colors.border }]}>
             <View>
@@ -294,30 +302,18 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         ))}
       </View>
 
-      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>👥 Ministry Teams ({ministries.length})</Text>
-        <View style={styles.chipsWrap}>
-          {ministries.map((m) => (
-            <View key={m.id} style={[styles.ministryChip, { backgroundColor: colors.badgeBg, borderColor: colors.border }]}>
-              <Text style={[styles.ministryChipText, { color: colors.text }]}>
-                {m.icon || '✨'} {m.name}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* User Management Section */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {/* Staff & Admin Users */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            🛡️ Staff & Admin Accounts ({users.length})
+            🛡️ Staff & Admin ({users.length})
           </Text>
           <TouchableOpacity
-            style={styles.addMiniBtn}
+            style={[styles.addMiniBtn, { backgroundColor: colors.primary }]}
             onPress={() => setIsUserModalOpen(true)}
           >
-            <Text style={styles.addMiniBtnText}>+ Add Staff</Text>
+            <Ionicons name="add" size={14} color="#fff" />
+            <Text style={styles.addMiniBtnText}>Add Staff</Text>
           </TouchableOpacity>
         </View>
 
@@ -342,7 +338,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
                 style={styles.deleteUserBtn}
                 onPress={() => handleDeleteUser(u)}
               >
-                <Text style={styles.deleteUserText}>✕</Text>
+                <Ionicons name="trash-outline" size={16} color="#94a3b8" />
               </TouchableOpacity>
             )}
           </View>
@@ -357,16 +353,21 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
             Built by <Text style={{ textDecorationLine: 'underline', color: colors.primary }}>Creative Clicks Studios</Text>
           </Text>
         </TouchableOpacity>
-        <Text style={[styles.footerVersion, { color: colors.subText }]}>Version 1.0.0 (Android Native)</Text>
+        <Text style={[styles.footerVersion, { color: colors.subText }]}>Version 1.0.0 (Native Android)</Text>
       </View>
 
-      {/* Add User Modal */}
+      {/* Add Staff Modal */}
       <Modal visible={isUserModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Church Staff / Admin</Text>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Church Staff</Text>
+              <TouchableOpacity onPress={() => setIsUserModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={[styles.label, { color: colors.subText }]}>Full Name *</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Full Name *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={userName}
@@ -375,7 +376,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
               placeholderTextColor={colors.subText}
             />
 
-            <Text style={[styles.label, { color: colors.subText }]}>Email Address *</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Email Address *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={userEmail}
@@ -386,7 +387,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
               placeholderTextColor={colors.subText}
             />
 
-            <Text style={[styles.label, { color: colors.subText }]}>Temporary Password *</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Password *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={userPassword}
@@ -395,24 +396,6 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
               placeholder="••••••••"
               placeholderTextColor={colors.subText}
             />
-
-            <Text style={[styles.label, { color: colors.subText }]}>Role</Text>
-            <View style={styles.rolePickerWrap}>
-              {['admin', 'worship_leader', 'scheduler', 'viewer'].map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[
-                    styles.roleChoice,
-                    { borderColor: colors.border, backgroundColor: userRole === r ? colors.primary : colors.inputBg },
-                  ]}
-                  onPress={() => setUserRole(r)}
-                >
-                  <Text style={[styles.roleChoiceText, { color: userRole === r ? '#ffffff' : colors.text }]}>
-                    {r}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
             <View style={styles.modalActionRow}>
               <TouchableOpacity
@@ -441,37 +424,35 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       <Modal visible={isEditChurchModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Church Profile</Text>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Church Profile</Text>
+              <TouchableOpacity onPress={() => setIsEditChurchModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={[styles.label, { color: colors.subText }]}>Church Name</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Church Name</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={churchName}
               onChangeText={setChurchName}
             />
 
-            <Text style={[styles.label, { color: colors.subText }]}>Phone Contact</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Phone Contact</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={churchPhone}
               onChangeText={setChurchPhone}
             />
 
-            <Text style={[styles.label, { color: colors.subText }]}>Email Contact</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={churchEmail}
-              onChangeText={setChurchEmail}
-            />
-
-            <Text style={[styles.label, { color: colors.subText }]}>Website URL</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Website URL</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={churchWebsite}
               onChangeText={setChurchWebsite}
             />
 
-            <Text style={[styles.label, { color: colors.subText }]}>Address / Location</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Address / Sanctuary Location</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={churchAddress}
@@ -493,7 +474,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
                 {savingChurch ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Save Changes</Text>
+                  <Text style={styles.submitBtnText}>Save Profile</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -516,63 +497,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  profileCard: {
+  card: {
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
     marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   churchAvatar: {
-    width: 52,
-    height: 52,
+    width: 48,
+    height: 48,
     borderRadius: 14,
-    backgroundColor: '#fee2e2',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  churchAvatarText: {
-    fontSize: 26,
-  },
   churchName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    letterSpacing: -0.3,
   },
   churchTagline: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
-  editBtn: {
-    paddingHorizontal: 12,
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
   },
-  editBtnText: {
+  editProfileBtnText: {
     fontSize: 12,
     fontWeight: '700',
   },
   divider: {
     height: 1,
-    marginVertical: 14,
+    marginVertical: 12,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: 13,
-    width: 84,
-    fontWeight: '600',
   },
   infoValue: {
     fontSize: 13,
@@ -587,40 +569,36 @@ const styles = StyleSheet.create({
   },
   statTile: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statNum: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '900',
   },
   statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     marginTop: 2,
   },
-  sectionCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
-  },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   addMiniBtn: {
-    backgroundColor: '#dc2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -634,7 +612,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   prefLabel: {
     fontSize: 14,
@@ -642,25 +620,28 @@ const styles = StyleSheet.create({
   },
   prefSub: {
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 1,
   },
-  logoutBtn: {
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#fee2e2',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  logoutBtnText: {
+  signOutBtnText: {
     color: '#dc2626',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
   },
   itemRow: {
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   itemName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   mainBadge: {
@@ -674,103 +655,87 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   itemSub: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
-  },
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  ministryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  ministryChipText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fee2e2',
     justifyContent: 'center',
     alignItems: 'center',
   },
   userAvatarText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#475569',
+    color: '#dc2626',
   },
   userNameText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   roleBadge: {
-    marginLeft: 8,
-    fontSize: 10,
+    marginLeft: 6,
+    fontSize: 9,
     fontWeight: '800',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
     textTransform: 'uppercase',
   },
   userEmailText: {
-    fontSize: 12,
-    marginTop: 1,
+    fontSize: 11,
   },
   deleteUserBtn: {
     padding: 6,
   },
-  deleteUserText: {
-    color: '#94a3b8',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   footerWrap: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   footerBrand: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
-    letterSpacing: 0.5,
   },
   footerCredit: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748b',
-    marginTop: 4,
+    marginTop: 3,
   },
   footerVersion: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 10,
+    marginTop: 3,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
   },
   modalCard: {
-    borderRadius: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
     padding: 20,
+    paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    marginBottom: 16,
   },
-  label: {
+  inputLabel: {
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
@@ -778,26 +743,10 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 42,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 12,
     fontSize: 14,
-  },
-  rolePickerWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  roleChoice: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  roleChoiceText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   modalActionRow: {
     flexDirection: 'row',
@@ -807,8 +756,8 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
     borderWidth: 1,
   },
   cancelBtnText: {
@@ -817,8 +766,8 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   submitBtnText: {
     color: '#fff',

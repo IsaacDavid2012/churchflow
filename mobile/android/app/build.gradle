@@ -109,9 +109,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'art.creativeclicks.servesync'
+    namespace 'art.creativeclicks.churchflow'
     defaultConfig {
-        applicationId 'art.creativeclicks.servesync'
+        applicationId 'art.creativeclicks.churchflow'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

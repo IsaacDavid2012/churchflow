@@ -5,43 +5,40 @@ import {
   View,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
+  TextInput,
   ActivityIndicator,
   Modal,
-  TextInput,
-  ScrollView,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
-export default function SongsScreen({ isDark = false }) {
+export default function SongsScreen({ user, isDark = false }) {
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
   // Add Song Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
-  const [defaultKey, setDefaultKey] = useState('C');
+  const [key, setKey] = useState('G');
   const [bpm, setBpm] = useState('72');
-  const [ccliNumber, setCcliNumber] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [chartUrl, setChartUrl] = useState('');
-  const [lyrics, setLyrics] = useState('');
+  const [ccli, setCcli] = useState('');
+  const [tags, setTags] = useState('Praise, Upbeat');
   const [saving, setSaving] = useState(false);
 
   const fetchSongs = async () => {
     try {
+      setLoading(true);
       const data = await api.getSongs();
       setSongs(data || []);
     } catch (err) {
       console.error('Fetch songs error:', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -49,242 +46,263 @@ export default function SongsScreen({ isDark = false }) {
     fetchSongs();
   }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchSongs();
-  };
-
-  const handleCreateSong = async () => {
-    if (!title.trim()) {
-      Alert.alert('Required', 'Song title is required');
+  const handleAddSong = async () => {
+    if (!title.trim() || !artist.trim()) {
+      Alert.alert('Required Fields', 'Please enter Title and Artist.');
       return;
     }
 
     setSaving(true);
     try {
       await api.createSong({
-        title,
-        artist,
-        default_key: defaultKey,
+        title: title.trim(),
+        artist: artist.trim(),
+        default_key: key.trim() || 'G',
         bpm: parseInt(bpm, 10) || 72,
-        ccli_number: ccliNumber,
-        youtube_url: youtubeUrl,
-        chart_url: chartUrl,
-        lyrics,
+        ccli_number: ccli.trim() || undefined,
+        tags: tags.trim() || undefined,
       });
+
       setIsModalOpen(false);
       setTitle('');
       setArtist('');
+      setCcli('');
       fetchSongs();
-      Alert.alert('Song Added', `"${title}" was added to the worship library.`);
+      Alert.alert('Song Added', `"${title}" has been added to the library.`);
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to save song');
+      Alert.alert('Error', err.response?.data?.error || 'Could not add song');
     } finally {
       setSaving(false);
     }
   };
 
+  const colors = {
+    bg: isDark ? '#020617' : '#f8fafc',
+    card: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#1e293b' : '#e2e8f0',
+    text: isDark ? '#ffffff' : '#0f172a',
+    subText: isDark ? '#94a3b8' : '#64748b',
+    primary: '#dc2626',
+    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
+    inputBg: isDark ? '#1e293b' : '#f1f5f9',
+    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+  };
+
   const filteredSongs = songs.filter((s) => {
     const q = search.toLowerCase();
     return (
-      s.title?.toLowerCase().includes(q) ||
-      s.artist?.toLowerCase().includes(q) ||
-      s.default_key?.toLowerCase().includes(q)
+      (s.title || '').toLowerCase().includes(q) ||
+      (s.artist || '').toLowerCase().includes(q) ||
+      (s.default_key || '').toLowerCase().includes(q) ||
+      (s.tags || '').toLowerCase().includes(q)
     );
   });
 
-  const bg = isDark ? '#020617' : '#f8fafc';
-  const cardBg = isDark ? '#0f172a' : '#ffffff';
-  const border = isDark ? '#1e293b' : '#e2e8f0';
-  const textPrimary = isDark ? '#ffffff' : '#0f172a';
-  const textSecondary = isDark ? '#94a3b8' : '#64748b';
-  const inputBg = isDark ? '#1e293b' : '#f1f5f9';
+  const renderSongItem = ({ item }) => {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.cardHeaderRow}>
+          {/* Key Badge */}
+          <View style={[styles.keyBadge, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.keyText, { color: colors.primary }]}>{item.default_key || 'G'}</Text>
+            <Text style={[styles.keySubText, { color: colors.primary }]}>KEY</Text>
+          </View>
 
-  const renderSong = ({ item }) => (
-    <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-      <View style={styles.cardHeader}>
-        <View style={styles.keyBadge}>
-          <Text style={styles.keyText}>{item.default_key || 'C'}</Text>
-        </View>
+          {/* Song Info */}
+          <View style={styles.songDetails}>
+            <Text style={[styles.songTitle, { color: colors.text }]}>{item.title}</Text>
+            <Text style={[styles.songArtist, { color: colors.subText }]}>{item.artist}</Text>
 
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={[styles.songTitle, { color: textPrimary }]}>{item.title}</Text>
-          <Text style={[styles.songArtist, { color: textSecondary }]}>
-            {item.artist || 'Unknown Artist'}
-          </Text>
-          <View style={styles.songMetaRow}>
-            {item.bpm ? (
-              <Text style={[styles.metaBadge, { color: textSecondary }]}>⏱️ {item.bpm} BPM</Text>
-            ) : null}
-            {item.ccli_number ? (
-              <Text style={[styles.metaBadge, { color: textSecondary }]}>CCLI: {item.ccli_number}</Text>
-            ) : null}
+            <View style={styles.metaRow}>
+              {item.bpm ? (
+                <View style={[styles.metaChip, { backgroundColor: colors.badgeBg }]}>
+                  <Ionicons name="speedometer-outline" size={12} color={colors.subText} />
+                  <Text style={[styles.metaChipText, { color: colors.text }]}>{item.bpm} BPM</Text>
+                </View>
+              ) : null}
+
+              {item.ccli_number ? (
+                <View style={[styles.metaChip, { backgroundColor: colors.badgeBg }]}>
+                  <Text style={[styles.metaChipText, { color: colors.subText }]}>
+                    CCLI #{item.ccli_number}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Links footer */}
-      <View style={[styles.cardFooter, { borderTopColor: border }]}>
-        <View style={styles.linksRow}>
-          {item.youtube_url ? (
-            <TouchableOpacity
-              style={[styles.linkBtn, styles.ytBtn]}
-              onPress={() => Linking.openURL(item.youtube_url)}
-            >
-              <Text style={styles.ytText}>▶ YouTube</Text>
-            </TouchableOpacity>
-          ) : null}
+        {/* Quick Actions Row */}
+        <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() =>
+              Linking.openURL(
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(
+                  item.title + ' ' + item.artist + ' worship'
+                )}`
+              )
+            }
+          >
+            <Ionicons name="play-circle-outline" size={16} color={colors.primary} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>YouTube Preview</Text>
+          </TouchableOpacity>
 
-          {item.chart_url ? (
-            <TouchableOpacity
-              style={[styles.linkBtn, styles.chartBtn]}
-              onPress={() => Linking.openURL(item.chart_url)}
-            >
-              <Text style={styles.chartText}>📄 Chord Chart</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() =>
+              Linking.openURL(
+                `https://www.google.com/search?q=${encodeURIComponent(
+                  item.title + ' ' + item.artist + ' chord chart pdf'
+                )}`
+              )
+            }
+          >
+            <Ionicons name="document-text-outline" size={16} color={colors.subText} />
+            <Text style={[styles.actionBtnText, { color: colors.subText }]}>Chord Chart</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header bar */}
-      <View style={[styles.headerBar, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: textPrimary }]}>Song Library</Text>
-          <Text style={[styles.headerSub, { color: textSecondary }]}>
-            {songs.length} Worship Arrangements & Chord Charts
-          </Text>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Search Header */}
+      <View style={styles.searchSection}>
+        <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Ionicons name="search" size={18} color={colors.subText} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search songs by title, artist, key..."
+            placeholderTextColor={colors.subText}
+          />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color={colors.subText} />
+            </TouchableOpacity>
+          ) : null}
         </View>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setIsModalOpen(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addBtnText}>+ Add Song</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Search Input */}
-      <View style={[styles.searchBarContainer, { backgroundColor: cardBg, borderBottomColor: border }]}>
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-          placeholder="Search songs by title, artist, key..."
-          placeholderTextColor="#94a3b8"
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
-
+      {/* Song List */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#dc2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
           data={filteredSongs}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSong}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#dc2626" />
-          }
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderSongItem}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🎵</Text>
-              <Text style={[styles.emptyTitle, { color: textPrimary }]}>No songs found</Text>
-              <Text style={[styles.emptySub, { color: textSecondary }]}>
-                Add worship songs, chord charts, and YouTube URLs above.
+            <View style={styles.emptyState}>
+              <Ionicons name="musical-notes-outline" size={48} color={colors.subText} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Songs Found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
+                {search ? 'Try another search keyword.' : 'Add worship songs to your library.'}
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Add Song Modal */}
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        activeOpacity={0.85}
+        onPress={() => setIsModalOpen(true)}
+      >
+        <Ionicons name="add" size={24} color="#ffffff" />
+        <Text style={styles.fabText}>Add Song</Text>
+      </TouchableOpacity>
+
+      {/* Add Song Bottom Sheet Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: cardBg, borderColor: border }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: border }]}>
-              <Text style={[styles.modalTitle, { color: textPrimary }]}>Add New Worship Song</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Worship Song</Text>
               <TouchableOpacity onPress={() => setIsModalOpen(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={[styles.formLabel, { color: textPrimary }]}>SONG TITLE *</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Song Title *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="e.g. Firm Foundation (He Won't)"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Way Maker"
+                placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>ARTIST / BAND</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Artist / Composer *</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={artist}
                 onChangeText={setArtist}
-                placeholder="e.g. Cody Carnes & Maverick City"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Sinach / Leeland"
+                placeholderTextColor={colors.subText}
               />
 
-              <View style={styles.rowTwoCols}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.formLabel, { color: textPrimary }]}>DEFAULT KEY</Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Default Key</Text>
                   <TextInput
-                    style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                    value={defaultKey}
-                    onChangeText={setDefaultKey}
-                    placeholder="e.g. Bb or G"
-                    placeholderTextColor="#94a3b8"
+                    style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                    value={key}
+                    onChangeText={setKey}
+                    placeholder="G"
+                    placeholderTextColor={colors.subText}
                   />
                 </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={[styles.formLabel, { color: textPrimary }]}>BPM</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>BPM Tempo</Text>
                   <TextInput
-                    style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
+                    style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                     value={bpm}
                     onChangeText={setBpm}
                     keyboardType="numeric"
+                    placeholder="72"
+                    placeholderTextColor={colors.subText}
                   />
                 </View>
               </View>
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>YOUTUBE VIDEO URL</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>CCLI Song Number</Text>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={youtubeUrl}
-                onChangeText={setYoutubeUrl}
-                placeholder="https://youtube.com/watch?v=..."
-                placeholderTextColor="#94a3b8"
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={ccli}
+                onChangeText={setCcli}
+                placeholder="7115744"
+                placeholderTextColor={colors.subText}
               />
+            </ScrollView>
 
-              <Text style={[styles.formLabel, { color: textPrimary }]}>CHORD CHART URL (PDF / WEB)</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-                value={chartUrl}
-                onChangeText={setChartUrl}
-                placeholder="https://tabs.ultimate-guitar.com/..."
-                placeholderTextColor="#94a3b8"
-              />
-
+            <View style={styles.modalActionRow}>
               <TouchableOpacity
-                style={[styles.submitBtn, saving && styles.buttonDisabled]}
-                onPress={handleCreateSong}
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsModalOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary }]}
+                onPress={handleAddSong}
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Add Song to Library</Text>
+                  <Text style={styles.submitBtnText}>Save Song</Text>
                 )}
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -296,207 +314,214 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerBar: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  addBtn: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  addBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    fontSize: 13,
-  },
-  list: {
+  searchSection: {
     padding: 16,
+    paddingBottom: 8,
   },
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
-  },
-  cardHeader: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  keyBadge: {
-    width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#fee2e2',
     borderWidth: 1,
-    borderColor: '#fecaca',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#dc2626',
-  },
-  songTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  songArtist: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  songMetaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  metaBadge: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  cardFooter: {
-    borderTopWidth: 1,
-    marginTop: 10,
-    paddingTop: 8,
-  },
-  linksRow: {
-    flexDirection: 'row',
+    paddingHorizontal: 12,
     gap: 8,
   },
-  linkBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
   },
-  ytBtn: {
-    backgroundColor: '#fef2f2',
-  },
-  chartBtn: {
-    backgroundColor: '#eff6ff',
-  },
-  ytText: {
-    color: '#dc2626',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  chartText: {
-    color: '#2563eb',
-    fontSize: 11,
-    fontWeight: '800',
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 90,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyContainer: {
-    padding: 40,
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: 10,
+  keyBadge: {
+    width: 48,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyText: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  keySubText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  songDetails: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  songTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  songArtist: {
+    fontSize: 13,
+    marginTop: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  metaChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 10,
+    gap: 16,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 50,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '800',
+    marginTop: 10,
   },
-  emptySub: {
-    fontSize: 12,
+  emptySubtitle: {
+    fontSize: 13,
     textAlign: 'center',
     marginTop: 4,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 26,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#dc2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  fabText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalSheet: {
+  modalCard: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    maxHeight: '85%',
+    padding: 20,
     paddingBottom: 30,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
   },
-  closeBtn: {
-    fontSize: 18,
-    color: '#94a3b8',
-    padding: 4,
-  },
-  modalBody: {
-    padding: 16,
-  },
-  formLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
     marginTop: 8,
   },
-  modalInput: {
+  input: {
+    height: 42,
+    borderRadius: 10,
     borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
+    fontSize: 14,
   },
-  rowTwoCols: {
+  modalActionRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   submitBtn: {
-    backgroundColor: '#dc2626',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 22,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   submitBtnText: {
-    color: '#ffffff',
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '800',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    fontWeight: '700',
   },
 });

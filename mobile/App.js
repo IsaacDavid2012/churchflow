@@ -12,6 +12,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
 import { api } from './src/api/client';
 import { registerForPushNotificationsAsync } from './src/services/fcm';
@@ -27,13 +28,12 @@ import PublicConfirmScreen from './src/screens/PublicConfirmScreen';
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [isDark, setIsDark] = useState(false); // Default to clean light mode
-  const [activeTab, setActiveTab] = useState('services'); // 'services' | 'people' | 'songs' | 'groups' | 'church'
+  const [isDark, setIsDark] = useState(false); // Clean light mode default
+  const [activeTab, setActiveTab] = useState('services');
   const [selectedService, setSelectedService] = useState(null);
   const [publicToken, setPublicToken] = useState(null);
 
   useEffect(() => {
-    // 1. Initialize API client & Auth state & Theme
     const initApp = async () => {
       try {
         await api.init();
@@ -59,7 +59,6 @@ export default function App() {
 
     initApp();
 
-    // 2. Handle Deep Linking for zero-login confirmation links (e.g. servesync://avail/token or https://serve.creativeclicks.art/avail/token)
     const handleDeepLink = (event) => {
       const data = Linking.parse(event.url);
       if (data.path && data.path.includes('avail')) {
@@ -119,7 +118,7 @@ export default function App() {
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Zero-login Deep link Confirmation Screen */}
+      {/* Deep Link Zero-Login Confirmation */}
       {publicToken ? (
         <PublicConfirmScreen token={publicToken} onDone={() => setPublicToken(null)} />
       ) : !user ? (
@@ -142,12 +141,12 @@ export default function App() {
           >
             <View style={styles.headerBrand}>
               <View style={styles.logoBadge}>
-                <Text style={styles.logoIcon}>⚡</Text>
+                <Ionicons name="flash" size={18} color="#ffffff" />
               </View>
               <View>
                 <Text style={[styles.brandTitle, { color: themeColors.text }]}>ChurchFlow</Text>
                 <Text style={[styles.brandSub, { color: themeColors.subText }]}>
-                  Jesus My Rock Church
+                  Jesus My Rock
                 </Text>
               </View>
             </View>
@@ -157,8 +156,13 @@ export default function App() {
                 style={[styles.iconButton, { borderColor: themeColors.border }]}
                 onPress={handleToggleTheme}
               >
-                <Text style={{ fontSize: 16 }}>{isDark ? '☀️' : '🌙'}</Text>
+                <Ionicons
+                  name={isDark ? 'sunny' : 'moon'}
+                  size={18}
+                  color={isDark ? '#facc15' : '#475569'}
+                />
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.userBadge, { backgroundColor: isDark ? '#1e293b' : '#fee2e2' }]}
                 onPress={() => setActiveTab('church')}
@@ -193,7 +197,7 @@ export default function App() {
             )}
           </View>
 
-          {/* Bottom Tab Bar */}
+          {/* Bottom Tab Bar with Ionicons */}
           <View
             style={[
               styles.bottomTabBar,
@@ -201,13 +205,14 @@ export default function App() {
             ]}
           >
             <TouchableOpacity
-              style={[
-                styles.tabItem,
-                activeTab === 'services' && { backgroundColor: themeColors.activeTabBg },
-              ]}
+              style={styles.tabItem}
               onPress={() => setActiveTab('services')}
             >
-              <Text style={styles.tabIcon}>📅</Text>
+              <Ionicons
+                name={activeTab === 'services' ? 'calendar' : 'calendar-outline'}
+                size={22}
+                color={activeTab === 'services' ? themeColors.primary : themeColors.subText}
+              />
               <Text
                 style={[
                   styles.tabLabel,
@@ -222,13 +227,14 @@ export default function App() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tabItem,
-                activeTab === 'people' && { backgroundColor: themeColors.activeTabBg },
-              ]}
+              style={styles.tabItem}
               onPress={() => setActiveTab('people')}
             >
-              <Text style={styles.tabIcon}>👥</Text>
+              <Ionicons
+                name={activeTab === 'people' ? 'people' : 'people-outline'}
+                size={22}
+                color={activeTab === 'people' ? themeColors.primary : themeColors.subText}
+              />
               <Text
                 style={[
                   styles.tabLabel,
@@ -243,13 +249,14 @@ export default function App() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tabItem,
-                activeTab === 'songs' && { backgroundColor: themeColors.activeTabBg },
-              ]}
+              style={styles.tabItem}
               onPress={() => setActiveTab('songs')}
             >
-              <Text style={styles.tabIcon}>🎵</Text>
+              <Ionicons
+                name={activeTab === 'songs' ? 'musical-notes' : 'musical-notes-outline'}
+                size={22}
+                color={activeTab === 'songs' ? themeColors.primary : themeColors.subText}
+              />
               <Text
                 style={[
                   styles.tabLabel,
@@ -264,13 +271,14 @@ export default function App() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tabItem,
-                activeTab === 'groups' && { backgroundColor: themeColors.activeTabBg },
-              ]}
+              style={styles.tabItem}
               onPress={() => setActiveTab('groups')}
             >
-              <Text style={styles.tabIcon}>🌱</Text>
+              <Ionicons
+                name={activeTab === 'groups' ? 'chatbubbles' : 'chatbubbles-outline'}
+                size={22}
+                color={activeTab === 'groups' ? themeColors.primary : themeColors.subText}
+              />
               <Text
                 style={[
                   styles.tabLabel,
@@ -285,13 +293,14 @@ export default function App() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tabItem,
-                activeTab === 'church' && { backgroundColor: themeColors.activeTabBg },
-              ]}
+              style={styles.tabItem}
               onPress={() => setActiveTab('church')}
             >
-              <Text style={styles.tabIcon}>⛪</Text>
+              <Ionicons
+                name={activeTab === 'church' ? 'business' : 'business-outline'}
+                size={22}
+                color={activeTab === 'church' ? themeColors.primary : themeColors.subText}
+              />
               <Text
                 style={[
                   styles.tabLabel,
@@ -325,16 +334,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topHeader: {
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   headerBrand: {
     flexDirection: 'row',
@@ -342,16 +358,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: '#dc2626',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  logoIcon: {
-    fontSize: 18,
-    color: '#ffffff',
   },
   brandTitle: {
     fontSize: 16,
@@ -360,7 +372,7 @@ const styles = StyleSheet.create({
   },
   brandSub: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -370,49 +382,44 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userBadgeText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   contentContainer: {
     flex: 1,
   },
   bottomTabBar: {
-    height: 62,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingBottom: 4,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    borderRadius: 10,
-    marginHorizontal: 2,
-  },
-  tabIcon: {
-    fontSize: 18,
-    marginBottom: 2,
+    paddingVertical: 4,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
+    marginTop: 2,
   },
 });

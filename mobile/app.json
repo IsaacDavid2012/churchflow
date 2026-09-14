@@ -17,7 +17,7 @@
       "bundleIdentifier": "art.creativeclicks.churchflow"
     },
     "android": {
-      "package": "art.creativeclicks.servesync",
+      "package": "art.creativeclicks.churchflow",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
