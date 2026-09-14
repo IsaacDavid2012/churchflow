@@ -1,11 +1,12 @@
 /**
- * ServeSync Mobile API Client
- * Configurable base URL with JWT auth header injection and automatic token refresh.
+ * ChurchFlow Mobile API Client
+ * Configurable base URL with JWT auth header injection, automatic token refresh,
+ * and comprehensive endpoints matching the web application.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://servesync.creativeclicks.art/api';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://serve.creativeclicks.art/api';
 
 class ApiClient {
   constructor() {
@@ -65,7 +66,7 @@ class ApiClient {
       if (refreshed) {
         options._retry = true;
         headers.Authorization = `Bearer ${this.token}`;
-        return fetch(url, { ...options, headers }).then(r => r.json());
+        return fetch(url, { ...options, headers }).then((r) => r.json());
       }
     }
 
@@ -96,7 +97,7 @@ class ApiClient {
     return false;
   }
 
-  // Auth endpoints
+  // --- Auth Endpoints ---
   async login(username, password) {
     const data = await this.request('/auth/login', {
       method: 'POST',
@@ -113,13 +114,20 @@ class ApiClient {
     return this.request('/auth/me');
   }
 
-  // Services
+  // --- Services Endpoints ---
   async getServices() {
     return this.request('/services');
   }
 
   async getServiceDetail(id) {
     return this.request(`/services/${id}`);
+  }
+
+  async createService(payload) {
+    return this.request('/services', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   async autoShuffle(serviceId, pool = 'auto') {
@@ -129,10 +137,17 @@ class ApiClient {
     });
   }
 
-  async manualOverride(serviceId, positionId, roleSlot, musicianId) {
+  async manualOverride(serviceId, positionId, roleSlot, musicianId, notes = '') {
     return this.request(`/services/${serviceId}/override`, {
       method: 'POST',
-      body: JSON.stringify({ position_id: positionId, role_slot: roleSlot, musician_id: musicianId }),
+      body: JSON.stringify({ position_id: positionId, role_slot: roleSlot, musician_id: musicianId, notes }),
+    });
+  }
+
+  async setWorshipLeader(serviceId, worshipLeaderId) {
+    return this.request(`/services/${serviceId}/worship-leader`, {
+      method: 'PUT',
+      body: JSON.stringify({ worship_leader_id: worshipLeaderId }),
     });
   }
 
@@ -142,24 +157,162 @@ class ApiClient {
     });
   }
 
-  // People
+  async getCandidates(serviceId, positionId) {
+    return this.request(`/services/${serviceId}/positions/${positionId}/candidates`);
+  }
+
+  // --- Order of Service Plan Items ---
+  async getPlanItems(serviceId) {
+    return this.request(`/services/${serviceId}/plan`);
+  }
+
+  async addPlanItem(serviceId, itemData) {
+    return this.request(`/services/${serviceId}/plan`, {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
+  }
+
+  async deletePlanItem(serviceId, itemId) {
+    return this.request(`/services/${serviceId}/plan/${itemId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- People / Musicians ---
   async getMusicians(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/musicians${query ? '?' + query : ''}`);
   }
 
-  // Songs
+  async createMusician(musicianData) {
+    return this.request('/musicians', {
+      method: 'POST',
+      body: JSON.stringify(musicianData),
+    });
+  }
+
+  async updateMusician(id, musicianData) {
+    return this.request(`/musicians/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(musicianData),
+    });
+  }
+
+  async deleteMusician(id) {
+    return this.request(`/musicians/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Songs Library ---
   async getSongs(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/songs${query ? '?' + query : ''}`);
   }
 
-  // Groups
+  async createSong(songData) {
+    return this.request('/songs', {
+      method: 'POST',
+      body: JSON.stringify(songData),
+    });
+  }
+
+  async deleteSong(id) {
+    return this.request(`/songs/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Small Groups ---
   async getGroups() {
     return this.request('/groups');
   }
 
-  // Public Tokenized Availability Endpoint (Zero Login)
+  async createGroup(groupData) {
+    return this.request('/groups', {
+      method: 'POST',
+      body: JSON.stringify(groupData),
+    });
+  }
+
+  async deleteGroup(id) {
+    return this.request(`/groups/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Church Profile, Campuses & Ministries ---
+  async getChurch() {
+    return this.request('/church');
+  }
+
+  async updateChurch(churchData) {
+    return this.request('/church', {
+      method: 'PUT',
+      body: JSON.stringify(churchData),
+    });
+  }
+
+  async getCampuses() {
+    return this.request('/church/campuses');
+  }
+
+  async createCampus(campusData) {
+    return this.request('/church/campuses', {
+      method: 'POST',
+      body: JSON.stringify(campusData),
+    });
+  }
+
+  async getMinistries() {
+    return this.request('/church/ministries');
+  }
+
+  // --- Positions Template ---
+  async getPositions() {
+    return this.request('/positions');
+  }
+
+  async createPosition(posData) {
+    return this.request('/positions', {
+      method: 'POST',
+      body: JSON.stringify(posData),
+    });
+  }
+
+  // --- User Management ---
+  async getUsers() {
+    return this.request('/auth/users');
+  }
+
+  async createUser(userData) {
+    return this.request('/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async deleteUser(id) {
+    return this.request(`/auth/users/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async resetUserPassword(id, newPassword) {
+    return this.request(`/auth/users/${id}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password: newPassword }),
+    });
+  }
+
+  // --- Audit Trail & Notifications ---
+  async getNotifications(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/notifications${query ? '?' + query : ''}`);
+  }
+
+  // --- Public Availability (Zero-Login) ---
   async getPublicService(token) {
     const res = await fetch(`${API_BASE_URL}/public/avail/${token}`);
     if (!res.ok) throw new Error('Invalid or expired link');
@@ -179,7 +332,7 @@ class ApiClient {
     return res.json();
   }
 
-  // Register push token
+  // --- Push Notifications ---
   async registerDeviceToken(token, platform = 'android') {
     return this.request('/notifications/register-device', {
       method: 'POST',

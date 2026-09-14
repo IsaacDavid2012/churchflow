@@ -1,26 +1,26 @@
 {
   "expo": {
-    "name": "ServeSync",
-    "slug": "servesync",
+    "name": "ChurchFlow",
+    "slug": "churchflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "scheme": "servesync",
+    "userInterfaceStyle": "automatic",
+    "scheme": "churchflow",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f172a"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "art.creativeclicks.servesync"
+      "bundleIdentifier": "art.creativeclicks.churchflow"
     },
     "android": {
       "package": "art.creativeclicks.servesync",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundColor": "#ffffff"
       },
       "intentFilters": [
         {
@@ -29,11 +29,11 @@
           "data": [
             {
               "scheme": "https",
-              "host": "servesync.creativeclicks.art",
+              "host": "serve.creativeclicks.art",
               "pathPrefix": "/avail"
             },
             {
-              "scheme": "servesync",
+              "scheme": "churchflow",
               "host": "avail"
             }
           ],
@@ -46,7 +46,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "servesync-jesus-my-rock"
+        "projectId": "churchflow-jesus-my-rock"
       }
     }
   }
