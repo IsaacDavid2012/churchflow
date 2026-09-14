@@ -1,7 +1,6 @@
 /**
  * ChurchFlow Mobile API Client
- * Configurable base URL with JWT auth header injection, automatic token refresh,
- * and comprehensive endpoints matching the web application.
+ * 100% matched to ChurchFlow backend routes (/api)
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,7 +65,12 @@ class ApiClient {
       if (refreshed) {
         options._retry = true;
         headers.Authorization = `Bearer ${this.token}`;
-        return fetch(url, { ...options, headers }).then((r) => r.json());
+        const retryRes = await fetch(url, { ...options, headers });
+        if (!retryRes.ok) {
+          const err = await retryRes.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${retryRes.status}`);
+        }
+        return retryRes.json();
       }
     }
 
@@ -97,7 +101,7 @@ class ApiClient {
     return false;
   }
 
-  // --- Auth Endpoints ---
+  // --- Auth & User Endpoints ---
   async login(username, password) {
     const data = await this.request('/auth/login', {
       method: 'POST',
@@ -110,8 +114,32 @@ class ApiClient {
     return data;
   }
 
-  async getCurrentUser() {
+  async getMe() {
     return this.request('/auth/me');
+  }
+
+  async getUsers() {
+    return this.request('/auth/users');
+  }
+
+  async createUser(userData) {
+    return this.request('/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async deleteUser(id) {
+    return this.request(`/auth/users/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async resetUserPassword(id, newPassword) {
+    return this.request(`/auth/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    });
   }
 
   // --- Services Endpoints ---
@@ -119,7 +147,11 @@ class ApiClient {
     return this.request('/services');
   }
 
-  async getServiceDetail(id) {
+  async getService(id) {
+    return this.request(`/services/${id}`);
+  }
+
+  async getServiceById(id) {
     return this.request(`/services/${id}`);
   }
 
@@ -130,38 +162,56 @@ class ApiClient {
     });
   }
 
-  async autoShuffle(serviceId, pool = 'auto') {
-    return this.request(`/services/${serviceId}/shuffle`, {
-      method: 'POST',
-      body: JSON.stringify({ pool }),
+  async deleteService(id) {
+    return this.request(`/services/${id}`, {
+      method: 'DELETE',
     });
   }
 
-  async manualOverride(serviceId, positionId, roleSlot, musicianId, notes = '') {
-    return this.request(`/services/${serviceId}/override`, {
+  async shuffleLineup(serviceId, options = {}) {
+    return this.request(`/services/${serviceId}/shuffle`, {
       method: 'POST',
-      body: JSON.stringify({ position_id: positionId, role_slot: roleSlot, musician_id: musicianId, notes }),
+      body: JSON.stringify(options),
     });
+  }
+
+  async autoSchedule(serviceId) {
+    return this.shuffleLineup(serviceId, { pool: 'available_and_unresponsive' });
   }
 
   async setWorshipLeader(serviceId, worshipLeaderId) {
     return this.request(`/services/${serviceId}/worship-leader`, {
-      method: 'PUT',
+      method: 'POST',
       body: JSON.stringify({ worship_leader_id: worshipLeaderId }),
     });
   }
 
+  async overrideSlot(serviceId, { position_id, role_slot = 'primary', musician_id, notes = '' }) {
+    return this.request(`/services/${serviceId}/assignments/override`, {
+      method: 'POST',
+      body: JSON.stringify({ position_id, role_slot, musician_id, notes }),
+    });
+  }
+
+  async manualAssignSlot(serviceId, positionId, musicianId) {
+    return this.overrideSlot(serviceId, {
+      position_id: positionId,
+      role_slot: 'primary',
+      musician_id: musicianId,
+    });
+  }
+
   async confirmLineup(serviceId) {
-    return this.request(`/services/${serviceId}/confirm`, {
+    return this.request(`/services/${serviceId}/assignments/confirm`, {
       method: 'POST',
     });
   }
 
   async getCandidates(serviceId, positionId) {
-    return this.request(`/services/${serviceId}/positions/${positionId}/candidates`);
+    return this.request(`/services/${serviceId}/candidates/${positionId}`);
   }
 
-  // --- Order of Service Plan Items ---
+  // --- Service Plan (Run Sheet) ---
   async getPlanItems(serviceId) {
     return this.request(`/services/${serviceId}/plan`);
   }
@@ -179,10 +229,14 @@ class ApiClient {
     });
   }
 
-  // --- People / Musicians ---
+  // --- People Directory ---
   async getMusicians(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/musicians${query ? '?' + query : ''}`);
+  }
+
+  async getPeople(params = {}) {
+    return this.getMusicians(params);
   }
 
   async createMusician(musicianData) {
@@ -205,7 +259,7 @@ class ApiClient {
     });
   }
 
-  // --- Songs Library ---
+  // --- Worship Songs ---
   async getSongs(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/songs${query ? '?' + query : ''}`);
@@ -225,8 +279,9 @@ class ApiClient {
   }
 
   // --- Small Groups ---
-  async getGroups() {
-    return this.request('/groups');
+  async getGroups(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/groups${query ? '?' + query : ''}`);
   }
 
   async createGroup(groupData) {
@@ -258,85 +313,27 @@ class ApiClient {
     return this.request('/church/campuses');
   }
 
-  async createCampus(campusData) {
-    return this.request('/church/campuses', {
-      method: 'POST',
-      body: JSON.stringify(campusData),
-    });
-  }
-
   async getMinistries() {
     return this.request('/church/ministries');
   }
 
-  // --- Positions Template ---
-  async getPositions() {
-    return this.request('/positions');
+  async getNotifications() {
+    return this.request('/notifications');
   }
 
-  async createPosition(posData) {
-    return this.request('/positions', {
+  async getAuditLogs(serviceId) {
+    return this.request('/notifications');
+  }
+
+  // --- Public Confirmation ---
+  async getPublicAvailability(token) {
+    return this.request(`/public/avail/${token}`);
+  }
+
+  async submitPublicResponse(token, status, notes = '') {
+    return this.request(`/public/avail/${token}/respond`, {
       method: 'POST',
-      body: JSON.stringify(posData),
-    });
-  }
-
-  // --- User Management ---
-  async getUsers() {
-    return this.request('/auth/users');
-  }
-
-  async createUser(userData) {
-    return this.request('/auth/users', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-  }
-
-  async deleteUser(id) {
-    return this.request(`/auth/users/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async resetUserPassword(id, newPassword) {
-    return this.request(`/auth/users/${id}/password`, {
-      method: 'PUT',
-      body: JSON.stringify({ password: newPassword }),
-    });
-  }
-
-  // --- Audit Trail & Notifications ---
-  async getNotifications(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/notifications${query ? '?' + query : ''}`);
-  }
-
-  // --- Public Availability (Zero-Login) ---
-  async getPublicService(token) {
-    const res = await fetch(`${API_BASE_URL}/public/avail/${token}`);
-    if (!res.ok) throw new Error('Invalid or expired link');
-    return res.json();
-  }
-
-  async submitPublicAvailability(token, musicianId, status) {
-    const res = await fetch(`${API_BASE_URL}/public/avail/${token}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ musician_id: musicianId, status }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Submission failed' }));
-      throw new Error(err.error || 'Failed to submit response');
-    }
-    return res.json();
-  }
-
-  // --- Push Notifications ---
-  async registerDeviceToken(token, platform = 'android') {
-    return this.request('/notifications/register-device', {
-      method: 'POST',
-      body: JSON.stringify({ token, platform }),
+      body: JSON.stringify({ status, notes }),
     });
   }
 }

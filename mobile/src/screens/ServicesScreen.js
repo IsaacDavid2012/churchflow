@@ -47,8 +47,8 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
         api.getServices(),
         api.getCampuses().catch(() => []),
       ]);
-      setServices(svcData || []);
-      setCampuses(campusData || []);
+      setServices(Array.isArray(svcData) ? svcData : []);
+      setCampuses(Array.isArray(campusData) ? campusData : []);
       if (campusData && campusData.length > 0 && !campusId) {
         const main = campusData.find((c) => c.is_main) || campusData[0];
         setCampusId(main.id);
@@ -86,7 +86,7 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   };
 
   const handleCreateService = async () => {
-    if (!serviceDate) {
+    if (!serviceDate.trim()) {
       Alert.alert('Missing Date', 'Please specify a service date (YYYY-MM-DD)');
       return;
     }
@@ -94,9 +94,9 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
     setCreating(true);
     try {
       await api.createService({
-        date: serviceDate,
-        time: serviceTime,
-        type: serviceType,
+        service_date: serviceDate.trim(),
+        service_time: serviceTime.trim(),
+        service_type: serviceType,
         theme: theme.trim() || undefined,
         notes: notes.trim() || undefined,
         campus_id: campusId || undefined,
@@ -104,10 +104,10 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
 
       setIsModalOpen(false);
       fetchServices();
-      Alert.alert('Success', 'Service scheduled successfully!');
+      Alert.alert('Service Scheduled', 'New service added to the calendar.');
     } catch (err) {
       console.error('Create service failed:', err);
-      Alert.alert('Error', err.response?.data?.error || 'Failed to create service');
+      Alert.alert('Error', err.message || 'Failed to create service');
     } finally {
       setCreating(false);
     }
@@ -128,27 +128,31 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
 
   const parseDateBox = (dateStr) => {
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return { day: '15', month: 'SEP', weekday: 'SUN' };
-      const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-      const day = d.getDate();
-      const weekday = d.toLocaleString('en-US', { weekday: 'short' }).toUpperCase();
-      return { day, month, weekday };
+      if (!dateStr) return { day: '15', month: 'SEP', weekday: 'SUN' };
+      const parts = dateStr.split('T')[0].split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        const day = d.getDate();
+        const weekday = d.toLocaleString('en-US', { weekday: 'short' }).toUpperCase();
+        return { day, month, weekday };
+      }
+      return { day: '15', month: 'SEP', weekday: 'SUN' };
     } catch {
       return { day: '15', month: 'SEP', weekday: 'SUN' };
     }
   };
 
   const renderServiceCard = ({ item }) => {
-    const { day, month, weekday } = parseDateBox(item.date);
-    const slotsCount = item.slots?.length || 0;
-    const filledCount = item.slots?.filter((s) => s.status === 'confirmed' || s.musician_id).length || 0;
-    const isFullyFilled = slotsCount > 0 && filledCount >= slotsCount;
+    const { day, month, weekday } = parseDateBox(item.service_date);
+    const confirmedCount = parseInt(item.confirmed_assignments_count, 10) || 0;
+    const totalCount = parseInt(item.total_assignments_count, 10) || 9;
+    const isFullyFilled = confirmedCount >= totalCount;
 
     return (
       <TouchableOpacity
         style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-        activeOpacity={0.7}
+        activeOpacity={0.75}
         onPress={() => onSelectService(item)}
       >
         <View style={styles.cardHeader}>
@@ -163,15 +167,15 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
           <View style={styles.cardMainInfo}>
             <View style={styles.typeBadgeRow}>
               <Text style={[styles.campusBadge, { backgroundColor: colors.badgeBg, color: colors.subText }]}>
-                {item.campus?.name || 'Main Sanctuary'}
+                {item.campus_name || 'Main Sanctuary'}
               </Text>
               <Text style={[styles.timeBadge, { color: colors.subText }]}>
-                🕒 {item.time || '10:00 AM'}
+                🕒 {item.service_time || '10:00 AM'}
               </Text>
             </View>
 
             <Text style={[styles.serviceTitle, { color: colors.text }]} numberOfLines={1}>
-              {item.type || 'Sunday Service'}
+              {item.service_type || 'Sunday Service'}
             </Text>
 
             {item.theme ? (
@@ -194,12 +198,12 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                     { color: isFullyFilled ? '#15803d' : '#b45309' },
                   ]}
                 >
-                  {filledCount}/{slotsCount || 9} Roster
+                  {confirmedCount}/{totalCount} Roster
                 </Text>
               </View>
 
               <View style={styles.chevronWrap}>
-                <Text style={[styles.openDetailText, { color: colors.subText }]}>Details</Text>
+                <Text style={[styles.openDetailText, { color: colors.subText }]}>Manage</Text>
                 <Ionicons name="chevron-forward" size={14} color={colors.subText} />
               </View>
             </View>
@@ -211,7 +215,6 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Services List */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -421,8 +424,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   calendarBox: {
-    width: 62,
-    height: 68,
+    width: 60,
+    height: 66,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

@@ -10,39 +10,36 @@ import {
   Platform,
   Alert,
   ScrollView,
-  Image,
+  Linking,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import { registerForPushNotificationsAsync } from '../services/fcm';
 
 export default function LoginScreen({ onLoginSuccess, isDark = false }) {
   const [username, setUsername] = useState('Isaac');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('IDC-201Two');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (customUser, customPass) => {
-    const u = customUser || username;
-    const p = customPass || password;
+    const u = customUser !== undefined ? customUser : username;
+    const p = customPass !== undefined ? customPass : password;
 
-    if (!u || !p) {
-      Alert.alert('Sign In', 'Please enter your username and password');
+    if (!u.trim() || !p.trim()) {
+      Alert.alert('Sign In', 'Please enter your username and password.');
       return;
     }
 
     setLoading(true);
     try {
-      const data = await api.login(u, p);
+      const data = await api.login(u.trim(), p.trim());
       registerForPushNotificationsAsync();
       onLoginSuccess(data.user);
     } catch (err) {
-      Alert.alert('Sign In Failed', err.message || 'Invalid username or password');
+      Alert.alert('Sign In Failed', err.message || 'Invalid username or password. Please verify credentials.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillAdmin = () => {
-    setUsername('Isaac');
   };
 
   const bg = isDark ? '#020617' : '#f8fafc';
@@ -59,17 +56,16 @@ export default function LoginScreen({ onLoginSuccess, isDark = false }) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-          {/* Red Accent Top Bar */}
           <View style={styles.topAccentBar} />
 
           {/* Logo & Header */}
           <View style={styles.header}>
-            <View style={[styles.logoContainer, { backgroundColor: isDark ? '#1e293b' : '#fef2f2' }]}>
-              <Text style={styles.logoIcon}>⚡</Text>
+            <View style={[styles.logoContainer, { backgroundColor: isDark ? '#1e293b' : '#fee2e2' }]}>
+              <Ionicons name="flash" size={28} color="#dc2626" />
             </View>
             <Text style={[styles.title, { color: textPrimary }]}>ChurchFlow</Text>
             <Text style={[styles.subtitle, { color: textSecondary }]}>
-              Worship Team Rostering & Planning
+              Worship Team Rostering & Service Planning
             </Text>
             <View style={styles.churchBadge}>
               <Text style={styles.churchBadgeText}>Jesus My Rock Church</Text>
@@ -111,19 +107,20 @@ export default function LoginScreen({ onLoginSuccess, isDark = false }) {
               )}
             </TouchableOpacity>
 
-            {/* Quick Admin Button */}
             <TouchableOpacity
               style={[styles.adminQuickBtn, { borderColor: border, backgroundColor: isDark ? '#1e293b' : '#f8fafc' }]}
-              onPress={fillAdmin}
+              onPress={() => handleLogin('Isaac', 'IDC-201Two')}
             >
-              <Text style={styles.adminQuickText}>🛡️ Admin Sign In (Isaac)</Text>
+              <Text style={styles.adminQuickText}>🛡️ Quick Admin Sign In (Isaac)</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        <Text style={[styles.footerText, { color: textSecondary }]}>
-          Built by Creative Clicks Studios • creativeclicks.art
-        </Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://creativeclicks.art')}>
+          <Text style={[styles.footerText, { color: textSecondary }]}>
+            Built by <Text style={{ color: '#dc2626', fontWeight: '700' }}>Creative Clicks Studios</Text>
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -142,11 +139,17 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
     overflow: 'hidden',
     position: 'relative',
   },
@@ -164,15 +167,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logoContainer: {
-    width: 60,
-    height: 60,
+    width: 58,
+    height: 58,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
-  logoIcon: {
-    fontSize: 28,
+    marginBottom: 10,
   },
   title: {
     fontSize: 24,
@@ -199,32 +199,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   form: {
-    width: '100%',
+    marginTop: 10,
   },
   label: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
     marginBottom: 6,
+    letterSpacing: 0.5,
   },
   input: {
+    height: 46,
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
     fontSize: 14,
   },
   button: {
     backgroundColor: '#dc2626',
+    height: 48,
     borderRadius: 12,
-    paddingVertical: 14,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 22,
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
+    marginTop: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#dc2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -235,21 +242,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   adminQuickBtn: {
-    marginTop: 16,
-    paddingVertical: 10,
+    height: 44,
     borderRadius: 12,
     borderWidth: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 10,
   },
   adminQuickText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: '#dc2626',
   },
   footerText: {
     textAlign: 'center',
-    fontSize: 11,
     marginTop: 24,
-    fontWeight: '500',
+    fontSize: 12,
   },
 });

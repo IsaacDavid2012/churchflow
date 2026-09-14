@@ -18,14 +18,17 @@ import { api } from '../api/client';
 export default function ServiceDetailScreen({ service, onBack, user, isDark = false }) {
   const [activeTab, setActiveTab] = useState('lineup'); // 'lineup' | 'runsheet' | 'availability' | 'logs'
   const [loading, setLoading] = useState(true);
-  const [detail, setDetail] = useState(null);
-  const [candidates, setCandidates] = useState([]);
+  const [serviceInfo, setServiceInfo] = useState(service);
+  const [lineup, setLineup] = useState([]);
   const [planItems, setPlanItems] = useState([]);
+  const [availability, setAvailability] = useState({ available: [], declined: [] });
   const [auditLogs, setAuditLogs] = useState([]);
   const [worshipLeaders, setWorshipLeaders] = useState([]);
 
   // Modals
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [candidates, setCandidates] = useState([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isWorshipLeaderModalOpen, setIsWorshipLeaderModalOpen] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
@@ -41,17 +44,31 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const fetchServiceData = async () => {
     try {
       setLoading(true);
-      const [svcData, planData, logsData, musiciansData] = await Promise.all([
-        api.getServiceById(service.id),
-        api.getPlanItems(service.id).catch(() => []),
-        api.getAuditLogs(service.id).catch(() => []),
+      const [svcData, musiciansData, logsData] = await Promise.all([
+        api.getService(service.id),
         api.getMusicians().catch(() => []),
+        api.getAuditLogs(service.id).catch(() => []),
       ]);
 
-      setDetail(svcData || service);
-      setPlanItems(planData || []);
-      setAuditLogs(logsData || []);
-      setWorshipLeaders((musiciansData || []).filter((m) => m.primary_instrument === 'Worship Leader' || m.can_lead_worship));
+      if (svcData) {
+        setServiceInfo(svcData.service || service);
+        setLineup(Array.isArray(svcData.lineup) ? svcData.lineup : []);
+        setPlanItems(Array.isArray(svcData.plan) ? svcData.plan : []);
+        setAvailability(svcData.availability || { available: [], declined: [] });
+      }
+
+      setAuditLogs(Array.isArray(logsData) ? logsData : []);
+
+      // Filter worship leaders from musicians list
+      if (Array.isArray(musiciansData)) {
+        const leaders = musiciansData.filter(
+          (m) =>
+            m.roles?.some((r) => r.toLowerCase().includes('worship') || r.toLowerCase().includes('leader')) ||
+            m.can_lead_worship ||
+            m.status === 'leader'
+        );
+        setWorshipLeaders(leaders.length > 0 ? leaders : musiciansData);
+      }
     } catch (err) {
       console.error('Fetch service detail error:', err);
     } finally {
@@ -66,24 +83,31 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const handleOpenAssignModal = async (slot) => {
     setSelectedSlot(slot);
     setIsAssignModalOpen(true);
+    setLoadingCandidates(true);
     try {
-      const cList = await api.getCandidates(service.id, slot.role_name);
-      setCandidates(cList || []);
+      const cList = await api.getCandidates(service.id, slot.positionId);
+      setCandidates(Array.isArray(cList) ? cList : []);
     } catch (err) {
       console.error('Fetch candidates error:', err);
       setCandidates([]);
+    } finally {
+      setLoadingCandidates(false);
     }
   };
 
   const handleAssignCandidate = async (musicianId) => {
     if (!selectedSlot) return;
     try {
-      await api.manualAssignSlot(service.id, selectedSlot.id, musicianId);
+      await api.overrideSlot(service.id, {
+        position_id: selectedSlot.positionId,
+        role_slot: 'primary',
+        musician_id: musicianId,
+      });
       setIsAssignModalOpen(false);
       fetchServiceData();
-      Alert.alert('Roster Updated', 'Volunteer assigned successfully.');
+      Alert.alert('Roster Updated', 'Volunteer assigned to position.');
     } catch (err) {
-      Alert.alert('Assignment Error', err.response?.data?.error || 'Could not assign volunteer');
+      Alert.alert('Assignment Error', err.message || 'Could not assign volunteer');
     }
   };
 
@@ -92,16 +116,16 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       await api.setWorshipLeader(service.id, musicianId);
       setIsWorshipLeaderModalOpen(false);
       fetchServiceData();
-      Alert.alert('Worship Leader Updated', 'Leader set and lineup updated.');
+      Alert.alert('Worship Leader Updated', 'Leader set and lineup refreshed.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not update leader');
+      Alert.alert('Error', err.message || 'Could not update worship leader');
     }
   };
 
   const handleAutoSchedule = async () => {
     Alert.alert(
       'Auto-Fill Lineup',
-      'Generate smart volunteer rotation based on availability, skill, and attendance history?',
+      'Generate fair volunteer rotation based on availability and serving frequency?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -109,11 +133,11 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           onPress: async () => {
             try {
               setLoading(true);
-              await api.autoSchedule(service.id);
+              await api.shuffleLineup(service.id, { pool: 'available_and_unresponsive' });
               fetchServiceData();
-              Alert.alert('Success', 'Lineup roster filled based on fair rotation rules!');
+              Alert.alert('Success', 'Lineup roster updated!');
             } catch (err) {
-              Alert.alert('Scheduling Error', err.response?.data?.error || 'Failed to auto-schedule');
+              Alert.alert('Scheduling Error', err.message || 'Failed to auto-schedule');
               setLoading(false);
             }
           },
@@ -124,17 +148,17 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
   const handleShareWhatsApp = () => {
     const lines = [
-      `⛪ *ChurchFlow Lineup - ${detail?.type || 'Sunday Service'}*`,
-      `📅 *Date:* ${detail?.date} at ${detail?.time || '10:00 AM'}`,
-      `🏛️ *Campus:* ${detail?.campus?.name || 'Main Sanctuary'}`,
-      detail?.theme ? `📖 *Theme:* "${detail.theme}"` : '',
-      `\n👥 *Stage Roster:*`,
+      `⛪ *ChurchFlow Lineup - ${serviceInfo?.service_type || 'Sunday Service'}*`,
+      `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
+      `🏛️ *Campus:* ${serviceInfo?.campus_name || 'Main Sanctuary'}`,
+      serviceInfo?.theme ? `📖 *Theme:* "${serviceInfo.theme}"` : '',
+      `\n👥 *Stage Lineup:*`,
     ];
 
-    detail?.slots?.forEach((s) => {
-      const name = s.musician?.name || 'Unassigned';
-      const statusIcon = s.status === 'confirmed' ? '✅' : s.status === 'declined' ? '❌' : '⏳';
-      lines.push(`• *${s.role_name}:* ${name} ${statusIcon}`);
+    lineup.forEach((slot) => {
+      const name = slot.primary?.name || 'Open Position';
+      const statusIcon = slot.primary?.status === 'confirmed' ? '✅' : '⏳';
+      lines.push(`• *${slot.positionName}:* ${name} ${statusIcon}`);
     });
 
     lines.push(`\n🔗 Confirm your serving status: https://serve.creativeclicks.art`);
@@ -169,7 +193,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       fetchServiceData();
       Alert.alert('Item Added', 'Order of service run sheet updated.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Failed to add run sheet item');
+      Alert.alert('Error', err.message || 'Failed to add run sheet item');
     } finally {
       setSavingPlan(false);
     }
@@ -189,13 +213,13 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
   const getRoleIcon = (role) => {
     const r = (role || '').toLowerCase();
-    if (r.includes('worship') || r.includes('lead vocal')) return 'mic';
+    if (r.includes('worship') || r.includes('vocal')) return 'mic';
     if (r.includes('guitar')) return 'musical-note';
-    if (r.includes('keys') || r.includes('piano') || r.includes('synth')) return 'keypad';
+    if (r.includes('keys') || r.includes('keyboard') || r.includes('piano')) return 'keypad';
     if (r.includes('drum')) return 'disc';
     if (r.includes('bass')) return 'pulse';
-    if (r.includes('media') || r.includes('visual') || r.includes('slides')) return 'tv';
-    if (r.includes('sound') || r.includes('audio')) return 'volume-high';
+    if (r.includes('sound') || r.includes('foh') || r.includes('audio')) return 'volume-high';
+    if (r.includes('media') || r.includes('slides') || r.includes('camera')) return 'tv';
     return 'person';
   };
 
@@ -208,8 +232,8 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     );
   }
 
-  const confirmedCount = detail?.slots?.filter((s) => s.status === 'confirmed').length || 0;
-  const totalSlots = detail?.slots?.length || 0;
+  const confirmedCount = lineup.filter((s) => s.primary?.status === 'confirmed').length;
+  const totalSlots = lineup.length || 9;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -221,10 +245,10 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
         <View style={styles.topBarCenter}>
           <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>
-            {detail?.type || 'Service Roster'}
+            {serviceInfo?.service_type || 'Service Roster'}
           </Text>
           <Text style={[styles.topBarSub, { color: colors.subText }]}>
-            {detail?.date} • {detail?.time || '10:00 AM'}
+            {serviceInfo?.service_date} • {serviceInfo?.service_time || '10:00 AM'}
           </Text>
         </View>
 
@@ -282,10 +306,10 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
               <View style={styles.heroRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.heroTheme, { color: colors.text }]}>
-                    {detail?.theme ? `"${detail.theme}"` : detail?.type}
+                    {serviceInfo?.theme ? `"${serviceInfo.theme}"` : serviceInfo?.service_type}
                   </Text>
                   <Text style={[styles.heroCampus, { color: colors.subText }]}>
-                    📍 {detail?.campus?.name || 'Sanctuary Campus'}
+                    📍 {serviceInfo?.campus_name || 'Sanctuary Campus'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -308,7 +332,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={[styles.leaderTag, { color: colors.primary }]}>Assigned Worship Leader</Text>
                   <Text style={[styles.leaderName, { color: colors.text }]}>
-                    {detail?.worship_leader?.name || 'Tap to assign Worship Leader'}
+                    {serviceInfo?.worship_leader_name || 'Tap to assign Worship Leader'}
                   </Text>
                 </View>
                 <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
@@ -317,17 +341,18 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
             {/* Lineup Slots List */}
             <Text style={[styles.sectionHeading, { color: colors.text }]}>
-              Stage Positions & Ministry Roles
+              Stage Lineup & Ministry Roles
             </Text>
 
-            {detail?.slots?.map((slot) => {
-              const isConfirmed = slot.status === 'confirmed';
-              const isDeclined = slot.status === 'declined';
-              const hasMusician = !!slot.musician;
+            {lineup.map((slot) => {
+              const primary = slot.primary;
+              const isConfirmed = primary?.status === 'confirmed';
+              const isDeclined = primary?.status === 'declined';
+              const hasMusician = !!primary?.name;
 
               return (
                 <View
-                  key={slot.id}
+                  key={slot.positionId}
                   style={[
                     styles.slotCard,
                     { backgroundColor: colors.card, borderColor: colors.border },
@@ -348,7 +373,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                       ]}
                     >
                       <Ionicons
-                        name={getRoleIcon(slot.role_name)}
+                        name={getRoleIcon(slot.positionName)}
                         size={18}
                         color={isConfirmed ? '#16a34a' : isDeclined ? '#dc2626' : colors.primary}
                       />
@@ -358,7 +383,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     <View style={styles.slotInfo}>
                       <View style={styles.roleTitleRow}>
                         <Text style={[styles.roleNameText, { color: colors.text }]}>
-                          {slot.role_name}
+                          {slot.positionName}
                         </Text>
                         <View
                           style={[
@@ -393,12 +418,12 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                           { color: hasMusician ? colors.text : colors.subText },
                         ]}
                       >
-                        {hasMusician ? slot.musician.name : 'Open Position (Not filled)'}
+                        {hasMusician ? primary.name : 'Open Position (Not filled)'}
                       </Text>
 
-                      {hasMusician && slot.musician.phone ? (
+                      {hasMusician && primary.phone ? (
                         <Text style={[styles.volunteerContact, { color: colors.subText }]}>
-                          📞 {slot.musician.phone}
+                          📞 {primary.phone}
                         </Text>
                       ) : null}
                     </View>
@@ -424,7 +449,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           <View>
             <View style={styles.sectionHeaderRow}>
               <Text style={[styles.sectionHeading, { color: colors.text }]}>
-                Service Flow & Run Sheet
+                Order of Service Flow
               </Text>
               <TouchableOpacity
                 style={[styles.miniActionBtn, { backgroundColor: colors.primary }]}
@@ -440,7 +465,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 <Ionicons name="list-outline" size={40} color={colors.subText} />
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>No Run Sheet Items</Text>
                 <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
-                  Add songs, prayers, scripture readings, and sermon segments.
+                  Add songs, scripture readings, prayers, and sermon timings.
                 </Text>
               </View>
             ) : (
@@ -488,62 +513,70 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
             <View style={styles.statsSummaryGrid}>
               <View style={[styles.statBox, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                <Text style={[styles.statBoxNum, { color: '#15803d' }]}>{confirmedCount}</Text>
-                <Text style={[styles.statBoxLabel, { color: '#15803d' }]}>Confirmed</Text>
-              </View>
-              <View style={[styles.statBox, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}>
-                <Text style={[styles.statBoxNum, { color: '#b45309' }]}>
-                  {totalSlots - confirmedCount}
+                <Text style={[styles.statBoxNum, { color: '#15803d' }]}>
+                  {availability?.available?.length || 0}
                 </Text>
-                <Text style={[styles.statBoxLabel, { color: '#b45309' }]}>Pending</Text>
+                <Text style={[styles.statBoxLabel, { color: '#15803d' }]}>Available</Text>
+              </View>
+              <View style={[styles.statBox, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
+                <Text style={[styles.statBoxNum, { color: '#b91c1c' }]}>
+                  {availability?.declined?.length || 0}
+                </Text>
+                <Text style={[styles.statBoxLabel, { color: '#b91c1c' }]}>Declined</Text>
               </View>
             </View>
 
-            {detail?.slots?.map((slot) => (
-              <View
-                key={slot.id}
-                style={[styles.availRowCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                <View style={styles.availAvatar}>
-                  <Text style={styles.availAvatarText}>
-                    {(slot.musician?.name || 'U').slice(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[styles.availName, { color: colors.text }]}>
-                    {slot.musician?.name || 'Open Position'}
-                  </Text>
-                  <Text style={[styles.availRole, { color: colors.subText }]}>
-                    Role: {slot.role_name}
-                  </Text>
-                </View>
+            {lineup.map((slot) => {
+              const primary = slot.primary;
+              const isConfirmed = primary?.status === 'confirmed';
+              const isDeclined = primary?.status === 'declined';
+
+              return (
                 <View
-                  style={[
-                    styles.statusChip,
-                    slot.status === 'confirmed'
-                      ? styles.statusConfirmed
-                      : slot.status === 'declined'
-                      ? styles.statusDeclined
-                      : styles.statusPending,
-                  ]}
+                  key={slot.positionId}
+                  style={[styles.availRowCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
-                  <Text
+                  <View style={styles.availAvatar}>
+                    <Text style={styles.availAvatarText}>
+                      {(primary?.name || 'U').slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.availName, { color: colors.text }]}>
+                      {primary?.name || 'Open Position'}
+                    </Text>
+                    <Text style={[styles.availRole, { color: colors.subText }]}>
+                      Position: {slot.positionName}
+                    </Text>
+                  </View>
+                  <View
                     style={[
-                      styles.statusChipText,
-                      {
-                        color: slot.status === 'confirmed'
-                          ? '#15803d'
-                          : slot.status === 'declined'
-                          ? '#b91c1c'
-                          : '#b45309',
-                      },
+                      styles.statusChip,
+                      isConfirmed
+                        ? styles.statusConfirmed
+                        : isDeclined
+                        ? styles.statusDeclined
+                        : styles.statusPending,
                     ]}
                   >
-                    {slot.status === 'confirmed' ? 'Accepted' : slot.status === 'declined' ? 'Declined' : 'No Reply'}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.statusChipText,
+                        {
+                          color: isConfirmed
+                            ? '#15803d'
+                            : isDeclined
+                            ? '#b91c1c'
+                            : '#b45309',
+                        },
+                      ]}
+                    >
+                      {isConfirmed ? 'Accepted' : isDeclined ? 'Declined' : 'Invited'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -551,7 +584,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
         {activeTab === 'logs' && (
           <View>
             <Text style={[styles.sectionHeading, { color: colors.text }]}>
-              Service Audit Trail & Activity
+              Service Activity Feed
             </Text>
 
             {auditLogs.length === 0 ? (
@@ -568,13 +601,13 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                   <Ionicons name="information-circle" size={18} color={colors.primary} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={[styles.logActionText, { color: colors.text }]}>
-                      {log.action || 'Roster modified'}
+                      {log.type || log.action || 'Roster activity'}
                     </Text>
                     <Text style={[styles.logDetailsText, { color: colors.subText }]}>
-                      {log.details || log.notes}
+                      {log.message || log.details}
                     </Text>
                     <Text style={[styles.logTimestamp, { color: colors.subText }]}>
-                      {new Date(log.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(log.created_at || Date.now()).toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -590,39 +623,46 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Assign {selectedSlot?.role_name}
+                Assign {selectedSlot?.positionName}
               </Text>
               <TouchableOpacity onPress={() => setIsAssignModalOpen(false)}>
                 <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 340 }}>
-              {candidates.length === 0 ? (
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: colors.subText }}>No candidates available for this role.</Text>
-                </View>
-              ) : (
-                candidates.map((c) => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={[styles.candidateRow, { borderColor: colors.border }]}
-                    onPress={() => handleAssignCandidate(c.id)}
-                  >
-                    <View style={styles.candAvatar}>
-                      <Text style={styles.candAvatarText}>{(c.name || 'U').slice(0, 2).toUpperCase()}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={[styles.candName, { color: colors.text }]}>{c.name}</Text>
-                      <Text style={[styles.candSub, { color: colors.subText }]}>
-                        {c.primary_instrument || 'Musician'} • {c.serving_status || 'Available'}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.subText} />
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+            {loadingCandidates ? (
+              <View style={{ padding: 30, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={{ marginTop: 8, color: colors.subText }}>Finding eligible volunteers...</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 340 }}>
+                {candidates.length === 0 ? (
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Text style={{ color: colors.subText }}>No candidates available for this role.</Text>
+                  </View>
+                ) : (
+                  candidates.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.candidateRow, { borderColor: colors.border }]}
+                      onPress={() => handleAssignCandidate(c.id)}
+                    >
+                      <View style={styles.candAvatar}>
+                        <Text style={styles.candAvatarText}>{(c.name || 'U').slice(0, 2).toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={[styles.candName, { color: colors.text }]}>{c.name}</Text>
+                        <Text style={[styles.candSub, { color: colors.subText }]}>
+                          {Array.isArray(c.roles) ? c.roles.join(', ') : c.roles || 'Volunteer'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.subText} />
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -648,7 +688,9 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                   <Text style={{ fontSize: 18, marginRight: 10 }}>👑</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.candName, { color: colors.text }]}>{wl.name}</Text>
-                    <Text style={[styles.candSub, { color: colors.subText }]}>{wl.primary_instrument}</Text>
+                    <Text style={[styles.candSub, { color: colors.subText }]}>
+                      {Array.isArray(wl.roles) ? wl.roles.join(', ') : wl.ministry}
+                    </Text>
                   </View>
                   <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
                 </TouchableOpacity>
@@ -724,7 +766,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={planNotes}
                 onChangeText={setPlanNotes}
-                placeholder="e.g. Key of G, transition directly into chorus"
+                placeholder="e.g. Transition directly to prayer"
                 placeholderTextColor={colors.subText}
               />
             </ScrollView>
