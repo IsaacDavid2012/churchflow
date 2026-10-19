@@ -184,8 +184,8 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
                         </h3>
                         {getStatusBadge(service.status)}
                         {service.service_type && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                            {service.service_type}
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#f5ede1] text-[#9e7343] dark:bg-[#3a2815] dark:text-[#c59c6c] border border-[#eadbc4] dark:border-[#523d24]">
+                            ⛪ {service.service_type}
                           </span>
                         )}
                       </div>

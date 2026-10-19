@@ -136,6 +136,29 @@ CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title);
 CREATE INDEX IF NOT EXISTS idx_songs_artist ON songs(artist);
 CREATE INDEX IF NOT EXISTS idx_songs_key ON songs(default_key);
 
+-- Service Types table
+CREATE TABLE IF NOT EXISTS service_types (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    default_time VARCHAR(50) DEFAULT '10:00 AM',
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_service_types_name ON service_types(name);
+
+INSERT INTO service_types (name, description, default_time, sort_order)
+VALUES 
+  ('Sunday Morning Celebration', 'Main Sunday worship service and preaching', '10:00 AM', 1),
+  ('Sunday Evening Praise & Word', 'Evening praise and prophetic word gathering', '6:00 PM', 2),
+  ('Midweek Encounter & Prayer', 'Wednesday prayer, intercession and Bible study', '8:00 PM', 3),
+  ('Youth Revolution (Friday)', 'Youth and young adult worship service', '8:00 PM', 4),
+  ('Night of Worship & Prophetic', 'Extended worship, soaking and prophetic encounter', '8:30 PM', 5),
+  ('Special Gathering', 'Conferences, holiday celebrations, and special services', '10:00 AM', 6)
+ON CONFLICT (name) DO NOTHING;
+
 -- Services table
 CREATE TABLE IF NOT EXISTS services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

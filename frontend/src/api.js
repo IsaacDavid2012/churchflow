@@ -96,6 +96,16 @@ export const api = {
     request(`/services/${id}`, {
       method: 'DELETE',
     }),
+  getServiceTypes: () => request('/service-types'),
+  createServiceType: (data) =>
+    request('/service-types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteServiceType: (id) =>
+    request(`/service-types/${id}`, {
+      method: 'DELETE',
+    }),
   setWorshipLeader: (id, worship_leader_id, auto_roster = false) =>
     request(`/services/${id}/worship-leader`, {
       method: 'POST',

@@ -13,6 +13,7 @@ const {
 } = require('../services/shuffleService');
 
 router.use(authMiddleware);
+router.use('/types', require('./serviceTypes'));
 
 // GET /api/services - List all services
 router.get('/', async (req, res) => {

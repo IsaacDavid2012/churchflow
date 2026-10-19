@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
-const SERVICE_TYPES = [
+const DEFAULT_SERVICE_TYPES = [
   'Sunday Morning Celebration',
   'Sunday Evening Praise & Word',
   'Midweek Encounter & Prayer',
@@ -33,6 +33,16 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   const [positions, setPositions] = useState([]);
   const [selectedPositionIds, setSelectedPositionIds] = useState([]);
 
+  // Dynamic Service Types
+  const [serviceTypes, setServiceTypes] = useState(
+    DEFAULT_SERVICE_TYPES.map((name, i) => ({ id: `default-${i}`, name, default_time: '10:00 AM' }))
+  );
+  const [isTypesModalOpen, setIsTypesModalOpen] = useState(false);
+  const [showInlineAddType, setShowInlineAddType] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeTime, setNewTypeTime] = useState('10:00 AM');
+  const [creatingType, setCreatingType] = useState(false);
+
   // Create & Edit Service Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState(null);
@@ -46,15 +56,19 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
 
   const fetchServices = async () => {
     try {
-      const [svcData, campusData, posData] = await Promise.all([
+      const [svcData, campusData, posData, typesData] = await Promise.all([
         api.getServices(),
         api.getCampuses().catch(() => []),
         api.getPositions().catch(() => []),
+        api.getServiceTypes().catch(() => []),
       ]);
       setServices(Array.isArray(svcData) ? svcData : []);
       setCampuses(Array.isArray(campusData) ? campusData : []);
       const posList = Array.isArray(posData) ? posData : [];
       setPositions(posList);
+      if (Array.isArray(typesData) && typesData.length > 0) {
+        setServiceTypes(typesData);
+      }
       if (selectedPositionIds.length === 0 && posList.length > 0) {
         setSelectedPositionIds(posList.map((p) => p.id));
       }
@@ -73,6 +87,69 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   useEffect(() => {
     fetchServices();
   }, []);
+
+  const handleAddServiceType = async () => {
+    if (!newTypeName.trim()) {
+      Alert.alert('Name Required', 'Please enter a name for the new service type.');
+      return;
+    }
+    setCreatingType(true);
+    try {
+      const created = await api.createServiceType({
+        name: newTypeName.trim(),
+        default_time: newTypeTime.trim() || '10:00 AM',
+      });
+      const updatedTypes = [...serviceTypes.filter((t) => t.id !== created.id), created];
+      setServiceTypes(updatedTypes);
+      setServiceType(created.name);
+      if (created.default_time && !editingService) {
+        setServiceTime(created.default_time);
+      }
+      setNewTypeName('');
+      setShowInlineAddType(false);
+      Alert.alert('Service Type Added', `"${created.name}" is now ready for service scheduling.`);
+    } catch (err) {
+      console.error('Add service type error:', err);
+      Alert.alert('Error', err.message || 'Failed to add service type');
+    } finally {
+      setCreatingType(false);
+    }
+  };
+
+  const handleDeleteServiceType = (typeItem) => {
+    if (serviceTypes.length <= 1) {
+      Alert.alert('Cannot Delete', 'You must have at least one service type.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Service Type',
+      `Are you sure you want to delete "${typeItem.name}"? Past services will keep their records intact.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (typeItem.id && !typeItem.id.toString().startsWith('default-')) {
+                await api.deleteServiceType(typeItem.id);
+              }
+              const remaining = serviceTypes.filter((t) => t.id !== typeItem.id && t.name !== typeItem.name);
+              setServiceTypes(remaining);
+              if (serviceType === typeItem.name && remaining.length > 0) {
+                setServiceType(remaining[0].name);
+              }
+              Alert.alert('Deleted', `"${typeItem.name}" service type was deleted.`);
+            } catch (err) {
+              console.error('Delete service type error:', err);
+              Alert.alert('Delete Failed', err.message || 'Could not delete service type');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -267,23 +344,24 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
           {/* Main Info */}
           <View style={styles.cardMainInfo}>
             <View style={styles.typeBadgeRow}>
-              <Text style={[styles.campusBadge, { backgroundColor: colors.badgeBg, color: colors.subText }]}>
-                {item.campus_name || 'Main Sanctuary'}
-              </Text>
+              <View style={[styles.serviceTypeBadge, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
+                <Ionicons name="sparkles" size={11} color={colors.primary} />
+                <Text style={[styles.serviceTypeBadgeText, { color: colors.primary }]} numberOfLines={1}>
+                  {item.service_type || 'Sunday Service'}
+                </Text>
+              </View>
               <Text style={[styles.timeBadge, { color: colors.subText }]}>
                 🕒 {item.service_time || '10:00 AM'}
               </Text>
             </View>
 
             <Text style={[styles.serviceTitle, { color: colors.text }]} numberOfLines={1}>
-              {item.service_type || 'Sunday Service'}
+              {item.theme ? `"${item.theme}"` : (item.service_type || 'Sunday Service')}
             </Text>
 
-            {item.theme ? (
-              <Text style={[styles.serviceTheme, { color: colors.primary }]} numberOfLines={1}>
-                "{item.theme}"
-              </Text>
-            ) : null}
+            <Text style={[styles.campusBadge, { backgroundColor: colors.badgeBg, color: colors.subText, alignSelf: 'flex-start', marginTop: 4 }]}>
+              📍 {item.campus_name || 'Main Sanctuary'}
+            </Text>
 
             {/* Lineup Capacity Bar */}
             <View style={styles.capacityRow}>
@@ -346,6 +424,25 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
           renderItem={renderServiceCard}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={
+            <View style={[styles.topSummaryBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.topSummaryLeft}>
+                <Text style={[styles.topServicesCount, { color: colors.text }]}>
+                  {services.length} {services.length === 1 ? 'Service' : 'Services'} Scheduled
+                </Text>
+                <Text style={[styles.topServicesSub, { color: colors.subText }]}>
+                  {serviceTypes.length} dynamic service types available
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.manageTypesTopBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                onPress={() => setIsTypesModalOpen(true)}
+              >
+                <Ionicons name="layers-outline" size={15} color={colors.primary} />
+                <Text style={[styles.manageTypesTopBtnText, { color: colors.primary }]}>Manage Types</Text>
+              </TouchableOpacity>
+            </View>
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={48} color={colors.subText} />
@@ -403,30 +500,106 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                 placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Type *</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, marginBottom: 6 }}>
+                <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>
+                  Service Type *
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowInlineAddType(!showInlineAddType)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Ionicons name={showInlineAddType ? 'close-circle' : 'add-circle'} size={15} color={colors.primary} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                    {showInlineAddType ? 'Cancel' : '+ Add Type'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {showInlineAddType && (
+                <View style={[styles.inlineAddTypeBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.inlineAddTitle, { color: colors.text }]}>New Service Type</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, marginBottom: 8 }]}
+                    value={newTypeName}
+                    onChangeText={setNewTypeName}
+                    placeholder="e.g. Special Revival Service"
+                    placeholderTextColor={colors.subText}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <TextInput
+                      style={[styles.input, { flex: 1, backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                      value={newTypeTime}
+                      onChangeText={setNewTypeTime}
+                      placeholder="Default Time (e.g. 10:00 AM)"
+                      placeholderTextColor={colors.subText}
+                    />
+                    <TouchableOpacity
+                      style={[styles.submitInlineBtn, { backgroundColor: colors.primary }]}
+                      onPress={handleAddServiceType}
+                      disabled={creatingType}
+                    >
+                      {creatingType ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.submitInlineBtnText}>Save</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.typesPillsWrap}>
-                {SERVICE_TYPES.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[
-                      styles.typeChoice,
-                      {
-                        borderColor: serviceType === t ? colors.primary : colors.border,
-                        backgroundColor: serviceType === t ? colors.primaryLight : colors.inputBg,
-                      },
-                    ]}
-                    onPress={() => setServiceType(t)}
-                  >
-                    <Text
+                {serviceTypes.map((t) => {
+                  const typeName = typeof t === 'string' ? t : t.name;
+                  const isSelected = serviceType === typeName;
+                  return (
+                    <View
+                      key={t.id || typeName}
                       style={[
-                        styles.typeChoiceText,
-                        { color: serviceType === t ? colors.primary : colors.text },
+                        styles.typeChoice,
+                        {
+                          borderColor: isSelected ? colors.primary : colors.border,
+                          backgroundColor: isSelected ? colors.primaryLight : colors.inputBg,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        },
                       ]}
                     >
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <TouchableOpacity
+                        onPress={() => {
+                          setServiceType(typeName);
+                          if (t.default_time && !editingService) {
+                            setServiceTime(t.default_time);
+                          }
+                        }}
+                        style={{ flexShrink: 1 }}
+                      >
+                        <Text
+                          style={[
+                            styles.typeChoiceText,
+                            { color: isSelected ? colors.primary : colors.text },
+                          ]}
+                        >
+                          {typeName}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {serviceTypes.length > 1 && (
+                        <TouchableOpacity
+                          onPress={() => handleDeleteServiceType(t)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={14}
+                            color={isSelected ? colors.primary : colors.subText}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
@@ -533,6 +706,102 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                     {editingService ? 'Save Changes' : `Create Service (${selectedPositionIds.length})`}
                   </Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Dedicated Manage Service Types Modal */}
+      <Modal visible={isTypesModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Ionicons name="layers" size={20} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Manage Service Types
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsTypesModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.typesIntroText, { color: colors.subText }]}>
+                Add or remove dynamic service types for Jesus My Rock Church. Changes sync across mobile and web instantly.
+              </Text>
+
+              {/* Add New Type Box */}
+              <View style={[styles.inlineAddTypeBox, { backgroundColor: colors.inputBg, borderColor: colors.border, marginTop: 12 }]}>
+                <Text style={[styles.inlineAddTitle, { color: colors.text }]}>Add New Service Type</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, marginBottom: 8 }]}
+                  value={newTypeName}
+                  onChangeText={setNewTypeName}
+                  placeholder="e.g. Easter Celebration Night"
+                  placeholderTextColor={colors.subText}
+                />
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                    value={newTypeTime}
+                    onChangeText={setNewTypeTime}
+                    placeholder="Default Time (e.g. 7:30 PM)"
+                    placeholderTextColor={colors.subText}
+                  />
+                  <TouchableOpacity
+                    style={[styles.submitInlineBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleAddServiceType}
+                    disabled={creatingType}
+                  >
+                    {creatingType ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.submitInlineBtnText}>Add Type</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Current List of Types */}
+              <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 18, marginBottom: 8 }]}>
+                Configured Service Types ({serviceTypes.length})
+              </Text>
+              <View style={styles.typesListContainer}>
+                {serviceTypes.map((t, idx) => {
+                  const typeName = typeof t === 'string' ? t : t.name;
+                  const typeTime = t.default_time || '10:00 AM';
+                  return (
+                    <View
+                      key={t.id || idx}
+                      style={[styles.typeRowItem, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.typeNameLabel, { color: colors.text }]}>{typeName}</Text>
+                        <Text style={[styles.typeTimeLabel, { color: colors.subText }]}>🕒 Default: {typeTime}</Text>
+                      </View>
+                      {serviceTypes.length > 1 && (
+                        <TouchableOpacity
+                          style={[styles.typeDeleteBtn, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                          onPress={() => handleDeleteServiceType(t)}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={{ marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary, alignItems: 'center' }]}
+                onPress={() => setIsTypesModalOpen(false)}
+              >
+                <Text style={styles.submitBtnText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -826,5 +1095,108 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  serviceTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  serviceTypeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  topSummaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  topSummaryLeft: {
+    flex: 1,
+  },
+  topServicesCount: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  topServicesSub: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  manageTypesTopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  manageTypesTopBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  inlineAddTypeBox: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  inlineAddTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  submitInlineBtn: {
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitInlineBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  typesIntroText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  typesListContainer: {
+    gap: 8,
+  },
+  typeRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  typeNameLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  typeTimeLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  typeDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

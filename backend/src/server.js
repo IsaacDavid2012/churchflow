@@ -16,6 +16,7 @@ const songsRoutes = require('./routes/songs');
 const groupsRoutes = require('./routes/groups');
 const notificationsRoutes = require('./routes/notifications');
 const publicRoutes = require('./routes/public');
+const serviceTypesRoutes = require('./routes/serviceTypes');
 const { startDeadlineMonitor } = require('./services/cronService');
 
 const app = express();
@@ -118,6 +119,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/songs', songsRoutes);
 app.use('/api/groups', groupsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/service-types', serviceTypesRoutes);
 
 // In production, serve React frontend build
 const frontendDist = path.join(__dirname, '../../frontend/dist');

@@ -187,8 +187,8 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
                 {service.status?.replace('_', ' ') || 'Planning'}
               </span>
               {service.service_type && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                  {service.service_type}
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#f5ede1] text-[#9e7343] dark:bg-[#3a2815] dark:text-[#c59c6c] border border-[#eadbc4] dark:border-[#523d24]">
+                  ⛪ {service.service_type}
                 </span>
               )}
             </div>
@@ -465,6 +465,7 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
         positions={lineup}
         campusName={service.campus_name}
         theme={service.theme}
+        serviceType={service.service_type}
       />
     </div>
   );

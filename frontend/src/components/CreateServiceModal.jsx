@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Calendar, Layers, Check } from 'lucide-react';
 import { api } from '../api';
 
-const SERVICE_TYPES = [
+const DEFAULT_SERVICE_TYPES = [
   'Sunday Morning Celebration',
   'Sunday Evening Praise & Word',
   'Midweek Encounter & Prayer',
@@ -25,6 +25,15 @@ export default function CreateServiceModal({ isOpen, onClose, onServiceCreated }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Dynamic Service Types
+  const [serviceTypes, setServiceTypes] = useState(
+    DEFAULT_SERVICE_TYPES.map((t, idx) => ({ id: `default-${idx}`, name: t, default_time: '10:00 AM' }))
+  );
+  const [showAddType, setShowAddType] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeTime, setNewTypeTime] = useState('10:00 AM');
+  const [creatingType, setCreatingType] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setError('');
@@ -41,8 +50,60 @@ export default function CreateServiceModal({ isOpen, onClose, onServiceCreated }
         setPositions(list);
         setSelectedPositionIds(list.map((p) => p.id));
       }).catch(console.error);
+
+      api.getServiceTypes().then((types) => {
+        if (Array.isArray(types) && types.length > 0) {
+          setServiceTypes(types);
+        }
+      }).catch(console.error);
     }
   }, [isOpen]);
+
+  async function handleAddType(e) {
+    e.preventDefault();
+    if (!newTypeName.trim()) return;
+    setCreatingType(true);
+    try {
+      const created = await api.createServiceType({
+        name: newTypeName.trim(),
+        default_time: newTypeTime.trim() || '10:00 AM',
+      });
+      const updated = [...serviceTypes.filter((t) => t.id !== created.id), created];
+      setServiceTypes(updated);
+      setServiceType(created.name);
+      if (created.default_time) {
+        setServiceTime(created.default_time);
+      }
+      setNewTypeName('');
+      setShowAddType(false);
+    } catch (err) {
+      setError(err.message || 'Failed to create service type');
+    } finally {
+      setCreatingType(false);
+    }
+  }
+
+  async function handleDeleteType(typeItem) {
+    if (serviceTypes.length <= 1) {
+      alert('Cannot delete the only remaining service type');
+      return;
+    }
+    if (!confirm(`Delete service type "${typeItem.name}"? Historical services will keep their service records.`)) {
+      return;
+    }
+    try {
+      if (typeItem.id && !typeItem.id.toString().startsWith('default-')) {
+        await api.deleteServiceType(typeItem.id);
+      }
+      const remaining = serviceTypes.filter((t) => t.id !== typeItem.id && t.name !== typeItem.name);
+      setServiceTypes(remaining);
+      if (serviceType === typeItem.name && remaining.length > 0) {
+        setServiceType(remaining[0].name);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to delete service type');
+    }
+  }
 
   if (!isOpen) return null;
 
@@ -148,18 +209,85 @@ export default function CreateServiceModal({ isOpen, onClose, onServiceCreated }
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-              Service Type
-            </label>
-            <select
-              value={serviceType}
-              onChange={(e) => setServiceType(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
-            >
-              {SERVICE_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Service Type
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAddType(!showAddType)}
+                className="text-[11px] font-bold text-[#c59c6c] hover:underline cursor-pointer"
+              >
+                {showAddType ? 'Cancel' : '+ Add New Type'}
+              </button>
+            </div>
+
+            {showAddType && (
+              <div className="p-3 mb-3 bg-[#f5ede1]/60 dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 rounded-xl space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-white">Create New Service Type</div>
+                <input
+                  type="text"
+                  placeholder="e.g. Easter Celebration Night"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#c59c6c]"
+                />
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Default Time (e.g. 7:30 PM)"
+                    value={newTypeTime}
+                    onChange={(e) => setNewTypeTime(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#c59c6c]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddType}
+                    disabled={creatingType}
+                    className="px-3 py-1.5 bg-[#c59c6c] hover:bg-[#b08757] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    {creatingType ? 'Saving...' : 'Add Type'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <select
+                value={serviceType}
+                onChange={(e) => {
+                  setServiceType(e.target.value);
+                  const matched = serviceTypes.find((t) => (t.name || t) === e.target.value);
+                  if (matched?.default_time) {
+                    setServiceTime(matched.default_time);
+                  }
+                }}
+                className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-none focus:border-[#c59c6c]"
+              >
+                {serviceTypes.map((t) => {
+                  const typeName = typeof t === 'string' ? t : t.name;
+                  return (
+                    <option key={t.id || typeName} value={typeName}>
+                      {typeName} {t.default_time ? `(${t.default_time})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {serviceTypes.length > 1 && (
+                <button
+                  type="button"
+                  title="Delete this service type"
+                  onClick={() => {
+                    const matched = serviceTypes.find((t) => (t.name || t) === serviceType);
+                    if (matched) handleDeleteType(matched);
+                  }}
+                  className="px-2.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold border border-red-200 transition-colors cursor-pointer"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Positions Toggle Selector */}

@@ -11,6 +11,7 @@ export default function ShareLinkModal({
   positions = [],
   campusName,
   theme,
+  serviceType,
 }) {
   const [copied, setCopied] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
@@ -22,7 +23,8 @@ export default function ShareLinkModal({
     : 'https://serve.creativeclicks.art';
   const url = `${baseUrl}/avail/${token}`;
 
-  const fullShareText = `🎸 *ChurchFlow — Jesus My Rock Church*\n📅 *${serviceDate}*\n\n👉 *Please tap below to confirm your availability or decline:*\n${url}`;
+  const serviceTypeStr = serviceType || 'Sunday Worship Service';
+  const fullShareText = `⛪ *Jesus My Rock Church — ${serviceTypeStr}*\n📅 *Date:* ${serviceDate}${campusName ? `\n📍 *Campus:* ${campusName}` : ''}${theme ? `\n🔥 *Theme:* "${theme}"` : ''}\n\n👉 *Please tap below to confirm your availability or decline:*\n${url}`;
 
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullShareText)}`;
 

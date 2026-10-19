@@ -203,6 +203,23 @@ class ApiClient {
     });
   }
 
+  async getServiceTypes() {
+    return this.request('/service-types');
+  }
+
+  async createServiceType(payload) {
+    return this.request('/service-types', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteServiceType(id) {
+    return this.request(`/service-types/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   async shuffleLineup(serviceId, options = {}) {
     return this.request(`/services/${serviceId}/shuffle`, {
       method: 'POST',

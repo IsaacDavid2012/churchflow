@@ -70,13 +70,17 @@ export function formatFinalLineupForWhatsApp(service, lineup = []) {
     }
   });
 
+  const serviceTypeStr = service.service_type || 'Sunday Service';
   const lines = [
+    `⛪ *Jesus My Rock Church — ${serviceTypeStr}*`,
     `📅 *Date:* ${dateStr}`,
     `⏰ *Time:* ${timeStr}`,
+    service.campus_name ? `📍 *Campus:* ${service.campus_name}` : '',
+    service.theme ? `📖 *Theme:* "${service.theme}"` : '',
     '',
     `👥 *Final Lineup:*`,
     ...(lineupLines.length > 0 ? lineupLines : ['• No assignments yet']),
-  ];
+  ].filter(Boolean);
 
   return lines.join('\n');
 }
