@@ -59,27 +59,52 @@ router.post('/', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Permission denied. Members have read-only access to ministries.' });
     }
 
-    const { name, category, leader_name, leader_id, leader_phone, meeting_day, meeting_time, location, description, member_count } = req.body;
+    const { name, leader_id, description, leader_name, leader_phone } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Ministry name is required' });
 
+    let finalLeaderName = leader_name ? leader_name.trim() : '';
+    let finalLeaderPhone = leader_phone ? leader_phone.trim() : null;
+    let finalLeaderId = leader_id || null;
+
+    if (leader_id) {
+      const leaderRes = await db.query('SELECT id, name, phone FROM musicians WHERE id = $1', [leader_id]);
+      if (leaderRes.rows.length > 0) {
+        finalLeaderName = leaderRes.rows[0].name;
+        finalLeaderPhone = leaderRes.rows[0].phone || finalLeaderPhone;
+      }
+    }
+
     const result = await db.query(`
-      INSERT INTO groups (name, category, leader_name, leader_id, leader_phone, meeting_day, meeting_time, location, description, member_count, active)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+      INSERT INTO groups (name, category, leader_name, leader_id, leader_phone, description, active)
+      VALUES ($1, $2, $3, $4, $5, $6, true)
       RETURNING *
     `, [
       name.trim(),
-      category || 'Worship & Music',
-      leader_name ? leader_name.trim() : '',
-      leader_id || null,
-      leader_phone ? leader_phone.trim() : null,
-      meeting_day || 'Sunday',
-      meeting_time || '10:00 AM',
-      location ? location.trim() : 'Main Sanctuary',
-      description ? description.trim() : '',
-      member_count ? parseInt(member_count, 10) : 0
+      name.trim(), // Ministry is the team/department itself
+      finalLeaderName,
+      finalLeaderId,
+      finalLeaderPhone,
+      description ? description.trim() : ''
     ]);
 
-    res.status(201).json(result.rows[0]);
+    const createdMinistry = result.rows[0];
+
+    // If leader selected from People dropdown, automatically assign as manager in ministry_members
+    if (finalLeaderId) {
+      await db.query(`
+        INSERT INTO ministry_members (ministry_id, musician_id, role, assigned_by)
+        VALUES ($1, $2, 'manager', $3)
+        ON CONFLICT (ministry_id, musician_id)
+        DO UPDATE SET role = 'manager'
+      `, [createdMinistry.id, finalLeaderId, req.user?.id || null]);
+
+      // Promote to manager if role was member
+      await db.query(`
+        UPDATE musicians SET role = 'manager' WHERE id = $1 AND role = 'member'
+      `, [finalLeaderId]);
+    }
+
+    res.status(201).json(createdMinistry);
   } catch (err) {
     next(err);
   }
@@ -93,8 +118,20 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Permission denied. Members have read-only access to ministries.' });
     }
 
-    const { name, category, leader_name, leader_id, leader_phone, meeting_day, meeting_time, location, description, member_count } = req.body;
+    const { name, leader_id, description, leader_name, leader_phone } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Ministry name is required' });
+
+    let finalLeaderName = leader_name ? leader_name.trim() : '';
+    let finalLeaderPhone = leader_phone ? leader_phone.trim() : null;
+    let finalLeaderId = leader_id || null;
+
+    if (leader_id) {
+      const leaderRes = await db.query('SELECT id, name, phone FROM musicians WHERE id = $1', [leader_id]);
+      if (leaderRes.rows.length > 0) {
+        finalLeaderName = leaderRes.rows[0].name;
+        finalLeaderPhone = leaderRes.rows[0].phone || finalLeaderPhone;
+      }
+    }
 
     const result = await db.query(`
       UPDATE groups
@@ -104,30 +141,34 @@ router.put('/:id', requireAuth, async (req, res, next) => {
         leader_name = $3,
         leader_id = $4,
         leader_phone = $5,
-        meeting_day = $6,
-        meeting_time = $7,
-        location = $8,
-        description = $9,
-        member_count = $10,
+        description = $6,
         updated_at = NOW()
-      WHERE id = $11 AND active = true
+      WHERE id = $7 AND active = true
       RETURNING *
     `, [
       name.trim(),
-      category || 'Worship & Music',
-      leader_name ? leader_name.trim() : '',
-      leader_id || null,
-      leader_phone ? leader_phone.trim() : null,
-      meeting_day || 'Sunday',
-      meeting_time || '10:00 AM',
-      location ? location.trim() : 'Main Sanctuary',
+      name.trim(),
+      finalLeaderName,
+      finalLeaderId,
+      finalLeaderPhone,
       description ? description.trim() : '',
-      member_count ? parseInt(member_count, 10) : 0,
       req.params.id
     ]);
 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Ministry not found' });
-    res.json(result.rows[0]);
+    const updatedMinistry = result.rows[0];
+
+    // If leader selected from People dropdown, ensure they are in ministry_members as manager
+    if (finalLeaderId) {
+      await db.query(`
+        INSERT INTO ministry_members (ministry_id, musician_id, role, assigned_by)
+        VALUES ($1, $2, 'manager', $3)
+        ON CONFLICT (ministry_id, musician_id)
+        DO UPDATE SET role = 'manager'
+      `, [req.params.id, finalLeaderId, req.user?.id || null]);
+    }
+
+    res.json(updatedMinistry);
   } catch (err) {
     next(err);
   }
@@ -406,19 +447,18 @@ router.put('/:id/members/:musicianId/role', requireAuth, async (req, res, next) 
 });
 
 // ----------------------------------------------------
-// AI Ministry Assistant (Chatbot) Routes
+// Ministry Team Chat Space (Real Group Chat for Team)
 // ----------------------------------------------------
-const { getMinistryAssistantReply } = require('../services/ministryAiService');
 
-// GET /api/ministries/:id/chat - Get chat history
-router.get('/:id/chat', async (req, res, next) => {
+// GET /api/ministries/:id/chat - Get team chat messages
+router.get('/:id/chat', requireAuth, async (req, res, next) => {
   try {
     const result = await db.query(`
-      SELECT id, sender, sender_name, message, created_at
+      SELECT id, ministry_id, user_id, sender, sender_role, sender_name, message, created_at
       FROM ministry_chat_messages
       WHERE ministry_id = $1
       ORDER BY created_at ASC
-      LIMIT 50
+      LIMIT 150
     `, [req.params.id]);
     res.json(result.rows);
   } catch (err) {
@@ -426,7 +466,7 @@ router.get('/:id/chat', async (req, res, next) => {
   }
 });
 
-// POST /api/ministries/:id/chat - Send message to AI Chatbot
+// POST /api/ministries/:id/chat - Send message to ministry team chat
 router.post('/:id/chat', requireAuth, async (req, res, next) => {
   try {
     const { message } = req.body;
@@ -434,34 +474,48 @@ router.post('/:id/chat', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Message cannot be empty' });
     }
 
-    // Get ministry details
+    // Verify ministry exists
     const minRes = await db.query('SELECT * FROM groups WHERE id = $1', [req.params.id]);
     if (minRes.rows.length === 0) return res.status(404).json({ error: 'Ministry not found' });
-    const ministry = minRes.rows[0];
 
-    const senderName = req.user?.name || req.user?.username || 'Member';
+    const userRole = normalizeRole(req.user?.role) || 'member';
+    const senderName = req.user?.name || req.user?.username || 'Team Member';
 
-    // Store user message
-    const userMsg = await db.query(`
-      INSERT INTO ministry_chat_messages (ministry_id, user_id, sender, sender_name, message)
-      VALUES ($1, $2, 'user', $3, $4)
+    // Store team message
+    const result = await db.query(`
+      INSERT INTO ministry_chat_messages (ministry_id, user_id, sender, sender_role, sender_name, message)
+      VALUES ($1, $2, 'member', $3, $4, $5)
       RETURNING *
-    `, [req.params.id, req.user?.id || null, senderName, message.trim()]);
+    `, [req.params.id, req.user?.id || null, userRole, senderName, message.trim()]);
 
-    // Generate AI response
-    const aiReplyText = await getMinistryAssistantReply(ministry, message.trim());
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
 
-    // Store AI reply
-    const aiMsg = await db.query(`
-      INSERT INTO ministry_chat_messages (ministry_id, user_id, sender, sender_name, message)
-      VALUES ($1, NULL, 'assistant', 'Ministry AI Assistant', $2)
-      RETURNING *
-    `, [req.params.id, aiReplyText]);
+// DELETE /api/ministries/:id/chat/:messageId - Delete a team chat message
+router.delete('/:id/chat/:messageId', requireAuth, async (req, res, next) => {
+  try {
+    const userRole = normalizeRole(req.user?.role);
+    const userId = req.user?.id;
 
-    res.json({
-      userMessage: userMsg.rows[0],
-      reply: aiMsg.rows[0],
-    });
+    // Check message existence and author
+    const msgRes = await db.query('SELECT * FROM ministry_chat_messages WHERE id = $1 AND ministry_id = $2', [req.params.messageId, req.params.id]);
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const message = msgRes.rows[0];
+    const isAuthor = userId && message.user_id && message.user_id === userId;
+    const canDelete = hasRole(userRole, [ROLES.ADMIN, ROLES.PASTOR]) || isAuthor;
+
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Permission denied. Only authors, Pastors, and Admins can delete messages.' });
+    }
+
+    await db.query('DELETE FROM ministry_chat_messages WHERE id = $1', [req.params.messageId]);
+    res.json({ success: true, message: 'Message deleted' });
   } catch (err) {
     next(err);
   }

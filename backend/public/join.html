@@ -415,6 +415,14 @@
           <input type="email" id="emailInput" class="form-input" placeholder="e.g. isaac@example.com">
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Create App Password <span>*</span></label>
+          <input type="password" id="passwordInput" class="form-input" placeholder="Min 6 characters (for Web & Mobile login)" required minlength="6">
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            You can use this password to sign into the ChurchFlow mobile app or web dashboard.
+          </p>
+        </div>
+
         <!-- Toggle List of Positions -->
         <div class="roles-section">
           <div class="roles-header">
@@ -521,10 +529,16 @@
       const name = document.getElementById('nameInput').value.trim();
       const phone = document.getElementById('phoneInput').value.trim();
       const email = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('passwordInput').value.trim();
       const notes = document.getElementById('notesInput').value.trim();
 
       if (!name || !phone) {
         showError('Please enter your full name and phone number.');
+        return;
+      }
+
+      if (!password || password.length < 6) {
+        showError('Please enter a password of at least 6 characters.');
         return;
       }
 
@@ -545,6 +559,7 @@
             name,
             phone,
             email,
+            password,
             roles: Array.from(selectedRoles),
             notes
           })
@@ -559,6 +574,10 @@
         document.getElementById('formCard').style.display = 'none';
         const successCard = document.getElementById('successCard');
         document.getElementById('welcomeTitle').textContent = `Welcome to the Team, ${name}!`;
+        document.getElementById('welcomeText').innerHTML = `
+          Thank you for registering! Your volunteer profile and member account have been created.<br><br>
+          You can now download the <strong>ChurchFlow Mobile App</strong> or log into the <strong>Web App</strong> using your phone/email and the password you just set.
+        `;
         const summaryWrap = document.getElementById('selectedRolesSummary');
         summaryWrap.innerHTML = '';
         Array.from(selectedRoles).forEach(r => {
@@ -567,6 +586,19 @@
           badge.textContent = `🎸 ${r}`;
           summaryWrap.appendChild(badge);
         });
+
+        // Add action buttons
+        const actionBtns = document.createElement('div');
+        actionBtns.style.cssText = 'display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;margin-bottom:20px;';
+        actionBtns.innerHTML = `
+          <a href="/churchflow.apk" style="display:inline-flex;align-items:center;gap:6px;background:var(--primary);color:#fff;text-decoration:none;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:700;">
+            📱 Download Mobile App
+          </a>
+          <a href="/" style="display:inline-flex;align-items:center;gap:6px;background:var(--card-inner);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:700;">
+            💻 Sign In on Web
+          </a>
+        `;
+        successCard.appendChild(actionBtns);
         successCard.style.display = 'block';
 
       } catch (err) {

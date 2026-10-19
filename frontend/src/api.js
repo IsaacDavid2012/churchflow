@@ -266,12 +266,38 @@ export const api = {
       body: JSON.stringify({ role }),
     }),
 
-  // Ministry AI Assistant (Chatbot)
+  // Ministry Team Chat Space
   getMinistryChat: (ministryId) => request(`/ministries/${ministryId}/chat`),
   sendMinistryChat: (ministryId, message) =>
     request(`/ministries/${ministryId}/chat`, {
       method: 'POST',
       body: JSON.stringify({ message }),
+    }),
+  deleteMinistryChat: (ministryId, messageId) =>
+    request(`/ministries/${ministryId}/chat/${messageId}`, {
+      method: 'DELETE',
+    }),
+
+  // Church Community (WhatsApp Community: General Announcements & Church Family Chat)
+  getCommunityAnnouncements: () => request('/community/announcements'),
+  createCommunityAnnouncement: (data) =>
+    request('/community/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteCommunityAnnouncement: (id) =>
+    request(`/community/announcements/${id}`, {
+      method: 'DELETE',
+    }),
+  getCommunityChat: () => request('/community/chat'),
+  sendCommunityChat: (message) =>
+    request('/community/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  deleteCommunityChat: (id) =>
+    request(`/community/chat/${id}`, {
+      method: 'DELETE',
     }),
 
   // Legacy Groups Aliases

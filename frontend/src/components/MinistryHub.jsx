@@ -73,6 +73,16 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
   useEffect(() => {
     if (activeTab === 'chat') {
       scrollToBottom();
+      const interval = setInterval(() => {
+        loadChat();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      scrollToBottom();
     }
   }, [chatMessages, activeTab]);
 
@@ -203,42 +213,31 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
     }
   }
 
-  async function handleSendChat(customMessage) {
-    const textToSend = customMessage || chatInput;
-    if (!textToSend.trim() || sendingChat) return;
+  async function handleSendChat(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!chatInput.trim() || sendingChat) return;
 
-    const userMsg = {
-      id: 'temp-' + Date.now(),
-      sender_role: 'user',
-      sender_name: currentUser?.name || 'You',
-      message: textToSend.trim(),
-      created_at: new Date().toISOString(),
-    };
-
-    setChatMessages((prev) => [...prev, userMsg]);
-    if (!customMessage) setChatInput('');
+    const textToSend = chatInput.trim();
+    setChatInput('');
     setSendingChat(true);
 
     try {
-      const res = await api.sendMinistryChat(ministry.id, textToSend.trim());
-      if (res && res.reply) {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: 'bot-' + Date.now(),
-            sender_role: 'assistant',
-            sender_name: 'Ministry AI',
-            message: res.reply,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      } else {
-        loadChat();
-      }
+      await api.sendMinistryChat(ministry.id, textToSend);
+      await loadChat();
     } catch (err) {
-      alert(err.message || 'Failed to get AI response');
+      alert(err.message || 'Failed to send message');
     } finally {
       setSendingChat(false);
+    }
+  }
+
+  async function handleDeleteChatMessage(msgId) {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      await api.deleteMinistryChat(ministry.id, msgId);
+      loadChat();
+    } catch (err) {
+      alert(err.message || 'Failed to delete message');
     }
   }
 
@@ -291,27 +290,36 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
             </p>
           )}
 
-          <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-white/20 text-xs">
-            {ministry.meeting_day && (
-              <div className="flex items-center gap-1.5 opacity-95">
-                <Clock className="w-3.5 h-3.5" />
-                <span>
-                  {ministry.meeting_day}s @ {ministry.meeting_time || 'TBD'}
-                </span>
-              </div>
-            )}
-            {ministry.location && (
-              <div className="flex items-center gap-1.5 opacity-95">
-                <MapPin className="w-3.5 h-3.5" />
-                <span>{ministry.location}</span>
-              </div>
-            )}
+          <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-white/20 text-xs">
             {ministry.leader_name && (
               <div className="flex items-center gap-1.5 opacity-95">
                 <Users className="w-3.5 h-3.5" />
                 <span>Leader: <strong>{ministry.leader_name}</strong></span>
               </div>
             )}
+            {ministry.leader_phone && (
+              <div className="flex items-center gap-2">
+                <a
+                  href={`https://wa.me/${ministry.leader_phone.replace(/[^0-9]/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-lg bg-emerald-500/30 hover:bg-emerald-500/40 text-white border border-emerald-400/40 transition-colors"
+                >
+                  <MessageCircle className="w-3 h-3" />
+                  WhatsApp Leader
+                </a>
+                <a
+                  href={`tel:${ministry.leader_phone}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white border border-white/30 transition-colors"
+                >
+                  <Phone className="w-3 h-3" />
+                  Call
+                </a>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 opacity-90 text-[11px] italic sm:ml-auto">
+              <span>* Meetings & call times are coordinated directly in the Team Chat Space</span>
+            </div>
           </div>
         </div>
       </div>
@@ -350,11 +358,8 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60'
           }`}
         >
-          <Bot className="w-4 h-4" />
-          <span>AI Ministry Assistant</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200/80 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 font-extrabold">
-            AI
-          </span>
+          <MessageCircle className="w-4 h-4" />
+          <span>Team Chat Space</span>
         </button>
       </div>
 
@@ -666,102 +671,106 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
         </div>
       )}
 
-      {/* TAB 3: AI ASSISTANT CHATBOT */}
+      {/* TAB 3: TEAM CHAT SPACE (Real Group Chat for Team) */}
       {activeTab === 'chat' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[650px]">
-          {/* Chatbot Header */}
+          {/* Chat Header */}
           <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-[#fbf8f3] to-white dark:from-slate-800/80 dark:to-slate-900 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#c59c6c] to-[#e4c59e] text-white flex items-center justify-center shadow-md shadow-[#c59c6c]/20">
-                <Sparkles className="w-5 h-5 text-white" />
+                <MessageCircle className="w-5 h-5 text-white" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
                   <h3 className="font-black text-sm text-slate-900 dark:text-white">
-                    {ministry.name} AI Assistant
+                    {ministry.name} Team Chat Space
                   </h3>
                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
-                    Online
+                    Live Team Chat
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Church-trained AI: setlists, rehearsal tips, tech troubleshooting & prayers.
+                  Real group chat for {ministry.name} volunteers and leaders to plan, discuss, and coordinate meetings.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Prompt suggestion chips */}
-          <div className="px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-              Suggestions:
-            </span>
-            <button
-              onClick={() => handleSendChat(`Suggest 4 worship songs on Faith & Grace suitable for this week's service`)}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#c59c6c] shrink-0 transition-all cursor-pointer"
-            >
-              🎵 4 Worship Songs on Faith
-            </button>
-            <button
-              onClick={() => handleSendChat(`Create a 4-step checklist for Sunday sound check and media broadcast`)}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#c59c6c] shrink-0 transition-all cursor-pointer"
-            >
-              📋 Sound Check Checklist
-            </button>
-            <button
-              onClick={() => handleSendChat(`Draft an encouraging announcement for our Thursday rehearsal at 8:00 PM`)}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#c59c6c] shrink-0 transition-all cursor-pointer"
-            >
-              📢 Rehearsal Announcement
-            </button>
-            <button
-              onClick={() => handleSendChat(`Provide an uplifting 1-minute devotional prayer for our volunteers before serving`)}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#c59c6c] shrink-0 transition-all cursor-pointer"
-            >
-              🙏 Team Devotional Prayer
-            </button>
-          </div>
-
           {/* Messages Feed */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-[#faf7f2]/30 dark:bg-slate-950/20">
             {chatMessages.length === 0 ? (
               <div className="text-center py-16 text-slate-400">
-                <Bot className="w-12 h-12 mx-auto text-[#c59c6c] opacity-40 mb-2" />
+                <MessageCircle className="w-12 h-12 mx-auto text-[#c59c6c] opacity-40 mb-2" />
                 <div className="font-bold text-slate-700 dark:text-slate-300 text-sm">
-                  Welcome to the {ministry.name} AI Assistant!
+                  Welcome to the {ministry.name} Team Chat!
                 </div>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                  Ask me anything about worship setlists, band arrangements, audio & video routing, or volunteer encouragement.
+                  Start the conversation! Leaders post meeting times, rehearsal schedules, or encouragement here.
                 </p>
               </div>
             ) : (
               chatMessages.map((msg, i) => {
-                const isAssistant = msg.sender_role === 'assistant';
+                const isMe =
+                  (msg.user_id && currentUser?.id && msg.user_id === currentUser.id) ||
+                  (msg.sender_name && msg.sender_name === currentUser?.name);
+                const role = (msg.sender_role || '').toLowerCase();
+                const canDeleteThis = canAdminOrPastor || isMe;
+
                 return (
                   <div
                     key={msg.id || i}
-                    className={`flex items-start gap-3 ${isAssistant ? 'justify-start' : 'justify-end'}`}
+                    className={`flex items-start gap-2.5 ${isMe ? 'justify-end' : 'justify-start'}`}
                   >
-                    {isAssistant && (
+                    {!isMe && (
                       <div className="w-8 h-8 rounded-xl bg-[#c59c6c] text-white flex items-center justify-center text-xs font-black shrink-0 shadow-sm">
-                        AI
+                        {(msg.sender_name || 'U')[0].toUpperCase()}
                       </div>
                     )}
                     <div
-                      className={`max-w-[80%] rounded-2xl p-4 text-xs leading-relaxed shadow-sm ${
-                        isAssistant
-                          ? 'bg-[#fbf8f3] dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 text-slate-800 dark:text-slate-200 whitespace-pre-wrap'
-                          : 'bg-[#c59c6c] text-white'
+                      className={`max-w-[75%] rounded-2xl p-3.5 text-xs leading-relaxed shadow-sm ${
+                        isMe
+                          ? 'bg-[#c59c6c] text-white'
+                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2 mb-1 opacity-80 text-[10px] font-bold">
-                        <span>{isAssistant ? 'Ministry AI' : msg.sender_name || 'You'}</span>
-                        <span>
-                          {new Date(msg.created_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
+                      <div className="flex items-center justify-between gap-3 mb-1 text-[10px]">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span>{isMe ? 'You' : msg.sender_name || 'Team Member'}</span>
+                          {role && role !== 'member' && (
+                            <span
+                              className={`text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded ${
+                                isMe
+                                  ? 'bg-white/20 text-white'
+                                  : role === 'pastor'
+                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                                  : role === 'admin'
+                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                              }`}
+                            >
+                              {role}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={isMe ? 'text-white/80' : 'text-slate-400'}>
+                            {new Date(msg.created_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          {canDeleteThis && (
+                            <button
+                              onClick={() => handleDeleteChatMessage(msg.id)}
+                              className={`p-0.5 rounded hover:bg-black/10 transition-colors cursor-pointer ${
+                                isMe ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                              }`}
+                              title="Delete message"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="whitespace-pre-wrap">{msg.message}</div>
                     </div>
@@ -769,30 +778,15 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                 );
               })
             )}
-
-            {sendingChat && (
-              <div className="flex items-center space-x-2 text-xs text-slate-400 p-2">
-                <div className="w-6 h-6 rounded-lg bg-[#c59c6c] text-white flex items-center justify-center text-[10px] font-black animate-pulse">
-                  AI
-                </div>
-                <span className="italic">AI assistant is thinking...</span>
-              </div>
-            )}
             <div ref={chatBottomRef} />
           </div>
 
           {/* Chat Input */}
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendChat();
-              }}
-              className="flex items-center gap-2"
-            >
+            <form onSubmit={handleSendChat} className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder={`Ask ${ministry.name} assistant (e.g. setlist ideas, rehearsal plan)...`}
+                placeholder={`Message ${ministry.name} team (e.g. rehearsal details, meeting location)...`}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 className="flex-1 bg-[#fbf8f3] dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#c59c6c]"

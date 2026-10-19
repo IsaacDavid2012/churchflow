@@ -119,8 +119,30 @@ async function runMigrations() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        sender VARCHAR(50) NOT NULL,
+        sender VARCHAR(50) NOT NULL DEFAULT 'member',
+        sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
         sender_name VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS general_announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        author_name VARCHAR(255) NOT NULL,
+        author_role VARCHAR(50) NOT NULL DEFAULT 'pastor',
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        is_pinned BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS general_chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        sender_name VARCHAR(255) NOT NULL,
+        sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
         message TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );

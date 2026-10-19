@@ -215,9 +215,11 @@ router.get('/join', async (req, res) => {
   }
 });
 
-// POST /api/public/join - Public volunteer sign-up / team registration
+const bcrypt = require('bcryptjs');
+
+// POST /api/public/join - Public volunteer sign-up / team registration with password creation
 router.post('/join', async (req, res) => {
-  const { name, phone, email, roles, notes } = req.body;
+  const { name, phone, email, password, roles, notes } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Full name is required' });
@@ -233,16 +235,66 @@ router.post('/join', async (req, res) => {
   }
 
   try {
+    let createdUserId = null;
+    const cleanEmail = email && email.trim() ? email.trim().toLowerCase() : null;
+    const cleanPhone = phone.trim();
+    const cleanName = name.trim();
+
+    // If password provided, create unified User login account
+    if (password && password.trim()) {
+      if (password.trim().length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+
+      const passwordHash = await bcrypt.hash(password.trim(), 10);
+      let baseUsername = cleanEmail ? cleanEmail.split('@')[0] : cleanPhone.replace(/[^0-9]/g, '');
+      baseUsername = baseUsername.slice(0, 50).toLowerCase();
+
+      // Check if user already exists
+      let existingUser = null;
+      if (cleanEmail) {
+        const userCheck = await db.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+        if (userCheck.rows.length > 0) existingUser = userCheck.rows[0];
+      }
+
+      if (existingUser) {
+        // Update existing user password
+        await db.query(`
+          UPDATE users 
+          SET password_hash = $1, name = $2, updated_at = NOW()
+          WHERE id = $3
+        `, [passwordHash, cleanName, existingUser.id]);
+        createdUserId = existingUser.id;
+      } else {
+        // Generate unique username
+        let uniqueUsername = baseUsername || 'volunteer';
+        let suffix = 1;
+        while (true) {
+          const uCheck = await db.query('SELECT id FROM users WHERE LOWER(username) = $1', [uniqueUsername.toLowerCase()]);
+          if (uCheck.rows.length === 0) break;
+          uniqueUsername = `${baseUsername}${suffix++}`;
+        }
+
+        const newUserRes = await db.query(`
+          INSERT INTO users (username, email, password_hash, role, name, status)
+          VALUES ($1, $2, $3, 'member', $4, 'active')
+          RETURNING id
+        `, [uniqueUsername, cleanEmail, passwordHash, cleanName]);
+        createdUserId = newUserRes.rows[0].id;
+      }
+    }
+
     const insertRes = await db.query(
       `
-      INSERT INTO musicians (name, phone, email, roles, ministry, status, notes, active)
-      VALUES ($1, $2, $3, $4, 'Worship & Media Team', 'member', $5, true)
-      RETURNING id, name, phone, email, roles, status, active, created_at
+      INSERT INTO musicians (user_id, name, phone, email, roles, ministry, status, role, notes, active)
+      VALUES ($1, $2, $3, $4, $5, 'Media Team', 'member', 'member', $6, true)
+      RETURNING id, name, phone, email, roles, status, role, active, created_at
       `,
       [
-        name.trim(),
-        phone.trim(),
-        email && email.trim() ? email.trim() : null,
+        createdUserId,
+        cleanName,
+        cleanPhone,
+        cleanEmail,
         selectedRoles,
         notes && notes.trim() ? notes.trim() : null,
       ]
@@ -266,8 +318,9 @@ router.post('/join', async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `Welcome to the team, ${newMusician.name}! Your volunteer registration has been received.`,
+      message: `Welcome to the team, ${newMusician.name}! Your volunteer registration and account have been created.`,
       member: newMusician,
+      hasAccount: !!createdUserId,
     });
   } catch (err) {
     console.error('Volunteer registration error:', err);

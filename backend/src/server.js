@@ -17,6 +17,7 @@ const groupsRoutes = require('./routes/groups');
 const notificationsRoutes = require('./routes/notifications');
 const publicRoutes = require('./routes/public');
 const serviceTypesRoutes = require('./routes/serviceTypes');
+const communityRoutes = require('./routes/community');
 const { startDeadlineMonitor } = require('./services/cronService');
 
 const app = express();
@@ -126,6 +127,7 @@ app.use('/api/groups', groupsRoutes);
 app.use('/api/ministries', groupsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/service-types', serviceTypesRoutes);
+app.use('/api/community', communityRoutes);
 
 // In production, serve React frontend build
 const frontendDist = path.join(__dirname, '../../frontend/dist');

@@ -81,6 +81,15 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
     loadChat();
   }, [ministry.id]);
 
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      const interval = setInterval(() => {
+        loadChat();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
   const loadAnnouncements = async () => {
     setLoadingAnnouncements(true);
     try {
@@ -233,43 +242,38 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
     ]);
   };
 
-  const handleSendChat = async (customPrompt) => {
-    const textToSend = customPrompt || chatInput;
-    if (!textToSend.trim() || sendingChat) return;
-
-    const userMsg = {
-      id: 'temp-' + Date.now(),
-      sender_role: 'user',
-      sender_name: user?.name || 'You',
-      message: textToSend.trim(),
-      created_at: new Date().toISOString(),
-    };
-
-    setChatMessages((prev) => [...prev, userMsg]);
-    if (!customPrompt) setChatInput('');
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || sendingChat) return;
+    const text = chatInput.trim();
+    setChatInput('');
     setSendingChat(true);
 
     try {
-      const res = await api.sendMinistryChat(ministry.id, textToSend.trim());
-      if (res && res.reply) {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: 'bot-' + Date.now(),
-            sender_role: 'assistant',
-            sender_name: 'Ministry AI',
-            message: res.reply,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      } else {
-        loadChat();
-      }
+      await api.sendMinistryChat(ministry.id, text);
+      await loadChat();
     } catch (err) {
-      Alert.alert('AI Error', err.response?.data?.error || err.message || 'Could not reach AI assistant');
+      Alert.alert('Error', err.response?.data?.error || err.message || 'Could not send message');
     } finally {
       setSendingChat(false);
     }
+  };
+
+  const handleDeleteChatMessage = (msgId) => {
+    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteMinistryChat(ministry.id, msgId);
+            loadChat();
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || err.message || 'Could not delete message');
+          }
+        },
+      },
+    ]);
   };
 
   // Group members into Managers vs Volunteers
@@ -315,26 +319,29 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
         ) : null}
 
         <View style={styles.heroMetaRow}>
-          {ministry.meeting_day ? (
-            <View style={styles.heroMetaItem}>
-              <Ionicons name="time-outline" size={13} color="#ffffff" />
-              <Text style={styles.heroMetaText}>
-                {ministry.meeting_day}s @ {ministry.meeting_time || 'TBD'}
-              </Text>
-            </View>
-          ) : null}
-
-          {ministry.location ? (
-            <View style={styles.heroMetaItem}>
-              <Ionicons name="location-outline" size={13} color="#ffffff" />
-              <Text style={styles.heroMetaText}>{ministry.location}</Text>
-            </View>
-          ) : null}
-
           {ministry.leader_name ? (
             <View style={styles.heroMetaItem}>
               <Ionicons name="person-outline" size={13} color="#ffffff" />
               <Text style={styles.heroMetaText}>Leader: {ministry.leader_name}</Text>
+            </View>
+          ) : null}
+
+          {ministry.leader_phone ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 4 }}
+                onPress={() => Linking.openURL(`https://wa.me/${ministry.leader_phone.replace(/[^0-9]/g, '')}`)}
+              >
+                <Ionicons name="logo-whatsapp" size={12} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>WhatsApp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 4 }}
+                onPress={() => Linking.openURL(`tel:${ministry.leader_phone}`)}
+              >
+                <Ionicons name="call-outline" size={12} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>Call</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
         </View>
@@ -394,9 +401,9 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
           onPress={() => setActiveTab('chat')}
         >
           <Ionicons
-            name="sparkles"
+            name="chatbubble-ellipses-outline"
             size={16}
-            color={activeTab === 'chat' ? '#ffffff' : colors.primary}
+            color={activeTab === 'chat' ? '#ffffff' : colors.subText}
           />
           <Text
             style={[
@@ -404,11 +411,8 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
               { color: activeTab === 'chat' ? '#ffffff' : colors.subText },
             ]}
           >
-            AI Assistant
+            Team Chat
           </Text>
-          <View style={styles.aiPill}>
-            <Text style={styles.aiPillText}>AI</Text>
-          </View>
         </TouchableOpacity>
       </View>
 
@@ -686,46 +690,13 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
         </View>
       )}
 
-      {/* TAB 3: AI ASSISTANT CHATBOT */}
+      {/* TAB 3: TEAM CHAT SPACE (Real Team Chat) */}
       {activeTab === 'chat' && (
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-          {/* Quick Suggestions Chips */}
-          <View style={[styles.chipsContainer, { backgroundColor: colors.inputBg, borderBottomColor: colors.border }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-              <TouchableOpacity
-                style={[styles.suggestionChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleSendChat(`Suggest 4 worship songs on Faith & Grace suitable for this week`)}
-              >
-                <Text style={[styles.chipText, { color: colors.text }]}>🎵 4 Songs on Faith</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.suggestionChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleSendChat(`Create a 4-step checklist for Sunday sound check and media broadcast`)}
-              >
-                <Text style={[styles.chipText, { color: colors.text }]}>📋 Sound Check Checklist</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.suggestionChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleSendChat(`Draft an encouraging announcement for our Thursday rehearsal at 8:00 PM`)}
-              >
-                <Text style={[styles.chipText, { color: colors.text }]}>📢 Rehearsal Announcement</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.suggestionChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleSendChat(`Provide an uplifting 1-minute devotional prayer for our volunteers before serving`)}
-              >
-                <Text style={[styles.chipText, { color: colors.text }]}>🙏 Team Prayer</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-
           {/* Messages list */}
           <FlatList
             ref={chatListRef}
@@ -735,62 +706,106 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
             onContentSizeChange={() => chatListRef.current?.scrollToEnd({ animated: true })}
             ListEmptyComponent={
               <View style={styles.emptyChatBox}>
-                <Ionicons name="sparkles" size={36} color={colors.primary} />
+                <Ionicons name="chatbubble-ellipses" size={36} color={colors.primary} />
                 <Text style={[styles.emptyChatTitle, { color: colors.text }]}>
-                  {ministry.name} AI Assistant
+                  {ministry.name} Team Chat Space
                 </Text>
                 <Text style={[styles.emptyChatSub, { color: colors.subText }]}>
-                  Ask anything about song keys, band arrangements, sound check checklists, or rehearsal announcements.
+                  Live team conversation for {ministry.name}. Leaders post meeting times, rehearsal schedules, and team notices here.
                 </Text>
               </View>
             }
             renderItem={({ item }) => {
-              const isAssistant = item.sender_role === 'assistant';
+              const isMe = (item.user_id && user?.id && item.user_id === user.id) || 
+                           (item.sender_name && item.sender_name === user?.name);
+              const role = (item.sender_role || '').toLowerCase();
+              const canDeleteThis = canAdminOrPastor || isMe;
+
               return (
                 <View
                   style={[
                     styles.chatRow,
-                    isAssistant ? styles.chatRowLeft : styles.chatRowRight,
+                    isMe ? styles.chatRowRight : styles.chatRowLeft,
                   ]}
                 >
-                  {isAssistant && (
+                  {!isMe && (
                     <View style={[styles.botAvatar, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.botAvatarText}>AI</Text>
+                      <Text style={styles.botAvatarText}>
+                        {(item.sender_name || 'U')[0].toUpperCase()}
+                      </Text>
                     </View>
                   )}
                   <View
                     style={[
                       styles.chatBubble,
-                      isAssistant
-                        ? [styles.chatBubbleBot, { backgroundColor: colors.inputBg, borderColor: colors.border }]
-                        : [styles.chatBubbleUser, { backgroundColor: colors.primary }],
+                      isMe
+                        ? [styles.chatBubbleUser, { backgroundColor: colors.primary }]
+                        : [styles.chatBubbleBot, { backgroundColor: colors.card, borderColor: colors.border }],
                     ]}
                   >
                     <View style={styles.chatMetaRow}>
-                      <Text
-                        style={[
-                          styles.chatSender,
-                          { color: isAssistant ? colors.primaryDark : '#ffffff' },
-                        ]}
-                      >
-                        {isAssistant ? 'Ministry AI' : item.sender_name || 'You'}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.chatTime,
-                          { color: isAssistant ? colors.subText : 'rgba(255,255,255,0.7)' },
-                        ]}
-                      >
-                        {new Date(item.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text
+                          style={[
+                            styles.chatSender,
+                            { color: isMe ? '#ffffff' : colors.text },
+                          ]}
+                        >
+                          {isMe ? 'You' : item.sender_name || 'Team Member'}
+                        </Text>
+                        {role && role !== 'member' && (
+                          <View
+                            style={{
+                              backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : colors.badgeBg,
+                              paddingHorizontal: 4,
+                              paddingVertical: 1,
+                              borderRadius: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                fontWeight: '800',
+                                color: isMe ? '#ffffff' : colors.primaryDark,
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {role}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text
+                          style={[
+                            styles.chatTime,
+                            { color: isMe ? 'rgba(255,255,255,0.7)' : colors.subText },
+                          ]}
+                        >
+                          {new Date(item.created_at).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </Text>
+                        {canDeleteThis && (
+                          <TouchableOpacity
+                            onPress={() => handleDeleteChatMessage(item.id)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={12}
+                              color={isMe ? 'rgba(255,255,255,0.7)' : colors.danger}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                     <Text
                       style={[
                         styles.chatMessageText,
-                        { color: isAssistant ? colors.text : '#ffffff' },
+                        { color: isMe ? '#ffffff' : colors.text },
                       ]}
                     >
                       {item.message}
@@ -801,22 +816,13 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
             }}
           />
 
-          {sendingChat && (
-            <View style={styles.typingIndicator}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.typingText, { color: colors.subText }]}>
-                AI assistant is generating response...
-              </Text>
-            </View>
-          )}
-
           {/* Bottom Chat Input */}
           <View style={[styles.chatInputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
             <TextInput
               style={[styles.chatTextInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={chatInput}
               onChangeText={setChatInput}
-              placeholder={`Ask ${ministry.name} assistant...`}
+              placeholder={`Message ${ministry.name} team...`}
               placeholderTextColor={colors.subText}
             />
             <TouchableOpacity
@@ -826,7 +832,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                 (!chatInput.trim() || sendingChat) && { opacity: 0.5 },
               ]}
               disabled={!chatInput.trim() || sendingChat}
-              onPress={() => handleSendChat()}
+              onPress={handleSendChat}
             >
               <Ionicons name="send" size={16} color="#ffffff" />
             </TouchableOpacity>

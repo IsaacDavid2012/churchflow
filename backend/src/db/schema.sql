@@ -307,12 +307,13 @@ CREATE TABLE IF NOT EXISTS ministry_announcements (
 CREATE INDEX IF NOT EXISTS idx_ministry_announcements_ministry ON ministry_announcements(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_ministry_announcements_created ON ministry_announcements(created_at DESC);
 
--- Ministry Chat Messages (AI Ministry Assistant Chatbot history)
+-- Ministry Chat Messages (Team Chat Space)
 CREATE TABLE IF NOT EXISTS ministry_chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    sender VARCHAR(50) NOT NULL, -- 'user', 'assistant'
+    sender VARCHAR(50) NOT NULL DEFAULT 'member',
+    sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
     sender_name VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -320,4 +321,31 @@ CREATE TABLE IF NOT EXISTS ministry_chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_ministry_chat_ministry ON ministry_chat_messages(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_ministry_chat_created ON ministry_chat_messages(created_at ASC);
+
+-- General Church Announcements (WhatsApp Community General Broadcast - Pastors & Admins only)
+CREATE TABLE IF NOT EXISTS general_announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    author_name VARCHAR(255) NOT NULL,
+    author_role VARCHAR(50) NOT NULL DEFAULT 'pastor',
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    is_pinned BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_general_announcements_created ON general_announcements(created_at DESC);
+
+-- General Church Chat Messages (WhatsApp Community General Chat - Whole Church Family)
+CREATE TABLE IF NOT EXISTS general_chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    sender_name VARCHAR(255) NOT NULL,
+    sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_general_chat_created ON general_chat_messages(created_at ASC);
 

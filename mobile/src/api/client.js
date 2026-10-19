@@ -436,6 +436,47 @@ class ApiClient {
     });
   }
 
+  async deleteMinistryChat(ministryId, messageId) {
+    return this.request(`/ministries/${ministryId}/chat/${messageId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Church Community (WhatsApp Community architecture) ---
+  async getCommunityAnnouncements() {
+    return this.request('/community/announcements');
+  }
+
+  async createCommunityAnnouncement(data) {
+    return this.request('/community/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCommunityAnnouncement(id) {
+    return this.request(`/community/announcements/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getCommunityChat() {
+    return this.request('/community/chat');
+  }
+
+  async sendCommunityChat(message) {
+    return this.request('/community/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  async deleteCommunityChat(id) {
+    return this.request(`/community/chat/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // --- Small Groups (Aliases for compatibility) ---
   async getGroups(params = {}) {
     return this.getMinistries(params);
