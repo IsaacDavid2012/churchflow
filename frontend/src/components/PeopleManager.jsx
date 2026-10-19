@@ -26,6 +26,13 @@ const STATUS_COLORS = {
   visitor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
 };
 
+const SYSTEM_ROLE_STYLES = {
+  admin: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30',
+  pastor: 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30',
+  manager: 'bg-amber-500/15 text-amber-800 dark:text-amber-400 border-amber-500/30',
+  member: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30',
+};
+
 export default function PeopleManager({ currentUser }) {
   const isAdmin = currentUser?.role === 'admin';
   const isMember = currentUser?.role === 'member';
@@ -57,6 +64,7 @@ export default function PeopleManager({ currentUser }) {
     name: '',
     email: '',
     phone: '',
+    role: 'member',
     status: 'member',
     ministry: 'Media Team',
     roles: [],
@@ -91,6 +99,7 @@ export default function PeopleManager({ currentUser }) {
       name: '',
       email: '',
       phone: '',
+      role: 'member',
       status: 'member',
       ministry: ministries[0]?.name || 'Media Team',
       roles: [],
@@ -105,6 +114,7 @@ export default function PeopleManager({ currentUser }) {
       name: p.name || '',
       email: p.email || '',
       phone: p.phone || '',
+      role: p.role || 'member',
       status: p.status || 'member',
       ministry: p.ministry || 'Media Team',
       roles: Array.isArray(p.roles) ? [...p.roles] : [],
@@ -299,7 +309,10 @@ export default function PeopleManager({ currentUser }) {
                       </div>
                       <div>
                         <div className="font-bold text-sm text-slate-900 dark:text-slate-100">{person.name}</div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className={`inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border ${SYSTEM_ROLE_STYLES[(person.role || 'member').toLowerCase()] || SYSTEM_ROLE_STYLES.member}`}>
+                            {person.role ? person.role.toUpperCase() : 'MEMBER'}
+                          </span>
                           <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border ${statusStyle}`}>
                             {person.status || 'Member'}
                           </span>
@@ -450,6 +463,39 @@ export default function PeopleManager({ currentUser }) {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* System Access Role (Admin-Only to change, Unified Users & People) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  System Access Role {isAdmin ? '(Admin Editable)' : '(View Only)'}
+                </label>
+                {isAdmin ? (
+                  <div>
+                    <select
+                      value={personForm.role || 'member'}
+                      onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 cursor-pointer font-bold"
+                    >
+                      <option value="member">Member (View Only)</option>
+                      <option value="manager">Manager (Manage Services & Ministries)</option>
+                      <option value="pastor">Pastor (Manage, Delete Services, Assign Managers)</option>
+                      <option value="admin">Admin (Full System Control & Role Management)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      As Admin, you can promote or demote system roles. When users sign up, their default role is Member.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded border ${SYSTEM_ROLE_STYLES[(personForm.role || 'member').toLowerCase()] || SYSTEM_ROLE_STYLES.member}`}>
+                      {personForm.role ? personForm.role.toUpperCase() : 'MEMBER'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Only Admins can change user access roles
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">

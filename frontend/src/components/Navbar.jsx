@@ -20,9 +20,6 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
     { id: 'ministries', label: 'Ministries', icon: HeartHandshake },
     { id: 'positions', label: 'Positions', icon: Sliders },
     { id: 'notifications', label: 'Audit Logs', icon: Bell },
-    ...(user?.role === 'admin' || user?.role === 'pastor' 
-      ? [{ id: 'users', label: 'Users', icon: ShieldCheck }] 
-      : []),
     { id: 'church', label: 'Church', icon: Building2 },
   ];
 

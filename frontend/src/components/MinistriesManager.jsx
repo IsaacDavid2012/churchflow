@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
+import MinistryHub from './MinistryHub';
 
 const CATEGORIES = [
   'Worship & Music',
@@ -32,6 +33,7 @@ const CATEGORIES = [
 
 export default function MinistriesManager({ currentUser }) {
   const [ministries, setMinistries] = useState([]);
+  const [selectedMinistry, setSelectedMinistry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -140,6 +142,19 @@ export default function MinistriesManager({ currentUser }) {
     } catch (err) {
       alert(err.message || 'Failed to delete ministry');
     }
+  }
+
+  if (selectedMinistry) {
+    return (
+      <MinistryHub
+        ministry={selectedMinistry}
+        currentUser={currentUser}
+        onBack={() => {
+          setSelectedMinistry(null);
+          loadMinistries();
+        }}
+      />
+    );
   }
 
   return (
@@ -308,6 +323,15 @@ export default function MinistriesManager({ currentUser }) {
                   {m.member_count} members serving
                 </span>
               </div>
+
+              {/* Enter Ministry Hub Button */}
+              <button
+                onClick={() => setSelectedMinistry(m)}
+                className="flex items-center justify-center space-x-1.5 w-full py-2.5 px-3 mt-3 rounded-xl bg-gradient-to-r from-[#c59c6c] to-[#b08756] hover:from-[#b08756] hover:to-[#9b7242] text-white font-bold text-xs shadow-md shadow-[#c59c6c]/20 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Open {m.name} Hub</span>
+              </button>
             </div>
           ))}
         </div>

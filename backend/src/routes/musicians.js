@@ -68,6 +68,7 @@ router.get('/', async (req, res) => {
         m.roles[1] AS primary_instrument,
         ('Worship Leader' = ANY(m.roles)) AS can_lead_worship,
         m.ministry,
+        COALESCE(u.role, m.role, 'member') AS role,
         m.status,
         m.household_id,
         m.household_role,
@@ -81,6 +82,7 @@ router.get('/', async (req, res) => {
         MAX(s.service_date) AS last_served_date,
         COUNT(a.id) FILTER (WHERE a.status = 'confirmed') AS total_confirmed_serves
       FROM musicians m
+      LEFT JOIN users u ON u.id = m.user_id OR (m.email IS NOT NULL AND LOWER(u.email) = LOWER(m.email))
       LEFT JOIN households h ON h.id = m.household_id
       LEFT JOIN assignments a ON a.musician_id = m.id AND a.status = 'confirmed'
       LEFT JOIN services s ON s.id = a.service_id
@@ -114,7 +116,7 @@ router.get('/', async (req, res) => {
     }
 
     query += `
-      GROUP BY m.id, m.name, m.email, m.phone, m.roles, m.ministry, m.status, m.household_id, m.household_role, m.birthday, m.gender, m.address, m.notes, m.active, m.created_at, h.name
+      GROUP BY m.id, m.name, m.email, m.phone, m.roles, m.ministry, m.status, m.household_id, m.household_role, m.birthday, m.gender, m.address, m.notes, m.active, m.created_at, h.name, u.role, m.role
       ORDER BY m.name ASC
     `;
 
@@ -224,12 +226,28 @@ router.post('/', async (req, res) => {
 // PUT /api/musicians/:id
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, roles, ministry, status, household_id, household_role, birthday, gender, address, notes, active } = req.body;
+  const { name, email, phone, roles, ministry, status, household_id, household_role, birthday, gender, address, notes, active, role } = req.body;
 
   try {
-    const check = await db.query('SELECT id FROM musicians WHERE id = $1', [id]);
+    const check = await db.query('SELECT id, role, email, user_id FROM musicians WHERE id = $1', [id]);
     if (check.rows.length === 0) {
       return res.status(404).json({ error: 'Person not found' });
+    }
+
+    // Role changes are strictly restricted to Admin ("only admin can change roles")
+    if (role !== undefined && normalizeRole(role) !== normalizeRole(check.rows[0].role)) {
+      const userRole = normalizeRole(req.user?.role);
+      if (!hasRole(userRole, ROLES.ADMIN)) {
+        return res.status(403).json({ error: 'Permission denied. Only Admins can change user roles.' });
+      }
+      const normRole = normalizeRole(role);
+      await db.query('UPDATE musicians SET role = $1 WHERE id = $2', [normRole, id]);
+      await db.query(`
+        UPDATE users u
+        SET role = $1, updated_at = NOW()
+        FROM musicians m
+        WHERE m.id = $2 AND (u.id = m.user_id OR (m.email IS NOT NULL AND LOWER(u.email) = LOWER(m.email)))
+      `, [normRole, id]);
     }
 
     const rolesArray = Array.isArray(roles) ? roles : undefined;

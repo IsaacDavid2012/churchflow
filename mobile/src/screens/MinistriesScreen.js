@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
+import MinistryHubScreen from './MinistryHubScreen';
 
 const CATEGORIES = [
   'All',
@@ -30,6 +31,7 @@ const CATEGORIES = [
 
 export default function MinistriesScreen({ user, isDark = false }) {
   const [ministries, setMinistries] = useState([]);
+  const [selectedMinistry, setSelectedMinistry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
@@ -287,9 +289,33 @@ export default function MinistriesScreen({ user, isDark = false }) {
             </Text>
           </View>
         </View>
+
+        {/* Open Ministry Hub Button */}
+        <TouchableOpacity
+          style={[styles.openHubBtn, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+          onPress={() => setSelectedMinistry(item)}
+        >
+          <Ionicons name="sparkles" size={14} color="#ffffff" />
+          <Text style={styles.openHubBtnText}>Open {item.name} Hub</Text>
+        </TouchableOpacity>
       </View>
     );
   };
+
+  if (selectedMinistry) {
+    return (
+      <MinistryHubScreen
+        ministry={selectedMinistry}
+        user={user}
+        isDark={isDark}
+        onBack={() => {
+          setSelectedMinistry(null);
+          fetchMinistries();
+        }}
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -832,6 +858,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   submitBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  openHubBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  openHubBtnText: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '800',

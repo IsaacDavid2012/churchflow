@@ -69,6 +69,7 @@ async function runMigrations() {
           ALTER TABLE musicians ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
           ALTER TABLE musicians ADD COLUMN IF NOT EXISTS address TEXT;
           ALTER TABLE musicians ADD COLUMN IF NOT EXISTS notes TEXT;
+          ALTER TABLE musicians ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'member';
         END IF;
 
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'positions_template') THEN
@@ -89,6 +90,42 @@ async function runMigrations() {
       END $$;
     `);
 
+    // Ensure Classroom tables exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ministry_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        musician_id UUID NOT NULL REFERENCES musicians(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL DEFAULT 'member',
+        assigned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        joined_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_ministry_musician UNIQUE (ministry_id, musician_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS ministry_announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        author_name VARCHAR(255) NOT NULL,
+        author_role VARCHAR(50) NOT NULL DEFAULT 'manager',
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        is_pinned BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ministry_chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        sender VARCHAR(50) NOT NULL,
+        sender_name VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // Run core schema
     await client.query(sql);
 
@@ -107,6 +144,40 @@ async function runMigrations() {
         ON CONFLICT DO NOTHING;
       `);
       console.log('Seeded default Church Ministries into groups table.');
+    }
+
+    // Sync roles between users and musicians
+    await client.query(`
+      UPDATE musicians m
+      SET role = u.role, user_id = u.id
+      FROM users u
+      WHERE (m.user_id = u.id OR LOWER(m.email) = LOWER(u.email) OR LOWER(m.name) = LOWER(u.name))
+        AND m.role != u.role;
+    `);
+
+    // Seed sample announcements if none exist
+    const announcementsCount = await client.query('SELECT COUNT(*) FROM ministry_announcements');
+    if (parseInt(announcementsCount.rows[0].count, 10) === 0) {
+      const worshipGroup = await client.query("SELECT id FROM groups WHERE name ILIKE '%Worship%' LIMIT 1");
+      const prodGroup = await client.query("SELECT id FROM groups WHERE name ILIKE '%Production%' LIMIT 1");
+
+      if (worshipGroup.rows.length > 0) {
+        await client.query(`
+          INSERT INTO ministry_announcements (ministry_id, author_name, author_role, title, content, is_pinned)
+          VALUES 
+            ($1, 'Isaac David', 'admin', 'Welcome to the Worship Ministry Classroom! 🎵', 'Praise God team! This is our dedicated ministry stream for song charts, setlists, and rehearsal briefings. Thursday rehearsals start promptly at 8:00 PM. Please review your charts beforehand!', true),
+            ($1, 'Josh', 'manager', 'Sunday Morning Celebration Songlist Update', 'This Sunday we will be singing: 1. Firm Foundation (He Won''t) [Key D], 2. Goodness of God [Key G], 3. Holy Forever [Key A]. Let''s come with prepared hearts!', false)
+        `, [worshipGroup.rows[0].id]);
+      }
+
+      if (prodGroup.rows.length > 0) {
+        await client.query(`
+          INSERT INTO ministry_announcements (ministry_id, author_name, author_role, title, content, is_pinned)
+          VALUES 
+            ($1, 'Alvin & Tech Team', 'manager', 'FOH Sound & OBS Livestream Checklist', 'Team, please ensure all wireless mic battery levels are checked at 8:30 AM before pre-service prayer. The new Behringer X32 scene has been saved under "Sunday Main".', true)
+        `, [prodGroup.rows[0].id]);
+      }
+      console.log('Seeded initial Ministry Classroom announcements.');
     }
 
     await client.query('COMMIT');

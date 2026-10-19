@@ -37,6 +37,7 @@ export default function PeopleScreen({ user, isDark = false }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [role, setRole] = useState('member');
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [ministry, setMinistry] = useState('Media Team');
   const [saving, setSaving] = useState(false);
@@ -71,6 +72,7 @@ export default function PeopleScreen({ user, isDark = false }) {
     setName('');
     setEmail('');
     setPhone('');
+    setRole('member');
     setSelectedRoles([]);
     setMinistry('Media Team');
     try {
@@ -85,6 +87,7 @@ export default function PeopleScreen({ user, isDark = false }) {
     setName(person.name || '');
     setEmail(person.email || '');
     setPhone(person.phone || '');
+    setRole(person.role || 'member');
     setSelectedRoles(Array.isArray(person.roles) ? [...person.roles] : (person.primary_instrument ? [person.primary_instrument] : []));
     setMinistry(person.ministry || 'Media Team');
     try {
@@ -115,6 +118,7 @@ export default function PeopleScreen({ user, isDark = false }) {
         name: name.trim(),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
+        role: role || 'member',
         roles: selectedRoles,
         ministry: ministry,
       };
@@ -209,7 +213,19 @@ export default function PeopleScreen({ user, isDark = false }) {
 
           <View style={styles.personDetails}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.personName, { color: colors.text }]}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                <Text style={[styles.personName, { color: colors.text }]}>{item.name}</Text>
+                {(() => {
+                  const r = (item.role || 'member').toLowerCase();
+                  const rBg = r === 'admin' ? '#ffe4e6' : r === 'pastor' ? '#f3e8ff' : r === 'manager' ? '#fef3c7' : colors.badgeBg;
+                  const rText = r === 'admin' ? '#e11d48' : r === 'pastor' ? '#7e22ce' : r === 'manager' ? '#b45309' : colors.subText;
+                  return (
+                    <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: rBg, borderWidth: 1, borderColor: rText + '40' }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: rText }}>{r.toUpperCase()}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
               {!isMember && (
                 <TouchableOpacity
                   onPress={() => handleOpenEditModal(item)}
@@ -459,6 +475,50 @@ export default function PeopleScreen({ user, isDark = false }) {
                 placeholder="+60176001484"
                 placeholderTextColor={colors.subText}
               />
+
+              {/* System Access Role (Admin Editable, Read-only for Others) */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>
+                System Access Role {isAdmin ? '(Admin Editable)' : '(View Only)'}
+              </Text>
+              {isAdmin ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                  {['member', 'manager', 'pastor', 'admin'].map((roleOption) => {
+                    const isSelected = (role || 'member').toLowerCase() === roleOption;
+                    return (
+                      <TouchableOpacity
+                        key={roleOption}
+                        onPress={() => setRole(roleOption)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                          backgroundColor: isSelected ? colors.primaryLight : colors.inputBg,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '800',
+                            textTransform: 'uppercase',
+                            color: isSelected ? colors.primary : colors.text,
+                          }}
+                        >
+                          {roleOption}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={{ padding: 10, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: colors.primary }}>
+                    {(role || 'member').toUpperCase()}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: colors.subText }}>Only Admins can change user roles</Text>
+                </View>
+              )}
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 6 }}>
                 <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>

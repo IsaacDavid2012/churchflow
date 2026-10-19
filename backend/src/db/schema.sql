@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS musicians (
     roles TEXT[] NOT NULL DEFAULT '{}',
     ministry VARCHAR(100) DEFAULT 'Worship Team',
     status VARCHAR(50) NOT NULL DEFAULT 'member', -- 'member', 'regular', 'visitor', 'leader', 'staff'
+    role VARCHAR(50) NOT NULL DEFAULT 'member', -- 'admin', 'pastor', 'manager', 'member'
     household_id UUID REFERENCES households(id) ON DELETE SET NULL,
     household_role VARCHAR(50) DEFAULT 'individual', -- 'head', 'spouse', 'child', 'individual'
     birthday DATE,
@@ -274,3 +275,49 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_device_tokens_musician ON device_tokens(musician_id);
+
+-- Ministry Members (Classroom volunteer assignments & managers)
+CREATE TABLE IF NOT EXISTS ministry_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    musician_id UUID NOT NULL REFERENCES musicians(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'member', -- 'manager', 'member'
+    assigned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_ministry_musician UNIQUE (ministry_id, musician_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ministry_members_ministry ON ministry_members(ministry_id);
+CREATE INDEX IF NOT EXISTS idx_ministry_members_musician ON ministry_members(musician_id);
+
+-- Ministry Announcements (Google Classroom style feed)
+CREATE TABLE IF NOT EXISTS ministry_announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    author_name VARCHAR(255) NOT NULL,
+    author_role VARCHAR(50) NOT NULL DEFAULT 'manager',
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    is_pinned BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ministry_announcements_ministry ON ministry_announcements(ministry_id);
+CREATE INDEX IF NOT EXISTS idx_ministry_announcements_created ON ministry_announcements(created_at DESC);
+
+-- Ministry Chat Messages (AI Ministry Assistant Chatbot history)
+CREATE TABLE IF NOT EXISTS ministry_chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ministry_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    sender VARCHAR(50) NOT NULL, -- 'user', 'assistant'
+    sender_name VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ministry_chat_ministry ON ministry_chat_messages(ministry_id);
+CREATE INDEX IF NOT EXISTS idx_ministry_chat_created ON ministry_chat_messages(created_at ASC);
+

@@ -237,6 +237,43 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Ministry Hub: Announcements Stream
+  getMinistryAnnouncements: (ministryId) => request(`/ministries/${ministryId}/announcements`),
+  createMinistryAnnouncement: (ministryId, data) =>
+    request(`/ministries/${ministryId}/announcements`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteMinistryAnnouncement: (ministryId, announcementId) =>
+    request(`/ministries/${ministryId}/announcements/${announcementId}`, {
+      method: 'DELETE',
+    }),
+
+  // Ministry Hub: Members & Managers Assignment
+  getMinistryMembers: (ministryId) => request(`/ministries/${ministryId}/members`),
+  assignMinistryMember: (ministryId, data) =>
+    request(`/ministries/${ministryId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  removeMinistryMember: (ministryId, musicianId) =>
+    request(`/ministries/${ministryId}/members/${musicianId}`, {
+      method: 'DELETE',
+    }),
+  updateMinistryMemberRole: (ministryId, musicianId, role) =>
+    request(`/ministries/${ministryId}/members/${musicianId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+
+  // Ministry AI Assistant (Chatbot)
+  getMinistryChat: (ministryId) => request(`/ministries/${ministryId}/chat`),
+  sendMinistryChat: (ministryId, message) =>
+    request(`/ministries/${ministryId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+
   // Legacy Groups Aliases
   getGroups: (params = {}) => {
     const query = new URLSearchParams(params).toString();

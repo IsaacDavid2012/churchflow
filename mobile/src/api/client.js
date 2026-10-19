@@ -383,6 +383,59 @@ class ApiClient {
     });
   }
 
+  // --- Ministry Hub: Stream, Members, Managers & AI Assistant ---
+  async getMinistryAnnouncements(ministryId) {
+    return this.request(`/ministries/${ministryId}/announcements`);
+  }
+
+  async createMinistryAnnouncement(ministryId, data) {
+    return this.request(`/ministries/${ministryId}/announcements`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMinistryAnnouncement(ministryId, announcementId) {
+    return this.request(`/ministries/${ministryId}/announcements/${announcementId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMinistryMembers(ministryId) {
+    return this.request(`/ministries/${ministryId}/members`);
+  }
+
+  async assignMinistryMember(ministryId, data) {
+    return this.request(`/ministries/${ministryId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeMinistryMember(ministryId, musicianId) {
+    return this.request(`/ministries/${ministryId}/members/${musicianId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateMinistryMemberRole(ministryId, musicianId, role) {
+    return this.request(`/ministries/${ministryId}/members/${musicianId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async getMinistryChat(ministryId) {
+    return this.request(`/ministries/${ministryId}/chat`);
+  }
+
+  async sendMinistryChat(ministryId, message) {
+    return this.request(`/ministries/${ministryId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
   // --- Small Groups (Aliases for compatibility) ---
   async getGroups(params = {}) {
     return this.getMinistries(params);
@@ -396,7 +449,7 @@ class ApiClient {
     return this.deleteMinistry(id);
   }
 
-  // --- Church Profile, Campuses & Ministries ---
+  // --- Church Profile, Campuses & Settings ---
   async getChurch() {
     return this.request('/church');
   }
@@ -412,7 +465,7 @@ class ApiClient {
     return this.request('/church/campuses');
   }
 
-  async getMinistries() {
+  async getChurchMinistries() {
     return this.request('/church/ministries');
   }
 
