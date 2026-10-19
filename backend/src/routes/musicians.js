@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
-const { ROLES } = require('../../../shared/roles');
+const { ROLES, normalizeRole, hasRole } = require('../../../shared/roles');
 
 router.use(authMiddleware);
 
