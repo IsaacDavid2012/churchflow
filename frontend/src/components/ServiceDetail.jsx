@@ -27,6 +27,11 @@ import ShareLinkModal from './ShareLinkModal';
 import OrderOfServicePlanner from './OrderOfServicePlanner';
 
 export default function ServiceDetail({ serviceId, onBack, user }) {
+  const userRole = (user?.role || '').toLowerCase();
+  const canDeleteServices = ['admin', 'pastor'].includes(userRole);
+  const canManage = ['admin', 'pastor', 'manager', 'leader'].includes(userRole);
+  const isMember = !canManage;
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,6 +117,10 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
 
   async function handleDeleteService() {
     if (!data?.service) return;
+    if (!canDeleteServices) {
+      alert('Only Admins and Pastors can delete services.');
+      return;
+    }
     const formatted = formatServiceDate(data.service.service_date);
     if (!window.confirm(`Are you sure you want to permanently delete the service on ${formatted}? This cannot be undone.`)) {
       return;
@@ -283,15 +292,17 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
               </button>
             )}
 
-            {/* Delete Service */}
-            <button
-              onClick={handleDeleteService}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
-              title="Permanently Delete Service"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
-            </button>
+            {/* Delete Service - Admin & Pastor only */}
+            {canDeleteServices && (
+              <button
+                onClick={handleDeleteService}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+                title="Permanently Delete Service"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

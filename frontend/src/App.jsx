@@ -134,12 +134,13 @@ export default function App() {
                   onSelectService={handleSelectService}
                   onCreateClick={() => setIsCreateModalOpen(true)}
                   onServiceDeleted={loadServices}
+                  currentUser={user}
                 />
               )}
             </>
           )}
 
-          {currentTab === 'people' && <PeopleManager />}
+          {currentTab === 'people' && <PeopleManager currentUser={user} />}
           {currentTab === 'users' && <UsersManager currentUser={user} />}
           {currentTab === 'groups' && <GroupsManager />}
           {currentTab === 'positions' && <PositionsManager />}

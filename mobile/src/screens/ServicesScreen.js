@@ -26,6 +26,13 @@ const DEFAULT_SERVICE_TYPES = [
 ];
 
 export default function ServicesScreen({ onSelectService, user, isDark = false }) {
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+  const isPastor = userRole === 'pastor';
+  const canDeleteServices = isAdmin || isPastor;
+  const canManage = ['admin', 'pastor', 'manager', 'leader'].includes(userRole);
+  const isMember = !canManage;
+
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,6 +124,10 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   };
 
   const handleDeleteServiceType = (typeItem) => {
+    if (!canDeleteServices) {
+      Alert.alert('Permission Denied', 'Only Admins and Pastors can delete service types.');
+      return;
+    }
     if (serviceTypes.length <= 1) {
       Alert.alert('Cannot Delete', 'You must have at least one service type.');
       return;
@@ -214,6 +225,10 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   };
 
   const handleDeleteService = (service) => {
+    if (!canDeleteServices) {
+      Alert.alert('Permission Denied', 'Only Admins and Pastors can delete services.');
+      return;
+    }
     Alert.alert(
       'Delete Service',
       `Are you sure you want to permanently delete the "${service.service_type || 'Sunday Service'}" on ${service.service_date}? This will delete all roster assignments and plan items for this service.`,
@@ -382,24 +397,28 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
               </View>
 
               <View style={styles.cardActionsGroup}>
-                <TouchableOpacity
-                  style={[styles.quickActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                  onPress={() => handleOpenEditModal(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="create-outline" size={15} color={colors.primary} />
-                </TouchableOpacity>
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.quickActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                    onPress={() => handleOpenEditModal(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="create-outline" size={15} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
 
-                <TouchableOpacity
-                  style={[styles.quickActionBtn, styles.deleteActionBtn]}
-                  onPress={() => handleDeleteService(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                </TouchableOpacity>
+                {canDeleteServices && (
+                  <TouchableOpacity
+                    style={[styles.quickActionBtn, styles.deleteActionBtn]}
+                    onPress={() => handleDeleteService(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                  </TouchableOpacity>
+                )}
 
                 <View style={styles.chevronWrap}>
-                  <Text style={[styles.openDetailText, { color: colors.subText }]}>Manage</Text>
+                  <Text style={[styles.openDetailText, { color: colors.subText }]}>{canManage ? 'Manage' : 'View'}</Text>
                   <Ionicons name="chevron-forward" size={14} color={colors.subText} />
                 </View>
               </View>
@@ -434,13 +453,15 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                   {serviceTypes.length} dynamic service types available
                 </Text>
               </View>
-              <TouchableOpacity
-                style={[styles.manageTypesTopBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
-                onPress={() => setIsTypesModalOpen(true)}
-              >
-                <Ionicons name="layers-outline" size={15} color={colors.primary} />
-                <Text style={[styles.manageTypesTopBtnText, { color: colors.primary }]}>Manage Types</Text>
-              </TouchableOpacity>
+              {canDeleteServices && (
+                <TouchableOpacity
+                  style={[styles.manageTypesTopBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                  onPress={() => setIsTypesModalOpen(true)}
+                >
+                  <Ionicons name="layers-outline" size={15} color={colors.primary} />
+                  <Text style={[styles.manageTypesTopBtnText, { color: colors.primary }]}>Manage Types</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           ListEmptyComponent={
@@ -448,22 +469,24 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
               <Ionicons name="calendar-outline" size={48} color={colors.subText} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>No Services Scheduled</Text>
               <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
-                Tap the + button below to plan your next worship service.
+                {canManage ? 'Tap the + button below to plan your next worship service.' : 'No upcoming services scheduled.'}
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Floating Action Button (FAB) */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        activeOpacity={0.85}
-        onPress={handleOpenCreateModal}
-      >
-        <Ionicons name="add" size={26} color="#ffffff" />
-        <Text style={styles.fabText}>Plan Service</Text>
-      </TouchableOpacity>
+      {/* Floating Action Button (FAB) - For Admin, Pastor, Manager */}
+      {canManage && (
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+          onPress={handleOpenCreateModal}
+        >
+          <Ionicons name="add" size={26} color="#ffffff" />
+          <Text style={styles.fabText}>Plan Service</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Plan / Edit Service Modal Bottom Sheet */}
       <Modal visible={isModalOpen} animationType="slide" transparent>

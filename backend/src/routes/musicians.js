@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+const { ROLES } = require('../../../shared/roles');
 
 router.use(authMiddleware);
 
@@ -278,8 +279,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/musicians/:id
-router.delete('/:id', async (req, res) => {
+// DELETE /api/musicians/:id (Admin and Pastor only - Managers and Members cannot delete members)
+router.delete('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(

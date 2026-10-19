@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#c59c6c">
+  <title>Volunteer Onboarding — Jesus My Rock Church</title>
+  <link rel="icon" type="image/png" href="/churchflow-logo.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root[data-theme="light"] {
+      --bg: #ffffff;
+      --card-bg: #ffffff;
+      --card-inner: #fbf8f3;
+      --border: #eadbc4;
+      --border-strong: #dcc29e;
+      --primary: #c59c6c;
+      --primary-hover: #b38856;
+      --primary-light: #f5ede1;
+      --text: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --success: #16a34a;
+      --success-light: #f0fdf4;
+      --success-border: #bbf7d0;
+      --input-bg: #fbf8f3;
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #090d16;
+      --card-bg: #131b2e;
+      --card-inner: #1c2640;
+      --border: #233052;
+      --border-strong: #334155;
+      --primary: #c59c6c;
+      --primary-hover: #b38856;
+      --primary-light: rgba(197, 156, 108, 0.15);
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.15);
+      --success-border: rgba(16, 185, 129, 0.35);
+      --input-bg: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 40px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 580px;
+      margin: 0 auto;
+    }
+
+    /* Top Brand Header */
+    .brand-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .brand-logo-wrap {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 12px;
+      border-radius: 20px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(197, 156, 108, 0.15);
+    }
+
+    .brand-logo-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .church-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+
+    .church-sub {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Card Wrapper */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06);
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .form-label span {
+      color: #ef4444;
+    }
+
+    .form-input, .form-textarea {
+      width: 100%;
+      height: 44px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0 14px;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus, .form-textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(197, 156, 108, 0.2);
+    }
+
+    .form-textarea {
+      height: 80px;
+      padding: 10px 14px;
+      resize: vertical;
+    }
+
+    /* Positions Toggle Chips Section */
+    .roles-section {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .roles-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .roles-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .roles-count {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .roles-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .role-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .role-chip:hover {
+      border-color: var(--primary);
+      color: var(--text);
+    }
+
+    .role-chip.selected {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: #9e7343;
+      font-weight: 700;
+    }
+
+    .role-chip .chip-check {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1.5px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 900;
+      transition: all 0.15s ease;
+    }
+
+    .role-chip.selected .chip-check {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Submit Button */
+    .submit-btn {
+      width: 100%;
+      height: 48px;
+      background: var(--primary);
+      border: none;
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(197, 156, 108, 0.3);
+      transition: all 0.2s;
+    }
+
+    .submit-btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Alerts */
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* Success Screen */
+    .success-card {
+      display: none;
+      text-align: center;
+      padding: 36px 20px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 32px;
+      background: var(--success-light);
+      border: 2px solid var(--success-border);
+      color: var(--success);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 16px;
+    }
+
+    .success-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .success-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 420px;
+      margin: 0 auto 20px;
+    }
+
+    .success-roles-list {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .success-role-badge {
+      background: var(--primary-light);
+      color: #9e7343;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #ffffff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Brand Header -->
+    <div class="brand-header">
+      <div class="brand-logo-wrap">
+        <img src="/jmrlogo.png" alt="Jesus My Rock Church Logo" onerror="this.src='/churchflow-logo.png'">
+      </div>
+      <h1 class="church-title">Jesus My Rock Church</h1>
+      <p class="church-sub">Worship & Media Team Registration</p>
+    </div>
+
+    <!-- Main Registration Form Card -->
+    <div class="card" id="formCard">
+      <h2 class="card-title">Join the Ministry Team</h2>
+      <p class="card-desc">
+        We would love to have you serve! Fill in your contact info and toggle all the positions you'd like to serve in.
+      </p>
+
+      <div class="error-box" id="errorBox"></div>
+
+      <form id="joinForm" onsubmit="handleSubmit(event)">
+        <div class="form-group">
+          <label class="form-label">Full Name <span>*</span></label>
+          <input type="text" id="nameInput" class="form-input" placeholder="e.g. Isaac David" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Phone Number / WhatsApp <span>*</span></label>
+          <input type="tel" id="phoneInput" class="form-input" placeholder="e.g. +60 17-600 1484" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email Address (Optional)</label>
+          <input type="email" id="emailInput" class="form-input" placeholder="e.g. isaac@example.com">
+        </div>
+
+        <!-- Toggle List of Positions -->
+        <div class="roles-section">
+          <div class="roles-header">
+            <span class="roles-title">Positions You Can Serve In <span>*</span></span>
+            <span class="roles-count" id="rolesCount">0 Selected</span>
+          </div>
+          <div class="roles-grid" id="rolesGrid">
+            <div style="font-size: 13px; color: var(--text-muted); padding: 8px 0;">Loading positions...</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Experience & Notes (Optional)</label>
+          <textarea id="notesInput" class="form-textarea" placeholder="Tell us about your musical or media background, availability, or preferences..."></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span>Submit Registration</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Celebration Success Card -->
+    <div class="card success-card" id="successCard">
+      <div class="success-icon">✓</div>
+      <h2 class="success-title" id="welcomeTitle">Welcome to the Team!</h2>
+      <p class="success-text" id="welcomeText">
+        Thank you for submitting your volunteer registration. Our worship and ministry team leaders will review your application and contact you soon.
+      </p>
+      <div class="success-roles-list" id="selectedRolesSummary"></div>
+      <p style="font-size: 12px; color: var(--text-muted);">
+        Jesus My Rock Church • Serving together for God's glory
+      </p>
+    </div>
+
+    <div class="footer">
+      Powered by <strong style="color: var(--primary);">ChurchFlow</strong> • Built for Jesus My Rock
+    </div>
+  </div>
+
+  <script>
+    let selectedRoles = new Set();
+    const DEFAULT_POSITIONS = [
+      'Drums',
+      'Bass',
+      'Acoustic Guitar',
+      'Electric Guitar',
+      'Keyboard',
+      'Vocal (Lead)',
+      'Vocal (Backup)',
+      'Sound (FOH)',
+      'Media / Lyrics Slides',
+      'Cameras / Stream'
+    ];
+
+    async function loadPositions() {
+      const grid = document.getElementById('rolesGrid');
+      try {
+        const res = await fetch('/api/public/join');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.positions && data.positions.length > 0) {
+            renderPositions(data.positions.map(p => p.name));
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load positions from server, using defaults:', err);
+      }
+      renderPositions(DEFAULT_POSITIONS);
+    }
+
+    function renderPositions(posNames) {
+      const grid = document.getElementById('rolesGrid');
+      grid.innerHTML = '';
+      posNames.forEach(pos => {
+        const chip = document.createElement('div');
+        chip.className = 'role-chip';
+        chip.innerHTML = `
+          <div class="chip-check">✓</div>
+          <span>${pos}</span>
+        `;
+        chip.onclick = () => toggleRole(pos, chip);
+        grid.appendChild(chip);
+      });
+    }
+
+    function toggleRole(pos, chipEl) {
+      if (selectedRoles.has(pos)) {
+        selectedRoles.delete(pos);
+        chipEl.classList.remove('selected');
+      } else {
+        selectedRoles.add(pos);
+        chipEl.classList.add('selected');
+      }
+      document.getElementById('rolesCount').textContent = `${selectedRoles.size} Selected`;
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const errorBox = document.getElementById('errorBox');
+      errorBox.style.display = 'none';
+
+      const name = document.getElementById('nameInput').value.trim();
+      const phone = document.getElementById('phoneInput').value.trim();
+      const email = document.getElementById('emailInput').value.trim();
+      const notes = document.getElementById('notesInput').value.trim();
+
+      if (!name || !phone) {
+        showError('Please enter your full name and phone number.');
+        return;
+      }
+
+      if (selectedRoles.size === 0) {
+        showError('Please toggle ON at least one position you would like to serve in.');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner"></div><span>Submitting...</span>';
+
+      try {
+        const res = await fetch('/api/public/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            phone,
+            email,
+            roles: Array.from(selectedRoles),
+            notes
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to submit registration');
+        }
+
+        // Show success screen
+        document.getElementById('formCard').style.display = 'none';
+        const successCard = document.getElementById('successCard');
+        document.getElementById('welcomeTitle').textContent = `Welcome to the Team, ${name}!`;
+        const summaryWrap = document.getElementById('selectedRolesSummary');
+        summaryWrap.innerHTML = '';
+        Array.from(selectedRoles).forEach(r => {
+          const badge = document.createElement('span');
+          badge.className = 'success-role-badge';
+          badge.textContent = `🎸 ${r}`;
+          summaryWrap.appendChild(badge);
+        });
+        successCard.style.display = 'block';
+
+      } catch (err) {
+        showError(err.message || 'Submission failed. Please check your connection.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Submit Registration</span>';
+      }
+    }
+
+    function showError(msg) {
+      const errorBox = document.getElementById('errorBox');
+      errorBox.textContent = msg;
+      errorBox.style.display = 'block';
+    }
+
+    window.addEventListener('DOMContentLoaded', loadPositions);
+  </script>
+</body>
+</html>

@@ -212,16 +212,19 @@ export default function UsersManager({ currentUser }) {
             Pastor
           </span>
         );
+      case 'manager':
       case 'leader':
         return (
           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30 w-fit">
-            Ministry Leader
+            Manager
           </span>
         );
+      case 'member':
+      case 'volunteer':
       default:
         return (
           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 w-fit">
-            Volunteer
+            Member
           </span>
         );
     }
@@ -460,12 +463,12 @@ export default function UsersManager({ currentUser }) {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 cursor-pointer"
                   >
-                    <option value="admin">Admin</option>
-                    <option value="pastor">Pastor</option>
-                    <option value="leader">Leader</option>
-                    <option value="volunteer">Volunteer</option>
+                    <option value="admin">Admin (Full Control, Master Settings & Invites)</option>
+                    <option value="pastor">Pastor (Plan, Roster & Delete Services)</option>
+                    <option value="manager">Manager (Plan & Roster, No Deletion)</option>
+                    <option value="member">Member (Read-Only View)</option>
                   </select>
                 </div>
               </div>
@@ -564,12 +567,12 @@ export default function UsersManager({ currentUser }) {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 cursor-pointer"
                   >
-                    <option value="admin">Admin</option>
-                    <option value="pastor">Pastor</option>
-                    <option value="leader">Leader</option>
-                    <option value="volunteer">Volunteer</option>
+                    <option value="admin">Admin (Full Control, Master Settings & Invites)</option>
+                    <option value="pastor">Pastor (Plan, Roster & Delete Services)</option>
+                    <option value="manager">Manager (Plan & Roster, No Deletion)</option>
+                    <option value="member">Member (Read-Only View)</option>
                   </select>
                 </div>
               </div>

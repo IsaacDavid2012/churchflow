@@ -188,4 +188,91 @@ router.post('/avail/:token', async (req, res) => {
   }
 });
 
+// GET /api/public/join - Get positions template and church info for volunteer onboarding
+router.get('/join', async (req, res) => {
+  try {
+    const posRes = await db.query(`
+      SELECT id, name, ministry, sort_order 
+      FROM positions_template 
+      ORDER BY sort_order ASC, name ASC
+    `);
+
+    let church = null;
+    try {
+      const churchRes = await db.query('SELECT name, tagline, email, phone, website FROM church_profile LIMIT 1');
+      if (churchRes.rows.length > 0) {
+        church = churchRes.rows[0];
+      }
+    } catch (e) {}
+
+    res.json({
+      church: church || { name: 'Jesus My Rock Church' },
+      positions: posRes.rows,
+    });
+  } catch (err) {
+    console.error('Fetch join data error:', err);
+    res.status(500).json({ error: 'Failed to load onboarding positions' });
+  }
+});
+
+// POST /api/public/join - Public volunteer sign-up / team registration
+router.post('/join', async (req, res) => {
+  const { name, phone, email, roles, notes } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Full name is required' });
+  }
+
+  if (!phone || !phone.trim()) {
+    return res.status(400).json({ error: 'Phone number / WhatsApp contact is required' });
+  }
+
+  const selectedRoles = Array.isArray(roles) && roles.length > 0 ? roles : [];
+  if (selectedRoles.length === 0) {
+    return res.status(400).json({ error: 'Please toggle at least one position you serve in' });
+  }
+
+  try {
+    const insertRes = await db.query(
+      `
+      INSERT INTO musicians (name, phone, email, roles, ministry, status, notes, active)
+      VALUES ($1, $2, $3, $4, 'Worship & Media Team', 'member', $5, true)
+      RETURNING id, name, phone, email, roles, status, active, created_at
+      `,
+      [
+        name.trim(),
+        phone.trim(),
+        email && email.trim() ? email.trim() : null,
+        selectedRoles,
+        notes && notes.trim() ? notes.trim() : null,
+      ]
+    );
+
+    const newMusician = insertRes.rows[0];
+
+    // Log notification for admins
+    try {
+      await db.query(
+        `
+        INSERT INTO notifications_log (type, message, metadata)
+        VALUES ('volunteer_registered', $1, $2)
+        `,
+        [
+          `[New Volunteer] ${newMusician.name} (${newMusician.phone}) registered via onboarding link for: ${selectedRoles.join(', ')}`,
+          JSON.stringify({ musicianId: newMusician.id, roles: selectedRoles }),
+        ]
+      );
+    } catch (e) {}
+
+    res.status(201).json({
+      success: true,
+      message: `Welcome to the team, ${newMusician.name}! Your volunteer registration has been received.`,
+      member: newMusician,
+    });
+  } catch (err) {
+    console.error('Volunteer registration error:', err);
+    res.status(500).json({ error: 'Failed to submit volunteer registration' });
+  }
+});
+
 module.exports = router;

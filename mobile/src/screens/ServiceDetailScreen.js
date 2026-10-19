@@ -31,6 +31,13 @@ const SERVICE_STATUSES = [
 ];
 
 export default function ServiceDetailScreen({ service, onBack, user, isDark = false }) {
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+  const isPastor = userRole === 'pastor';
+  const canDeleteServices = isAdmin || isPastor;
+  const canManage = ['admin', 'pastor', 'manager', 'leader'].includes(userRole);
+  const isMember = !canManage;
+
   const [activeTab, setActiveTab] = useState('lineup'); // 'lineup' | 'runsheet' | 'availability' | 'logs'
   const [loading, setLoading] = useState(true);
   const [serviceInfo, setServiceInfo] = useState(service);
@@ -151,6 +158,10 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   };
 
   const handleDeleteServiceType = (typeItem) => {
+    if (!canDeleteServices) {
+      Alert.alert('Permission Denied', 'Only Admins and Pastors can delete service types.');
+      return;
+    }
     if (serviceTypes.length <= 1) {
       Alert.alert('Cannot Delete', 'You must have at least one service type.');
       return;
@@ -231,6 +242,10 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   };
 
   const handleDeleteService = () => {
+    if (!canDeleteServices) {
+      Alert.alert('Permission Denied', 'Only Admins and Pastors can delete services.');
+      return;
+    }
     Alert.alert(
       'Delete Service',
       `Are you sure you want to permanently delete the "${serviceInfo?.service_type || 'Service'}" on ${serviceInfo?.service_date}? This will delete all roster assignments, availability, and run sheet items for this service.`,
@@ -481,19 +496,23 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
         </View>
 
         <View style={styles.topBarActions}>
-          <TouchableOpacity
-            style={[styles.topActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-            onPress={handleOpenEditModal}
-          >
-            <Ionicons name="create-outline" size={17} color={colors.primary} />
-          </TouchableOpacity>
+          {canManage && (
+            <TouchableOpacity
+              style={[styles.topActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+              onPress={handleOpenEditModal}
+            >
+              <Ionicons name="create-outline" size={17} color={colors.primary} />
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[styles.topActionBtn, styles.deleteTopBtn]}
-            onPress={handleDeleteService}
-          >
-            <Ionicons name="trash-outline" size={17} color="#ef4444" />
-          </TouchableOpacity>
+          {canDeleteServices && (
+            <TouchableOpacity
+              style={[styles.topActionBtn, styles.deleteTopBtn]}
+              onPress={handleDeleteService}
+            >
+              <Ionicons name="trash-outline" size={17} color="#ef4444" />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity style={styles.shareIconBtn} onPress={handleShareWhatsApp}>
             <Ionicons name="logo-whatsapp" size={20} color="#16a34a" />
@@ -564,44 +583,50 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     📍 {serviceInfo?.campus_name || 'Damansara Perdana Sanctuary'}
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <TouchableOpacity
-                    style={[styles.autoFillBtn, { backgroundColor: colors.primary }]}
-                    onPress={handleAutoSchedule}
-                  >
-                    <Ionicons name="sparkles" size={14} color="#fff" />
-                    <Text style={styles.autoFillBtnText}>Auto-Roster</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.autoFillBtn, { backgroundColor: '#059669' }]}
-                    onPress={handleConfirmLineup}
-                    disabled={confirmingLineup}
-                  >
-                    <Ionicons name="checkmark-done" size={14} color="#fff" />
-                    <Text style={styles.autoFillBtnText}>
-                      {serviceInfo?.status === 'confirmed' ? 'Re-Confirm' : 'Confirm'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                {canManage && (
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      style={[styles.autoFillBtn, { backgroundColor: colors.primary }]}
+                      onPress={handleAutoSchedule}
+                    >
+                      <Ionicons name="sparkles" size={14} color="#fff" />
+                      <Text style={styles.autoFillBtnText}>Auto-Roster</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.autoFillBtn, { backgroundColor: '#059669' }]}
+                      onPress={handleConfirmLineup}
+                      disabled={confirmingLineup}
+                    >
+                      <Ionicons name="checkmark-done" size={14} color="#fff" />
+                      <Text style={styles.autoFillBtnText}>
+                        {serviceInfo?.status === 'confirmed' ? 'Re-Confirm' : 'Confirm'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Service Management Actions Row */}
               <View style={[styles.heroActionsRow, { borderTopColor: colors.border }]}>
-                <TouchableOpacity
-                  style={[styles.heroActionPill, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                  onPress={handleOpenEditModal}
-                >
-                  <Ionicons name="create-outline" size={14} color={colors.primary} />
-                  <Text style={[styles.heroActionPillText, { color: colors.text }]}>Edit Details</Text>
-                </TouchableOpacity>
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.heroActionPill, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                    onPress={handleOpenEditModal}
+                  >
+                    <Ionicons name="create-outline" size={14} color={colors.primary} />
+                    <Text style={[styles.heroActionPillText, { color: colors.text }]}>Edit Details</Text>
+                  </TouchableOpacity>
+                )}
 
-                <TouchableOpacity
-                  style={[styles.heroActionPill, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
-                  onPress={handleDeleteService}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                  <Text style={[styles.heroActionPillText, { color: '#ef4444' }]}>Delete Service</Text>
-                </TouchableOpacity>
+                {canDeleteServices && (
+                  <TouchableOpacity
+                    style={[styles.heroActionPill, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                    onPress={handleDeleteService}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                    <Text style={[styles.heroActionPillText, { color: '#ef4444' }]}>Delete Service</Text>
+                  </TouchableOpacity>
+                )}
 
                 {serviceInfo?.notes ? (
                   <View style={{ flex: 1, marginLeft: 4 }}>
@@ -791,14 +816,16 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     </View>
 
                     {/* Swap / Assign Action */}
-                    <TouchableOpacity
-                      style={[styles.assignBtn, { borderColor: colors.border }]}
-                      onPress={() => handleOpenAssignModal(slot)}
-                    >
-                      <Text style={[styles.assignBtnText, { color: colors.text }]}>
-                        {hasMusician ? 'Swap' : '+ Assign'}
-                      </Text>
-                    </TouchableOpacity>
+                    {canManage && (
+                      <TouchableOpacity
+                        style={[styles.assignBtn, { borderColor: colors.border }]}
+                        onPress={() => handleOpenAssignModal(slot)}
+                      >
+                        <Text style={[styles.assignBtnText, { color: colors.text }]}>
+                          {hasMusician ? 'Swap' : '+ Assign'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -1274,7 +1301,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                         </Text>
                       </TouchableOpacity>
 
-                      {serviceTypes.length > 1 && (
+                      {canDeleteServices && serviceTypes.length > 1 && (
                         <TouchableOpacity
                           onPress={() => handleDeleteServiceType(t)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -1368,20 +1395,22 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
             </ScrollView>
 
             <View style={styles.modalActionRow}>
-              <TouchableOpacity
-                style={[styles.deleteModalBtn, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
-                onPress={handleDeleteService}
-                disabled={deletingService}
-              >
-                {deletingService ? (
-                  <ActivityIndicator size="small" color="#ef4444" />
-                ) : (
-                  <>
-                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                    <Text style={[styles.deleteModalBtnText, { color: '#ef4444' }]}>Delete</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {canDeleteServices && (
+                <TouchableOpacity
+                  style={[styles.deleteModalBtn, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                  onPress={handleDeleteService}
+                  disabled={deletingService}
+                >
+                  {deletingService ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <>
+                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      <Text style={[styles.deleteModalBtnText, { color: '#ef4444' }]}>Delete</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
               <View style={{ flex: 1 }} />
 

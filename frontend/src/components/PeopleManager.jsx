@@ -9,9 +9,13 @@ import {
   Trash2, 
   X,
   Check,
-  Layers
+  Layers,
+  Link as LinkIcon,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { api } from '../api';
+import { copyToClipboard } from '../utils/clipboard';
 
 const STATUS_COLORS = {
   staff: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
@@ -22,11 +26,24 @@ const STATUS_COLORS = {
   visitor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
 };
 
-export default function PeopleManager() {
+export default function PeopleManager({ currentUser }) {
+  const isAdmin = currentUser?.role === 'admin';
+  const isMember = currentUser?.role === 'member';
+
   const [people, setPeople] = useState([]);
   const [ministries, setMinistries] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+
+  async function handleCopyInviteLink() {
+    const url = 'https://serve.creativeclicks.art/join';
+    const success = await copyToClipboard(url);
+    if (success) {
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2500);
+    }
+  }
 
   // Filters
   const [search, setSearch] = useState('');
@@ -160,14 +177,57 @@ export default function PeopleManager() {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreatePerson}
-          className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/20 transition-all self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Member</span>
-        </button>
+        {!isMember && (
+          <button
+            onClick={handleOpenCreatePerson}
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/20 transition-all self-start sm:self-auto cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Member</span>
+          </button>
+        )}
       </div>
+
+      {/* Admin Only: Volunteer Self-Onboarding Link Banner */}
+      {isAdmin && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-700/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
+              <LinkIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Volunteer Self-Onboarding Link</h3>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-200 dark:border-amber-700/60">
+                  Admin Only
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Share this link so volunteers can fill in their Name, Phone, and toggle the positions they serve in.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <button
+              onClick={handleCopyInviteLink}
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition-all cursor-pointer"
+            >
+              {copiedInvite ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedInvite ? 'Link Copied!' : 'Copy Invite Link'}</span>
+            </button>
+            <a
+              href="https://serve.creativeclicks.art/join"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 text-slate-700 dark:text-slate-200 hover:bg-amber-100/50 dark:hover:bg-amber-900/30 font-bold text-xs transition-all"
+              title="Open Onboarding Form Preview"
+            >
+              <span>Preview Form</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -250,22 +310,26 @@ export default function PeopleManager() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-1">
-                      <button
-                        onClick={() => handleOpenEditPerson(person)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePerson(person)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        title="Deactivate"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {!isMember && (
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => handleOpenEditPerson(person)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeletePerson(person)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Deactivate"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Contact Info */}

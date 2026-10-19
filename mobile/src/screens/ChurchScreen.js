@@ -16,7 +16,17 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
+const STAFF_ROLES = [
+  { id: 'admin', label: 'Admin', desc: 'Full control over system, settings, services & invite links' },
+  { id: 'pastor', label: 'Pastor', desc: 'Plan & delete services, auto-roster. No system/staff admin' },
+  { id: 'manager', label: 'Manager', desc: 'Plan & schedule services, auto-roster. No deletions' },
+  { id: 'member', label: 'Member', desc: 'Read-only view of assigned services, run-sheets & songs' },
+];
+
 export default function ChurchScreen({ user, onLogout, isDark = false, onToggleTheme }) {
+  const userRoleState = (user?.role || '').toLowerCase();
+  const isAdmin = userRoleState === 'admin';
+
   const [loading, setLoading] = useState(true);
   const [church, setChurch] = useState(null);
   const [campuses, setCampuses] = useState([]);
@@ -29,7 +39,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
-  const [userRole, setUserRole] = useState('worship_leader');
+  const [userRole, setUserRole] = useState('manager');
   const [savingUser, setSavingUser] = useState(false);
 
   // Edit Church Modal
@@ -305,13 +315,15 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             🛡️ Staff & Admin ({users.length})
           </Text>
-          <TouchableOpacity
-            style={[styles.addMiniBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setIsUserModalOpen(true)}
-          >
-            <Ionicons name="add" size={14} color="#fff" />
-            <Text style={styles.addMiniBtnText}>Add Staff</Text>
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.addMiniBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setIsUserModalOpen(true)}
+            >
+              <Ionicons name="add" size={14} color="#fff" />
+              <Text style={styles.addMiniBtnText}>Add Staff</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {users.map((u) => (
@@ -330,7 +342,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
               </View>
               <Text style={[styles.userEmailText, { color: colors.subText }]}>{u.email}</Text>
             </View>
-            {u.id !== user?.id && (
+            {isAdmin && u.id !== user?.id && (
               <TouchableOpacity
                 style={styles.deleteUserBtn}
                 onPress={() => handleDeleteUser(u)}
@@ -363,6 +375,40 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
                 <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
+
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Staff Role & Permissions *</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 6 }}>
+              {STAFF_ROLES.map((r) => {
+                const isSelected = userRole === r.id;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 10,
+                      backgroundColor: isSelected ? colors.primary : colors.inputBg,
+                      borderWidth: 1,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                    }}
+                    onPress={() => setUserRole(r.id)}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color: isSelected ? '#ffffff' : colors.text,
+                      }}
+                    >
+                      {r.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={{ fontSize: 11, color: colors.subText, marginBottom: 8, fontStyle: 'italic' }}>
+              ℹ️ {STAFF_ROLES.find((r) => r.id === userRole)?.desc || ''}
+            </Text>
 
             <Text style={[styles.inputLabel, { color: colors.subText }]}>Full Name *</Text>
             <TextInput

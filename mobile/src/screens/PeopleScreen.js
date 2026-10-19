@@ -13,6 +13,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -20,6 +21,9 @@ import { api } from '../api/client';
 const MINISTRIES = ['All', 'Media Team', 'Production', 'Worship'];
 
 export default function PeopleScreen({ user, isDark = false }) {
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+  const isMember = userRole === 'member';
   const [people, setPeople] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +162,37 @@ export default function PeopleScreen({ user, isDark = false }) {
     return matchesSearch && matchesMin;
   });
 
+  const handleShareInviteLink = async () => {
+    const inviteUrl = 'https://serve.creativeclicks.art/join';
+    const message = `👋 Welcome to Jesus My Rock Volunteer Team!\nPlease tap this link to enter your details and choose the positions you'd like to serve in:\n${inviteUrl}`;
+    try {
+      await Share.share({
+        title: 'Jesus My Rock Volunteer Onboarding',
+        message: Platform.OS === 'android' ? message : inviteUrl,
+        url: inviteUrl,
+      });
+    } catch (err) {
+      console.error('Share error:', err);
+    }
+  };
+
+  const handleWhatsAppInvite = async () => {
+    const inviteUrl = 'https://serve.creativeclicks.art/join';
+    const text = `👋 Hi! Welcome to Jesus My Rock / ChurchFlow.\nPlease tap the link to fill in your name, contact, and choose what positions you'd like to serve in:\n${inviteUrl}`;
+    const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    const waWebUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    try {
+      const canOpen = await Linking.canOpenURL(waUrl);
+      if (canOpen) {
+        await Linking.openURL(waUrl);
+      } else {
+        await Linking.openURL(waWebUrl);
+      }
+    } catch (err) {
+      await Linking.openURL(waWebUrl);
+    }
+  };
+
   const renderPersonCard = ({ item }) => {
     const memberRoles = Array.isArray(item.roles) && item.roles.length > 0
       ? item.roles
@@ -175,13 +210,15 @@ export default function PeopleScreen({ user, isDark = false }) {
           <View style={styles.personDetails}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={[styles.personName, { color: colors.text }]}>{item.name}</Text>
-              <TouchableOpacity
-                onPress={() => handleOpenEditModal(item)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.badgeBg }}
-              >
-                <Ionicons name="create-outline" size={14} color={colors.primary} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>Edit Roles</Text>
-              </TouchableOpacity>
+              {!isMember && (
+                <TouchableOpacity
+                  onPress={() => handleOpenEditModal(item)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.badgeBg }}
+                >
+                  <Ionicons name="create-outline" size={14} color={colors.primary} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>Edit Roles</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={[styles.roleTagsRow, { flexWrap: 'wrap' }]}>
               {memberRoles.length > 0 ? (
@@ -248,6 +285,52 @@ export default function PeopleScreen({ user, isDark = false }) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Admin Only: Volunteer Self-Onboarding Link Banner */}
+      {isAdmin && (
+        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+          <View style={styles.inviteHeaderRow}>
+            <View style={[styles.inviteIconCircle, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="link" size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.inviteTitle, { color: colors.text }]}>Volunteer Invite Link</Text>
+                <View style={[styles.adminPill, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[styles.adminPillText, { color: colors.primary }]}>ADMIN ONLY</Text>
+                </View>
+              </View>
+              <Text style={[styles.inviteSubtitle, { color: colors.subText }]}>
+                Prospective members can submit name, contact & toggle their serving positions.
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.inviteUrlBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.inviteUrlText, { color: colors.primary }]} numberOfLines={1}>
+              https://serve.creativeclicks.art/join
+            </Text>
+          </View>
+
+          <View style={styles.inviteActionRow}>
+            <TouchableOpacity
+              style={[styles.inviteBtn, { backgroundColor: colors.primary }]}
+              onPress={handleShareInviteLink}
+            >
+              <Ionicons name="share-social-outline" size={15} color="#ffffff" />
+              <Text style={styles.inviteBtnText}>Share / Copy Link</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.inviteBtn, { backgroundColor: '#16a34a' }]}
+              onPress={handleWhatsAppInvite}
+            >
+              <Ionicons name="logo-whatsapp" size={15} color="#ffffff" />
+              <Text style={styles.inviteBtnText}>WhatsApp Invite</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchSection}>
         <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -321,15 +404,17 @@ export default function PeopleScreen({ user, isDark = false }) {
         />
       )}
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        activeOpacity={0.85}
-        onPress={handleOpenAddModal}
-      >
-        <Ionicons name="person-add" size={20} color="#ffffff" />
-        <Text style={styles.fabText}>Add Member</Text>
-      </TouchableOpacity>
+      {/* Floating Action Button - Hidden for Member role */}
+      {!isMember && (
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+          onPress={handleOpenAddModal}
+        >
+          <Ionicons name="person-add" size={20} color="#ffffff" />
+          <Text style={styles.fabText}>Add Member</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Add / Edit Member Bottom Sheet Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
@@ -700,6 +785,86 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  inviteCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#c59c6c',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  inviteHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  inviteIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  inviteTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  adminPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  adminPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  inviteSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  inviteUrlBox: {
+    marginVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  inviteUrlText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  inviteActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  inviteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  inviteBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

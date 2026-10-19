@@ -18,7 +18,12 @@ import { copyToClipboard, formatFinalLineupForWhatsApp } from '../utils/clipboar
 import { api } from '../api';
 import ShareLinkModal from './ShareLinkModal';
 
-export default function ServiceList({ services, onSelectService, onCreateClick, onServiceDeleted }) {
+export default function ServiceList({ services, onSelectService, onCreateClick, onServiceDeleted, currentUser }) {
+  const userRole = (currentUser?.role || '').toLowerCase();
+  const canDeleteServices = ['admin', 'pastor'].includes(userRole);
+  const canManage = ['admin', 'pastor', 'manager', 'leader'].includes(userRole);
+  const isMember = !canManage;
+
   const [copiedToken, setCopiedToken] = useState(null);
   const [copiedFinalId, setCopiedFinalId] = useState(null);
   const [shareModal, setShareModal] = useState({ isOpen: false, serviceDate: '', token: '' });
@@ -26,6 +31,10 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
 
   async function handleDelete(e, service) {
     e.stopPropagation();
+    if (!canDeleteServices) {
+      alert('Only Admins and Pastors can delete services.');
+      return;
+    }
     const formatted = formatServiceDate(service.service_date);
     if (!window.confirm(`Are you sure you want to permanently delete the service on ${formatted}?`)) {
       return;
@@ -128,13 +137,15 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
             Service plans for Jesus My Rock Church — Order of Service and multi-team volunteer scheduling.
           </p>
         </div>
-        <button
-          onClick={onCreateClick}
-          className="flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-600/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Service Plan</span>
-        </button>
+        {canManage && (
+          <button
+            onClick={onCreateClick}
+            className="flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-600/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Service Plan</span>
+          </button>
+        )}
       </div>
 
       {/* Services List */}
@@ -143,15 +154,19 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
           <Calendar className="w-12 h-12 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No service plans scheduled yet</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            Create your first worship service date to start planning the run sheet and collecting team availability.
+            {canManage
+              ? 'Create your first worship service date to start planning the run sheet and collecting team availability.'
+              : 'No worship services are currently scheduled.'}
           </p>
-          <button
-            onClick={onCreateClick}
-            className="mt-4 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create First Service</span>
-          </button>
+          {canManage && (
+            <button
+              onClick={onCreateClick}
+              className="mt-4 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create First Service</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3.5">
@@ -271,15 +286,17 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
                         </>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, service)}
-                        disabled={deletingId === service.id}
-                        className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-500/30 transition-all cursor-pointer"
-                        title="Delete Service"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canDeleteServices && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDelete(e, service)}
+                          disabled={deletingId === service.id}
+                          className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-500/30 transition-all cursor-pointer"
+                          title="Delete Service"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-red-500 group-hover:translate-x-1 transition-all" />

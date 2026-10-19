@@ -101,6 +101,11 @@ app.get('/avail/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/avail.html'));
 });
 
+// Public volunteer onboarding link (accessible without login)
+app.get(['/join', '/volunteer-join', '/register-member'], (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/join.html'));
+});
+
 // Never cache API responses (live server data only)
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

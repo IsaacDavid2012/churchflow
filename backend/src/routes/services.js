@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/db');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+const { ROLES } = require('../../../shared/roles');
 const {
   autoShuffleService,
   manualOverrideSlot,
@@ -79,8 +80,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/services - Create a new service
-router.post('/', async (req, res) => {
+// POST /api/services - Create a new service (Admin, Pastor, Manager)
+router.post('/', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before, position_ids } = req.body;
   if (!service_date) {
     return res.status(400).json({ error: 'Service date is required' });
@@ -178,8 +179,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/services/:id - Delete a service and cascade delete plan items/assignments
-router.delete('/:id', async (req, res) => {
+// DELETE /api/services/:id - Delete a service (Admin and Pastor only - Managers cannot delete)
+router.delete('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query('DELETE FROM services WHERE id = $1 RETURNING *', [id]);
@@ -565,8 +566,8 @@ router.post(['/:id/select-worship-leader', '/:id/worship-leader'], async (req, r
   }
 });
 
-// POST /api/services/:id/shuffle - Trigger auto-shuffle algorithm
-router.post('/:id/shuffle', async (req, res) => {
+// POST /api/services/:id/shuffle - Trigger auto-shuffle algorithm (Admin, Pastor, Manager)
+router.post('/:id/shuffle', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { pool = 'auto' } = req.body;
   try {
