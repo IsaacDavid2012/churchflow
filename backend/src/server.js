@@ -123,6 +123,7 @@ app.use('/api/positions', positionsRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/songs', songsRoutes);
 app.use('/api/groups', groupsRoutes);
+app.use('/api/ministries', groupsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/service-types', serviceTypesRoutes);
 

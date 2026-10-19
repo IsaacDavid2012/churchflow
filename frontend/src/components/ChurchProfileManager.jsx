@@ -135,11 +135,11 @@ export default function ChurchProfileManager() {
           </div>
           <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
             <div className="text-xs text-slate-500">Ministries</div>
-            <div className="text-xl font-bold text-blue-600 mt-1">{ministries.length}</div>
+            <div className="text-xl font-bold text-[#c59c6c] mt-1">{ministries.length}</div>
           </div>
           <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
-            <div className="text-xs text-slate-500">Life Groups</div>
-            <div className="text-xl font-bold text-amber-600 mt-1">{stats.totalGroups} <span className="text-xs font-normal text-slate-500">groups</span></div>
+            <div className="text-xs text-slate-500">Serving Departments</div>
+            <div className="text-xl font-bold text-[#8c6738] mt-1">{stats.totalGroups || ministries.length} <span className="text-xs font-normal text-slate-500">active</span></div>
           </div>
         </div>
       </div>

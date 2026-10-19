@@ -354,22 +354,46 @@ class ApiClient {
     });
   }
 
-  // --- Small Groups ---
+  // --- Church Ministries ---
+  async getMinistries(params = {}) {
+    return this.request(`/ministries${buildQueryString(params)}`);
+  }
+
+  async getMinistry(id) {
+    return this.request(`/ministries/${id}`);
+  }
+
+  async createMinistry(data) {
+    return this.request('/ministries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMinistry(id, data) {
+    return this.request(`/ministries/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMinistry(id) {
+    return this.request(`/ministries/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Small Groups (Aliases for compatibility) ---
   async getGroups(params = {}) {
-    return this.request(`/groups${buildQueryString(params)}`);
+    return this.getMinistries(params);
   }
 
   async createGroup(groupData) {
-    return this.request('/groups', {
-      method: 'POST',
-      body: JSON.stringify(groupData),
-    });
+    return this.createMinistry(groupData);
   }
 
   async deleteGroup(id) {
-    return this.request(`/groups/${id}`, {
-      method: 'DELETE',
-    });
+    return this.deleteMinistry(id);
   }
 
   // --- Church Profile, Campuses & Ministries ---

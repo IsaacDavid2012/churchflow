@@ -6,7 +6,7 @@ import ServiceList from './components/ServiceList';
 import ServiceDetail from './components/ServiceDetail';
 import CreateServiceModal from './components/CreateServiceModal';
 import PeopleManager from './components/PeopleManager';
-import GroupsManager from './components/GroupsManager';
+import MinistriesManager from './components/MinistriesManager';
 import PositionsManager from './components/PositionsManager';
 import ChurchProfileManager from './components/ChurchProfileManager';
 import UsersManager from './components/UsersManager';
@@ -142,7 +142,7 @@ export default function App() {
 
           {currentTab === 'people' && <PeopleManager currentUser={user} />}
           {currentTab === 'users' && <UsersManager currentUser={user} />}
-          {currentTab === 'groups' && <GroupsManager />}
+          {(currentTab === 'ministries' || currentTab === 'groups') && <MinistriesManager currentUser={user} />}
           {currentTab === 'positions' && <PositionsManager />}
           {currentTab === 'church' && <ChurchProfileManager />}
           {currentTab === 'notifications' && <NotificationsFeed />}

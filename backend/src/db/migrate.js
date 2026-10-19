@@ -82,11 +82,32 @@ async function runMigrations() {
           ALTER TABLE services ADD COLUMN IF NOT EXISTS deadline_hours_before INT DEFAULT 48;
           ALTER TABLE services ADD COLUMN IF NOT EXISTS position_ids UUID[] DEFAULT NULL;
         END IF;
+
+        IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'groups') THEN
+          ALTER TABLE groups ADD COLUMN IF NOT EXISTS leader_phone VARCHAR(50);
+        END IF;
       END $$;
     `);
 
     // Run core schema
     await client.query(sql);
+
+    // Seed default church ministries if none active
+    const activeGroupsCount = await client.query('SELECT COUNT(*) FROM groups WHERE active = true');
+    if (parseInt(activeGroupsCount.rows[0].count, 10) === 0) {
+      await client.query(`
+        INSERT INTO groups (name, category, leader_name, leader_phone, meeting_day, meeting_time, location, description, member_count, active)
+        VALUES 
+          ('Worship Ministry', 'Worship & Music', 'Isaac David', '+60 17-600 1484', 'Thursday', '8:00 PM', 'Main Sanctuary', 'Vocalists, band musicians, and worship leaders leading the congregation into God''s presence each Sunday.', 12, true),
+          ('Production & Tech Ministry', 'Production & Tech', 'Alvin & Tech Team', '+60 12-345 6789', 'Sunday', '8:30 AM', 'FOH Sound Booth & Control Center', 'Audio engineering (FOH), live-stream broadcasting, lighting, ProPresenter lyrics, and camera operations.', 6, true),
+          ('Media & Communications', 'Media & Tech', 'Media Lead', '+60 16-987 6543', 'Sunday', '9:00 AM', 'Media Suite', 'Photography, videography, social media, and digital church communications.', 5, true),
+          ('Hospitality & Ushering', 'Hospitality & Welcome', 'Sharon & Ushering Team', '+60 11-234 5678', 'Sunday', '9:15 AM', 'Church Foyer & Welcome Desk', 'Welcoming newcomers, greeting church members, ushering, and coordinating refreshments.', 8, true),
+          ('Prayer & Intercession', 'Prayer & Pastoral Care', 'Prayer Team', '+60 18-765 4321', 'Wednesday', '8:00 PM', 'Prayer Room / Sanctuary', 'Pre-service intercession, weekly prayer encounter meetings, and prophetic altar ministry.', 10, true),
+          ('Rock Kids & NextGen', 'NextGen & Children', 'Kids Director', '+60 19-876 5432', 'Sunday', '10:00 AM', 'Kids Sanctuary Room 2', 'Sunday school curriculum, worship, games, and discipleship for toddlers to youth.', 7, true)
+        ON CONFLICT DO NOTHING;
+      `);
+      console.log('Seeded default Church Ministries into groups table.');
+    }
 
     await client.query('COMMIT');
     console.log('Migrations executed successfully!');

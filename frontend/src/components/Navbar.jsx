@@ -17,7 +17,7 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
   const tabs = [
     { id: 'services', label: 'Services', icon: Calendar },
     { id: 'people', label: 'People', icon: Users },
-    { id: 'groups', label: 'Groups', icon: HeartHandshake },
+    { id: 'ministries', label: 'Ministries', icon: HeartHandshake },
     { id: 'positions', label: 'Positions', icon: Sliders },
     { id: 'notifications', label: 'Audit Logs', icon: Bell },
     ...(user?.role === 'admin' || user?.role === 'pastor' 
@@ -62,7 +62,7 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
           <nav className="hidden lg:flex items-center space-x-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = currentTab === tab.id;
+              const isActive = currentTab === tab.id || (tab.id === 'ministries' && currentTab === 'groups');
               return (
                 <button
                   key={tab.id}
@@ -107,7 +107,7 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
         <div className="flex lg:hidden overflow-x-auto py-2 space-x-1 border-t border-slate-200 dark:border-slate-800/60 scrollbar-none">
           {tabs.map((tab) => {
             const Icon = tab.icon;
-            const isActive = currentTab === tab.id;
+            const isActive = currentTab === tab.id || (tab.id === 'ministries' && currentTab === 'groups');
             return (
               <button
                 key={tab.id}

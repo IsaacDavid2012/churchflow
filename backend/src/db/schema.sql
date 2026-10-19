@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS groups (
     location VARCHAR(255) DEFAULT 'Fellowship Hall Room 201',
     description TEXT,
     member_count INT DEFAULT 8,
+    leader_phone VARCHAR(50),
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

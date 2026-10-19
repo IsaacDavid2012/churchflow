@@ -21,7 +21,7 @@ import ServicesScreen from './src/screens/ServicesScreen';
 import ServiceDetailScreen from './src/screens/ServiceDetailScreen';
 import PeopleScreen from './src/screens/PeopleScreen';
 import PositionsScreen from './src/screens/PositionsScreen';
-import GroupsScreen from './src/screens/GroupsScreen';
+import MinistriesScreen from './src/screens/MinistriesScreen';
 import ChurchScreen from './src/screens/ChurchScreen';
 import PublicConfirmScreen from './src/screens/PublicConfirmScreen';
 
@@ -180,7 +180,9 @@ export default function App() {
             )}
             {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
             {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
-            {activeTab === 'groups' && <GroupsScreen user={user} isDark={isDark} />}
+            {(activeTab === 'ministries' || activeTab === 'groups') && (
+              <MinistriesScreen user={user} isDark={isDark} />
+            )}
             {activeTab === 'church' && (
               <ChurchScreen
                 user={user}
@@ -266,23 +268,23 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('groups')}
+              onPress={() => setActiveTab('ministries')}
             >
               <Ionicons
-                name={activeTab === 'groups' ? 'chatbubbles' : 'chatbubbles-outline'}
+                name={activeTab === 'ministries' || activeTab === 'groups' ? 'heart-circle' : 'heart-circle-outline'}
                 size={22}
-                color={activeTab === 'groups' ? themeColors.primary : themeColors.subText}
+                color={activeTab === 'ministries' || activeTab === 'groups' ? themeColors.primary : themeColors.subText}
               />
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: activeTab === 'groups' ? themeColors.primary : themeColors.subText,
-                    fontWeight: activeTab === 'groups' ? '800' : '600',
+                    color: activeTab === 'ministries' || activeTab === 'groups' ? themeColors.primary : themeColors.subText,
+                    fontWeight: activeTab === 'ministries' || activeTab === 'groups' ? '800' : '600',
                   },
                 ]}
               >
-                Groups
+                Ministries
               </Text>
             </TouchableOpacity>
 

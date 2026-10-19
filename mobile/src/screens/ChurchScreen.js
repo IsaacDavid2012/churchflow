@@ -249,7 +249,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         </View>
         <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.statNum, { color: '#9333ea' }]}>{stats.groups}</Text>
-          <Text style={[styles.statLabel, { color: colors.subText }]}>Groups</Text>
+          <Text style={[styles.statLabel, { color: colors.subText }]}>Ministries</Text>
         </View>
       </View>
 

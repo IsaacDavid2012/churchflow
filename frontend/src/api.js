@@ -216,24 +216,45 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Small Groups
+  // Church Ministries
+  getMinistries: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/ministries${query ? `?${query}` : ''}`);
+  },
+  getMinistry: (id) => request(`/ministries/${id}`),
+  createMinistry: (data) =>
+    request('/ministries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateMinistry: (id, data) =>
+    request(`/ministries/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteMinistry: (id) =>
+    request(`/ministries/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Legacy Groups Aliases
   getGroups: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/groups${query ? `?${query}` : ''}`);
+    return request(`/ministries${query ? `?${query}` : ''}`);
   },
-  getGroup: (id) => request(`/groups/${id}`),
+  getGroup: (id) => request(`/ministries/${id}`),
   createGroup: (data) =>
-    request('/groups', {
+    request('/ministries', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   updateGroup: (id, data) =>
-    request(`/groups/${id}`, {
+    request(`/ministries/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   deleteGroup: (id) =>
-    request(`/groups/${id}`, {
+    request(`/ministries/${id}`, {
       method: 'DELETE',
     }),
 
