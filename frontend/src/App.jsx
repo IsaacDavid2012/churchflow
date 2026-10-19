@@ -6,7 +6,6 @@ import ServiceList from './components/ServiceList';
 import ServiceDetail from './components/ServiceDetail';
 import CreateServiceModal from './components/CreateServiceModal';
 import PeopleManager from './components/PeopleManager';
-import SongLibraryManager from './components/SongLibraryManager';
 import GroupsManager from './components/GroupsManager';
 import PositionsManager from './components/PositionsManager';
 import ChurchProfileManager from './components/ChurchProfileManager';
@@ -17,26 +16,19 @@ import ErrorBoundary from './components/ErrorBoundary';
 export default function App() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [currentTab, setCurrentTab] = useState('services'); // 'services', 'people', 'songs', 'users', 'groups', 'positions', 'church', 'notifications'
+  const [currentTab, setCurrentTab] = useState('services'); // 'services', 'people', 'users', 'groups', 'positions', 'church', 'notifications'
   
   // Services data
   const [services, setServices] = useState([]);
   const [selectedServiceId, setSelectedServiceId] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('churchflow_theme') || 'light');
+  const [theme] = useState('light');
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-    localStorage.setItem('churchflow_theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    document.documentElement.classList.remove('dark');
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('churchflow_theme', 'light');
+  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -99,7 +91,7 @@ export default function App() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center text-slate-600 dark:text-slate-400">
+      <div className="min-h-screen bg-white flex items-center justify-center text-slate-600">
         <div className="animate-spin w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full mr-3"></div>
         <span className="font-semibold text-xs">Initializing ChurchFlow...</span>
       </div>
@@ -111,7 +103,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans">
       <Navbar
         currentTab={currentTab}
         setTab={(tab) => {
@@ -120,7 +112,6 @@ export default function App() {
         }}
         user={user}
         theme={theme}
-        onToggleTheme={toggleTheme}
         onLogout={handleLogout}
       />
 
@@ -149,7 +140,6 @@ export default function App() {
           )}
 
           {currentTab === 'people' && <PeopleManager />}
-          {currentTab === 'songs' && <SongLibraryManager />}
           {currentTab === 'users' && <UsersManager currentUser={user} />}
           {currentTab === 'groups' && <GroupsManager />}
           {currentTab === 'positions' && <PositionsManager />}

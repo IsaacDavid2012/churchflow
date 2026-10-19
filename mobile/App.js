@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
+  Image,
   SafeAreaView,
   ActivityIndicator,
   TouchableOpacity,
@@ -11,7 +12,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
 import { api } from './src/api/client';
@@ -20,7 +20,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import ServiceDetailScreen from './src/screens/ServiceDetailScreen';
 import PeopleScreen from './src/screens/PeopleScreen';
-import SongsScreen from './src/screens/SongsScreen';
+import PositionsScreen from './src/screens/PositionsScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import ChurchScreen from './src/screens/ChurchScreen';
 import PublicConfirmScreen from './src/screens/PublicConfirmScreen';
@@ -34,22 +34,15 @@ export default function App() {
   const [publicToken, setPublicToken] = useState(null);
 
   useEffect(() => {
+    api.setOnUnauthorized(() => {
+      setUser(null);
+      setSelectedService(null);
+    });
+
     const initApp = async () => {
       try {
+        // Clear any legacy phone storage so everything comes 100% live from server
         await api.init();
-        const [storedUser, storedTheme] = await Promise.all([
-          AsyncStorage.getItem('servesync_user'),
-          AsyncStorage.getItem('servesync_theme'),
-        ]);
-
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-          registerForPushNotificationsAsync();
-        }
-
-        if (storedTheme) {
-          setIsDark(storedTheme === 'dark');
-        }
       } catch (err) {
         console.error('App init error:', err);
       } finally {
@@ -78,10 +71,8 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
-  const handleToggleTheme = async () => {
-    const nextTheme = !isDark;
-    setIsDark(nextTheme);
-    await AsyncStorage.setItem('servesync_theme', nextTheme ? 'dark' : 'light');
+  const handleToggleTheme = () => {
+    setIsDark((prev) => !prev);
   };
 
   const handleLoginSuccess = (userData) => {
@@ -90,26 +81,25 @@ export default function App() {
 
   const handleLogout = async () => {
     await api.clearTokens();
-    await AsyncStorage.removeItem('servesync_user');
     setUser(null);
     setSelectedService(null);
     setActiveTab('services');
   };
 
   const themeColors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     navBg: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    activeTabBg: isDark ? '#1e293b' : '#fee2e2',
+    primary: '#c59c6c',
+    activeTabBg: isDark ? '#1e293b' : '#f5ede1',
   };
 
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: themeColors.bg }]}>
-        <ActivityIndicator size="large" color="#dc2626" />
+        <ActivityIndicator size="large" color="#c59c6c" />
       </View>
     );
   }
@@ -141,11 +131,15 @@ export default function App() {
           >
             <View style={styles.headerBrand}>
               <View style={styles.logoBadge}>
-                <Ionicons name="flash" size={18} color="#ffffff" />
+                <Image
+                  source={require('./assets/jmrlogo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
               <View>
                 <Text style={[styles.brandTitle, { color: themeColors.text }]}>ChurchFlow</Text>
-                <Text style={[styles.brandSub, { color: themeColors.subText }]}>
+                <Text style={[styles.brandSub, { color: themeColors.primary }]}>
                   Jesus My Rock
                 </Text>
               </View>
@@ -164,10 +158,10 @@ export default function App() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.userBadge, { backgroundColor: isDark ? '#1e293b' : '#fee2e2' }]}
+                style={[styles.userBadge, { backgroundColor: isDark ? '#1e293b' : '#f5ede1' }]}
                 onPress={() => setActiveTab('church')}
               >
-                <Text style={[styles.userBadgeText, { color: themeColors.primary }]}>
+                <Text style={[styles.userBadgeText, { color: '#9e7343' }]}>
                   {(user?.name || 'U').slice(0, 2).toUpperCase()}
                 </Text>
               </TouchableOpacity>
@@ -185,7 +179,7 @@ export default function App() {
               />
             )}
             {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
-            {activeTab === 'songs' && <SongsScreen user={user} isDark={isDark} />}
+            {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
             {activeTab === 'groups' && <GroupsScreen user={user} isDark={isDark} />}
             {activeTab === 'church' && (
               <ChurchScreen
@@ -250,23 +244,23 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('songs')}
+              onPress={() => setActiveTab('positions')}
             >
               <Ionicons
-                name={activeTab === 'songs' ? 'musical-notes' : 'musical-notes-outline'}
+                name={activeTab === 'positions' ? 'layers' : 'layers-outline'}
                 size={22}
-                color={activeTab === 'songs' ? themeColors.primary : themeColors.subText}
+                color={activeTab === 'positions' ? themeColors.primary : themeColors.subText}
               />
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: activeTab === 'songs' ? themeColors.primary : themeColors.subText,
-                    fontWeight: activeTab === 'songs' ? '800' : '600',
+                    color: activeTab === 'positions' ? themeColors.primary : themeColors.subText,
+                    fontWeight: activeTab === 'positions' ? '800' : '600',
                   },
                 ]}
               >
-                Songs
+                Positions
               </Text>
             </TouchableOpacity>
 
@@ -358,12 +352,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#dc2626',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#eadbc4',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 2,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   brandTitle: {
     fontSize: 16,

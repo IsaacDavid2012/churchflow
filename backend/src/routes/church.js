@@ -10,11 +10,11 @@ router.get('/', async (req, res, next) => {
     const profile = profileRes.rows[0] || {
       name: 'Jesus My Rock Church',
       tagline: 'Standing Firm on Christ the Solid Rock',
-      lead_pastor: 'Pastor David & Sarah Mitchell',
-      email: 'office@jesusmyrock.org',
-      phone: '+1 (555) 762-5762',
-      address: '1200 Rock Boulevard, Suite 100, Austin, TX',
-      website: 'https://serve.creativeclicks.art',
+      lead_pastor: 'Pastor Joseph',
+      email: 'jesusmyrockchurch@gmail.com',
+      phone: '+60 3-7722 1484',
+      address: '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
+      website: 'https://www.instagram.com/jesusmyrockchurch/',
     };
 
     // Aggregate key church metrics

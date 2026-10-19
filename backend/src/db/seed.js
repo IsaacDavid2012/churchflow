@@ -35,20 +35,22 @@ async function seed() {
       VALUES (
         'Jesus My Rock Church',
         'Standing Firm on Christ the Solid Rock',
-        'Pastor David & Sarah Mitchell',
-        'office@jesusmyrock.org',
-        '+1 (555) 762-5762',
-        '1200 Rock Boulevard, Suite 100, Austin, TX',
-        'https://serve.creativeclicks.art',
-        '#4f46e5'
+        'Pastor Joseph',
+        'jesusmyrockchurch@gmail.com',
+        '+60 3-7722 1484',
+        '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
+        'https://www.instagram.com/jesusmyrockchurch/',
+        '#c59c6c'
       )
     `);
 
-    // 2. Seed Campuses
+    // 2. Seed Single Campus
     const campusesData = [
-      { name: 'Main Sanctuary (Downtown)', address: '1200 Rock Boulevard, Austin, TX', is_main: true },
-      { name: 'North Campus', address: '4500 Stone Creek Pkwy, Round Rock, TX', is_main: false },
-      { name: 'Online & Broadcast Campus', address: 'online.jesusmyrock.org', is_main: false },
+      {
+        name: 'Damansara Perdana Sanctuary',
+        address: '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
+        is_main: true,
+      },
     ];
 
     const campusMap = {};
@@ -85,10 +87,9 @@ async function seed() {
 
     await client.query(`
       INSERT INTO users (username, email, password_hash, role, name, status)
-      VALUES 
-        ($1, $2, $3, 'admin', $1, 'active'),
-        (LOWER($1), $2, $3, 'admin', $1, 'active')
+      VALUES ($1, $2, $3, 'admin', $1, 'active')
       ON CONFLICT (username) DO UPDATE SET 
+        email = EXCLUDED.email,
         password_hash = EXCLUDED.password_hash,
         role = EXCLUDED.role,
         name = EXCLUDED.name,
@@ -246,10 +247,10 @@ async function seed() {
 
     // 9. Seed Small Groups (Life Groups)
     const groupsData = [
-      { name: 'Rock Solid Men\'s Fellowship', category: 'Men\'s Group', leader_name: 'David Mitchell', leader_id: peopleMap['Pastor David Mitchell'], meeting_day: 'Tuesday', meeting_time: '6:30 AM', location: 'Fellowship Hall Room 101', description: 'Weekly prayer, Bible study, and brotherhood for men.', member_count: 18 },
-      { name: 'Grace & Truth Women\'s Circle', category: 'Women\'s Group', leader_name: 'Sarah Mitchell', leader_id: peopleMap['Sarah Mitchell'], meeting_day: 'Thursday', meeting_time: '7:00 PM', location: 'Sanctuary Lounge', description: 'Deep dive into spiritual disciplines and sisterhood.', member_count: 24 },
-      { name: 'Young Adults & University (Ignite)', category: 'Young Adults', leader_name: 'James Wilson', leader_id: peopleMap['James Wilson'], meeting_day: 'Friday', meeting_time: '7:30 PM', location: 'Youth Center & Cafe', description: 'Community, worship, and discipleship for 18-30s.', member_count: 32 },
-      { name: 'North Austin Community Life Group', category: 'Couples & Families', leader_name: 'John Doe', leader_id: peopleMap['John Doe'], meeting_day: 'Wednesday', meeting_time: '7:00 PM', location: 'North Campus Room 204', description: 'Family dinner, fellowship, and sermon discussion.', member_count: 15 },
+      { name: 'Rock Solid Men\'s Fellowship', category: 'Men\'s Group', leader_name: 'Isaac', leader_id: peopleMap['Isaac'], meeting_day: 'Tuesday', meeting_time: '6:30 AM', location: 'Fellowship Hall Room 101', description: 'Weekly prayer, Bible study, and brotherhood for men.', member_count: 18 },
+      { name: 'Grace & Truth Women\'s Circle', category: 'Women\'s Group', leader_name: 'Sharon', leader_id: peopleMap['Sharon'], meeting_day: 'Thursday', meeting_time: '7:00 PM', location: 'Sanctuary Lounge', description: 'Deep dive into spiritual disciplines and sisterhood.', member_count: 24 },
+      { name: 'Young Adults & University (Ignite)', category: 'Young Adults', leader_name: 'Josh', leader_id: peopleMap['Josh'], meeting_day: 'Friday', meeting_time: '7:30 PM', location: 'Youth Center & Cafe', description: 'Community, worship, and discipleship for 18-30s.', member_count: 32 },
+      { name: 'North Austin Community Life Group', category: 'Couples & Families', leader_name: 'Alvin Anne', leader_id: peopleMap['Alvin Anne'], meeting_day: 'Wednesday', meeting_time: '7:00 PM', location: 'North Campus Room 204', description: 'Family dinner, fellowship, and sermon discussion.', member_count: 15 },
     ];
 
     for (const g of groupsData) {
@@ -261,7 +262,7 @@ async function seed() {
 
     // 10. Seed Upcoming & Past Services
     const upcomingServiceToken = 'jesus-my-rock-sun-10am';
-    const mainCampusId = campusMap['Main Sanctuary (Downtown)'];
+    const mainCampusId = campusMap['Damansara Perdana Sanctuary'];
 
     // Upcoming Sunday
     const sRes = await client.query(`

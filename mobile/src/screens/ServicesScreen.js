@@ -30,25 +30,34 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [campuses, setCampuses] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [selectedPositionIds, setSelectedPositionIds] = useState([]);
 
-  // Create Service Modal
+  // Create & Edit Service Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState(null);
   const [serviceDate, setServiceDate] = useState('');
   const [serviceTime, setServiceTime] = useState('10:00 AM');
   const [serviceType, setServiceType] = useState('Sunday Morning Celebration');
   const [theme, setTheme] = useState('');
   const [notes, setNotes] = useState('Sunday Service at Jesus My Rock');
   const [campusId, setCampusId] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const fetchServices = async () => {
     try {
-      const [svcData, campusData] = await Promise.all([
+      const [svcData, campusData, posData] = await Promise.all([
         api.getServices(),
         api.getCampuses().catch(() => []),
+        api.getPositions().catch(() => []),
       ]);
       setServices(Array.isArray(svcData) ? svcData : []);
       setCampuses(Array.isArray(campusData) ? campusData : []);
+      const posList = Array.isArray(posData) ? posData : [];
+      setPositions(posList);
+      if (selectedPositionIds.length === 0 && posList.length > 0) {
+        setSelectedPositionIds(posList.map((p) => p.id));
+      }
       if (campusData && campusData.length > 0 && !campusId) {
         const main = campusData.find((c) => c.is_main) || campusData[0];
         setCampusId(main.id);
@@ -70,7 +79,22 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
     fetchServices();
   };
 
-  const handleOpenCreateModal = () => {
+  const togglePositionId = (posId) => {
+    setSelectedPositionIds((prev) =>
+      prev.includes(posId) ? prev.filter((id) => id !== posId) : [...prev, posId]
+    );
+  };
+
+  const handleToggleAllPositions = () => {
+    if (selectedPositionIds.length === positions.length) {
+      setSelectedPositionIds([]);
+    } else {
+      setSelectedPositionIds(positions.map((p) => p.id));
+    }
+  };
+
+  const handleOpenCreateModal = async () => {
+    setEditingService(null);
     const nextSun = new Date();
     const dayOfWeek = nextSun.getDay();
     const daysUntilNextSunday = (7 - dayOfWeek) % 7 || 7;
@@ -82,48 +106,121 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
     setServiceType('Sunday Morning Celebration');
     setTheme('');
     setNotes('Sunday Service at Jesus My Rock');
+    try {
+      const posList = await api.getPositions();
+      if (Array.isArray(posList) && posList.length > 0) {
+        setPositions(posList);
+        setSelectedPositionIds(posList.map((p) => p.id));
+      }
+    } catch (e) {
+      if (positions.length > 0) {
+        setSelectedPositionIds(positions.map((p) => p.id));
+      }
+    }
     setIsModalOpen(true);
   };
 
-  const handleCreateService = async () => {
+  const handleOpenEditModal = (service) => {
+    setEditingService(service);
+    setServiceDate(service.service_date ? service.service_date.split('T')[0] : '');
+    setServiceTime(service.service_time || '10:00 AM');
+    setServiceType(service.service_type || 'Sunday Morning Celebration');
+    setTheme(service.theme || '');
+    setNotes(service.notes || '');
+    setCampusId(service.campus_id || (campuses[0]?.id || ''));
+    if (Array.isArray(service.position_ids) && service.position_ids.length > 0) {
+      setSelectedPositionIds(service.position_ids);
+    } else if (positions.length > 0) {
+      setSelectedPositionIds(positions.map((p) => p.id));
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteService = (service) => {
+    Alert.alert(
+      'Delete Service',
+      `Are you sure you want to permanently delete the "${service.service_type || 'Sunday Service'}" on ${service.service_date}? This will delete all roster assignments and plan items for this service.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await api.deleteService(service.id);
+              await fetchServices();
+              Alert.alert('Service Deleted', 'The service has been permanently deleted.');
+            } catch (err) {
+              console.error('Delete service error:', err);
+              Alert.alert('Delete Failed', err.message || 'Failed to delete service');
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveService = async () => {
     if (!serviceDate.trim()) {
       Alert.alert('Missing Date', 'Please specify a service date (YYYY-MM-DD)');
       return;
     }
+    if (positions.length > 0 && selectedPositionIds.length === 0) {
+      Alert.alert('No Positions Selected', 'Please toggle ON at least one position for this service.');
+      return;
+    }
 
-    setCreating(true);
+    setSaving(true);
     try {
-      await api.createService({
-        service_date: serviceDate.trim(),
-        service_time: serviceTime.trim(),
-        service_type: serviceType,
-        theme: theme.trim() || undefined,
-        notes: notes.trim() || undefined,
-        campus_id: campusId || undefined,
-      });
-
-      setIsModalOpen(false);
-      fetchServices();
-      Alert.alert('Service Scheduled', 'New service added to the calendar.');
+      if (editingService) {
+        await api.updateService(editingService.id, {
+          service_date: serviceDate.trim(),
+          service_time: serviceTime.trim(),
+          service_type: serviceType,
+          theme: theme.trim() || undefined,
+          notes: notes.trim() || undefined,
+          campus_id: campusId || undefined,
+          position_ids: selectedPositionIds,
+        });
+        setIsModalOpen(false);
+        setEditingService(null);
+        await fetchServices();
+        Alert.alert('Service Updated', 'Service details have been saved successfully.');
+      } else {
+        await api.createService({
+          service_date: serviceDate.trim(),
+          service_time: serviceTime.trim(),
+          service_type: serviceType,
+          theme: theme.trim() || undefined,
+          notes: notes.trim() || undefined,
+          campus_id: campusId || undefined,
+          position_ids: selectedPositionIds,
+        });
+        setIsModalOpen(false);
+        await fetchServices();
+        Alert.alert('Service Scheduled', `New service created with ${selectedPositionIds.length} position(s).`);
+      }
     } catch (err) {
-      console.error('Create service failed:', err);
-      Alert.alert('Error', err.message || 'Failed to create service');
+      console.error('Save service failed:', err);
+      Alert.alert('Error', err.message || 'Failed to save service');
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
   const colors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
-    inputBg: isDark ? '#1e293b' : '#f1f5f9',
-    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
-    cardBorder: isDark ? '#1e293b' : '#e2e8f0',
+    primary: '#c59c6c',
+    primaryLight: isDark ? '#3a2815' : '#f5ede1',
+    inputBg: isDark ? '#1e293b' : '#fbf8f3',
+    badgeBg: isDark ? '#1e293b' : '#fbf8f3',
+    cardBorder: isDark ? '#1e293b' : '#eadbc4',
   };
 
   const parseDateBox = (dateStr) => {
@@ -146,7 +243,11 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   const renderServiceCard = ({ item }) => {
     const { day, month, weekday } = parseDateBox(item.service_date);
     const confirmedCount = parseInt(item.confirmed_assignments_count, 10) || 0;
-    const totalCount = parseInt(item.total_assignments_count, 10) || 9;
+    const totalCount =
+      parseInt(item.required_positions_count, 10) ||
+      (Array.isArray(item.position_ids) && item.position_ids.length > 0
+        ? item.position_ids.length
+        : parseInt(item.total_assignments_count, 10) || 9);
     const isFullyFilled = confirmedCount >= totalCount;
 
     return (
@@ -202,9 +303,27 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                 </Text>
               </View>
 
-              <View style={styles.chevronWrap}>
-                <Text style={[styles.openDetailText, { color: colors.subText }]}>Manage</Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.subText} />
+              <View style={styles.cardActionsGroup}>
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                  onPress={() => handleOpenEditModal(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="create-outline" size={15} color={colors.primary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, styles.deleteActionBtn]}
+                  onPress={() => handleDeleteService(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                </TouchableOpacity>
+
+                <View style={styles.chevronWrap}>
+                  <Text style={[styles.openDetailText, { color: colors.subText }]}>Manage</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.subText} />
+                </View>
               </View>
             </View>
           </View>
@@ -249,14 +368,16 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
         <Text style={styles.fabText}>Plan Service</Text>
       </TouchableOpacity>
 
-      {/* Plan Service Modal Bottom Sheet */}
+      {/* Plan / Edit Service Modal Bottom Sheet */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
-                <Ionicons name="calendar" size={20} color={colors.primary} />
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Plan New Service</Text>
+                <Ionicons name={editingService ? 'create' : 'calendar'} size={20} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {editingService ? 'Edit Service Details' : 'Plan New Service'}
+                </Text>
               </View>
               <TouchableOpacity onPress={() => setIsModalOpen(false)}>
                 <Ionicons name="close" size={22} color={colors.subText} />
@@ -308,6 +429,57 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                 ))}
               </View>
 
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
+                <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>
+                  Positions to Set ({selectedPositionIds.length}/{positions.length}) *
+                </Text>
+                {positions.length > 0 && (
+                  <TouchableOpacity onPress={handleToggleAllPositions}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                      {selectedPositionIds.length === positions.length ? 'Deselect All' : 'Select All'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.typesPillsWrap}>
+                {positions.map((pos) => {
+                  const isChecked = selectedPositionIds.includes(pos.id);
+                  return (
+                    <TouchableOpacity
+                      key={pos.id}
+                      style={[
+                        styles.typeChoice,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          borderColor: isChecked ? colors.primary : colors.border,
+                          backgroundColor: isChecked ? colors.primaryLight : colors.inputBg,
+                        },
+                      ]}
+                      onPress={() => togglePositionId(pos.id)}
+                    >
+                      <Ionicons
+                        name={isChecked ? 'checkbox' : 'square-outline'}
+                        size={15}
+                        color={isChecked ? colors.primary : colors.subText}
+                      />
+                      <Text
+                        style={[
+                          styles.typeChoiceText,
+                          {
+                            color: isChecked ? colors.primary : colors.subText,
+                            textDecorationLine: isChecked ? 'none' : 'line-through',
+                          },
+                        ]}
+                      >
+                        {pos.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               <Text style={[styles.inputLabel, { color: colors.subText }]}>Sermon / Service Theme</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
@@ -316,36 +488,6 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
                 placeholder="e.g. Unshakable Faith"
                 placeholderTextColor={colors.subText}
               />
-
-              {campuses.length > 0 ? (
-                <>
-                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Campus</Text>
-                  <View style={styles.typesPillsWrap}>
-                    {campuses.map((c) => (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={[
-                          styles.typeChoice,
-                          {
-                            borderColor: campusId === c.id ? colors.primary : colors.border,
-                            backgroundColor: campusId === c.id ? colors.primaryLight : colors.inputBg,
-                          },
-                        ]}
-                        onPress={() => setCampusId(c.id)}
-                      >
-                        <Text
-                          style={[
-                            styles.typeChoiceText,
-                            { color: campusId === c.id ? colors.primary : colors.text },
-                          ]}
-                        >
-                          {c.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              ) : null}
 
               <Text style={[styles.inputLabel, { color: colors.subText }]}>Notes & Instructions</Text>
               <TextInput
@@ -359,6 +501,20 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
             </ScrollView>
 
             <View style={styles.modalActionRow}>
+              {editingService && (
+                <TouchableOpacity
+                  style={[styles.deleteModalBtn, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                  onPress={() => {
+                    const toDelete = editingService;
+                    setIsModalOpen(false);
+                    setTimeout(() => handleDeleteService(toDelete), 200);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                  <Text style={[styles.deleteModalBtnText, { color: '#ef4444' }]}>Delete</Text>
+                </TouchableOpacity>
+              )}
+              <View style={{ flex: 1 }} />
               <TouchableOpacity
                 style={[styles.cancelBtn, { borderColor: colors.border }]}
                 onPress={() => setIsModalOpen(false)}
@@ -367,13 +523,15 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.submitBtn, { backgroundColor: colors.primary }]}
-                onPress={handleCreateService}
-                disabled={creating}
+                onPress={handleSaveService}
+                disabled={saving}
               >
-                {creating ? (
+                {saving ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Create Service</Text>
+                  <Text style={styles.submitBtnText}>
+                    {editingService ? 'Save Changes' : `Create Service (${selectedPositionIds.length})`}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -506,6 +664,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   },
+  cardActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteActionBtn: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff1f2',
+  },
+  deleteModalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  deleteModalBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   openDetailText: {
     fontSize: 11,
     fontWeight: '600',
@@ -538,7 +726,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     ...Platform.select({
       ios: {
-        shadowColor: '#dc2626',
+        shadowColor: '#c59c6c',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#dc2626">
+  <meta name="theme-color" content="#c59c6c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ChurchFlow">
@@ -17,15 +17,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root[data-theme="light"] {
-      --bg: #f8fafc;
+      --bg: #ffffff;
       --card-bg: #ffffff;
-      --card-inner: #f1f5f9;
-      --border: #e2e8f0;
-      --border-strong: #cbd5e1;
-      --primary: #dc2626;
-      --primary-hover: #b91c1c;
-      --primary-light: #fef2f2;
-      --primary-border: #fecaca;
+      --card-inner: #fbf8f3;
+      --border: #eadbc4;
+      --border-strong: #dcc29e;
+      --primary: #c59c6c;
+      --primary-hover: #b38856;
+      --primary-light: #fbf8f3;
+      --primary-border: #eadbc4;
       --success: #16a34a;
       --success-hover: #15803d;
       --success-light: #f0fdf4;
@@ -40,9 +40,9 @@
       --text: #0f172a;
       --text-secondary: #475569;
       --text-muted: #64748b;
-      --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-      --badge-bg: #f1f5f9;
-      --badge-text: #334155;
+      --shadow: 0 4px 20px -2px rgba(197, 156, 108, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+      --badge-bg: #fbf8f3;
+      --badge-text: #9e7343;
     }
 
     :root[data-theme="dark"] {
@@ -51,10 +51,10 @@
       --card-inner: #1c2640;
       --border: #233052;
       --border-strong: #334155;
-      --primary: #ef4444;
-      --primary-hover: #dc2626;
-      --primary-light: rgba(239, 68, 68, 0.15);
-      --primary-border: rgba(239, 68, 68, 0.35);
+      --primary: #c59c6c;
+      --primary-hover: #b38856;
+      --primary-light: rgba(197, 156, 108, 0.15);
+      --primary-border: rgba(197, 156, 108, 0.35);
       --success: #10b981;
       --success-hover: #059669;
       --success-light: rgba(16, 185, 129, 0.15);
@@ -183,7 +183,7 @@
       left: 0;
       right: 0;
       height: 5px;
-      background: linear-gradient(90deg, #dc2626, #ef4444, #f43f5e);
+      background: linear-gradient(90deg, #9e7343, #c59c6c, #d0af83);
     }
 
     .church-name {
@@ -505,25 +505,13 @@
     let activeSubmittingPosId = null;
     let latestReshuffleMsg = null;
 
-    // Theme switcher logic
-    function getStoredTheme() {
-      return localStorage.getItem('churchflow_theme') || 'light';
+    // Always use clean white light theme
+    function setTheme() {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('churchflow_theme', 'light');
     }
 
-    function setTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('churchflow_theme', theme);
-      const btn = document.getElementById('theme-toggle-icon');
-      if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
-    }
-
-    function toggleTheme() {
-      const current = document.documentElement.getAttribute('data-theme') || 'light';
-      setTheme(current === 'light' ? 'dark' : 'light');
-    }
-
-    // Initialize theme
-    setTheme(getStoredTheme());
+    setTheme('light');
 
     const iconMap = {
       'Worship Leader': '🎤',
@@ -648,36 +636,16 @@
         }
       }
 
-      // Sync Worship Leader
-      if (serviceData && serviceData.worship_leader_name) {
-        if (grouped['Worship Leader']) {
-          grouped['Worship Leader'].musician_id = serviceData.worship_leader_id;
-          grouped['Worship Leader'].musician = serviceData.worship_leader_name;
-          grouped['Worship Leader'].status = 'confirmed';
-        } else {
-          grouped['Worship Leader'] = {
-            position_name: 'Worship Leader',
-            musician_id: serviceData.worship_leader_id,
-            musician: serviceData.worship_leader_name,
-            status: 'confirmed'
-          };
-        }
-      }
-
-      const rows = Object.values(grouped);
+      const rows = Object.values(grouped).filter(r => !r.position_name.toLowerCase().includes('worship leader'));
 
       let html = `
-        <!-- Top Bar with Brand & Theme Switcher -->
+        <!-- Top Bar with Brand -->
         <div class="top-bar">
           <div class="logo-badge">
             <img src="/churchflow-logo.png" alt="ChurchFlow" class="logo-img" onerror="this.style.display='none'" />
             <span class="brand-text">ChurchFlow</span>
             <span class="brand-tag">Live</span>
           </div>
-
-          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
-            <span id="theme-toggle-icon">${currentTheme === 'light' ? '🌙' : '☀️'}</span>
-          </button>
         </div>
 
         <!-- Service Header Card -->
@@ -689,7 +657,6 @@
             <span class="meta-pill">⏰ ${serviceData.service_time || '10:00 AM'}</span>
             ${serviceData.campus_name ? `<span class="meta-pill">📍 ${serviceData.campus_name}</span>` : ''}
             ${serviceData.theme ? `<span class="meta-pill">📖 ${serviceData.theme}</span>` : ''}
-            ${serviceData.worship_leader_name ? `<span class="meta-pill highlight">🎤 WL: ${serviceData.worship_leader_name}</span>` : ''}
           </div>
         </div>
 
@@ -704,7 +671,7 @@
 
         <!-- Lineup Section Header -->
         <div class="section-title">
-          <span>🎸 Tap Your Position To Confirm Attendance</span>
+          <span>🎬 Tap Your Position To Confirm Attendance</span>
         </div>
 
         <!-- Position Cards List -->
@@ -743,7 +710,7 @@
                       class="btn-confirm ${isSubmitting ? 'btn-disabled' : ''}" 
                       onclick="handleConfirm('${r.musician_id}', '${r.musician}', '${r.position_name}', 'available')"
                     >
-                      ${isSubmitting ? 'Saving...' : (isConfirmed ? '✓ I\'m Playing' : '✅ I\'m Playing')}
+                      ${isSubmitting ? 'Saving...' : (isConfirmed ? '✓ I\'m Serving' : '✅ I\'m Serving')}
                     </button>
                     <button 
                       class="btn-decline ${isSubmitting ? 'btn-disabled' : ''}" 

@@ -7,45 +7,56 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://serve.creativeclicks.art/api';
 
+function buildQueryString(params = {}) {
+  if (!params || typeof params !== 'object') return '';
+  const parts = Object.entries(params)
+    .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
 class ApiClient {
   constructor() {
     this.token = null;
     this.refreshToken = null;
+    this.refreshPromise = null;
+    this.onUnauthorized = null;
+  }
+
+  setOnUnauthorized(callback) {
+    this.onUnauthorized = callback;
   }
 
   async init() {
     try {
-      this.token = await AsyncStorage.getItem('servesync_token');
-      this.refreshToken = await AsyncStorage.getItem('servesync_refresh_token');
+      // Wipe any legacy phone storage data so the app never uses phone storage
+      await AsyncStorage.clear();
     } catch (e) {
-      console.warn('Failed to load token from storage:', e);
+      // Ignore storage clear errors
     }
+    this.token = null;
+    this.refreshToken = null;
   }
 
   async setTokens(token, refreshToken) {
-    this.token = token;
-    this.refreshToken = refreshToken;
-    if (token) {
-      await AsyncStorage.setItem('servesync_token', token);
-    } else {
-      await AsyncStorage.removeItem('servesync_token');
-    }
-    if (refreshToken) {
-      await AsyncStorage.setItem('servesync_refresh_token', refreshToken);
-    } else {
-      await AsyncStorage.removeItem('servesync_refresh_token');
-    }
+    this.token = token || null;
+    this.refreshToken = refreshToken || null;
   }
 
   async clearTokens() {
     this.token = null;
     this.refreshToken = null;
-    await AsyncStorage.multiRemove(['servesync_token', 'servesync_refresh_token', 'servesync_user']);
+    try {
+      await AsyncStorage.clear();
+    } catch (e) {}
   }
 
   async request(endpoint, options = {}) {
     const headers = {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
       ...(options.headers || {}),
     };
 
@@ -60,17 +71,23 @@ class ApiClient {
     });
 
     // Handle token expired (try refresh once)
-    if (response.status === 401 && this.refreshToken && !options._retry) {
-      const refreshed = await this.tryRefresh();
-      if (refreshed) {
-        options._retry = true;
-        headers.Authorization = `Bearer ${this.token}`;
-        const retryRes = await fetch(url, { ...options, headers });
-        if (!retryRes.ok) {
-          const err = await retryRes.json().catch(() => ({}));
-          throw new Error(err.error || `HTTP ${retryRes.status}`);
+    if (response.status === 401 && !endpoint.startsWith('/auth/login') && !options._retry) {
+      if (this.refreshToken) {
+        const refreshed = await this.tryRefresh();
+        if (refreshed) {
+          options._retry = true;
+          headers.Authorization = `Bearer ${this.token}`;
+          const retryRes = await fetch(url, { ...options, headers });
+          if (!retryRes.ok) {
+            const err = await retryRes.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${retryRes.status}`);
+          }
+          return retryRes.json();
         }
-        return retryRes.json();
+      }
+      await this.clearTokens();
+      if (this.onUnauthorized) {
+        this.onUnauthorized();
       }
     }
 
@@ -83,22 +100,36 @@ class ApiClient {
   }
 
   async tryRefresh() {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: this.refreshToken }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await this.setTokens(data.token, this.refreshToken);
-        return true;
-      }
-    } catch (e) {
-      console.warn('Token refresh failed:', e);
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
-    await this.clearTokens();
-    return false;
+    this.refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          },
+          body: JSON.stringify({ refreshToken: this.refreshToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          await this.setTokens(data.token, this.refreshToken);
+          return true;
+        }
+      } catch (e) {
+        console.warn('Token refresh failed:', e);
+      }
+      await this.clearTokens();
+      return false;
+    })();
+
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
+    }
   }
 
   // --- Auth & User Endpoints ---
@@ -108,9 +139,6 @@ class ApiClient {
       body: JSON.stringify({ username, password }),
     });
     await this.setTokens(data.token, data.refreshToken);
-    if (data.user) {
-      await AsyncStorage.setItem('servesync_user', JSON.stringify(data.user));
-    }
     return data;
   }
 
@@ -162,6 +190,13 @@ class ApiClient {
     });
   }
 
+  async updateService(id, payload) {
+    return this.request(`/services/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async deleteService(id) {
     return this.request(`/services/${id}`, {
       method: 'DELETE',
@@ -179,25 +214,26 @@ class ApiClient {
     return this.shuffleLineup(serviceId, { pool: 'available_and_unresponsive' });
   }
 
-  async setWorshipLeader(serviceId, worshipLeaderId) {
+  async setWorshipLeader(serviceId, worshipLeaderId, autoRoster = false) {
     return this.request(`/services/${serviceId}/worship-leader`, {
       method: 'POST',
-      body: JSON.stringify({ worship_leader_id: worshipLeaderId }),
+      body: JSON.stringify({ worship_leader_id: worshipLeaderId, auto_roster: autoRoster }),
     });
   }
 
-  async overrideSlot(serviceId, { position_id, role_slot = 'primary', musician_id, notes = '' }) {
+  async overrideSlot(serviceId, { position_id, role_slot = 'primary', musician_id, notes = '', auto_roster = false }) {
     return this.request(`/services/${serviceId}/assignments/override`, {
       method: 'POST',
-      body: JSON.stringify({ position_id, role_slot, musician_id, notes }),
+      body: JSON.stringify({ position_id, role_slot, musician_id, notes, auto_roster }),
     });
   }
 
-  async manualAssignSlot(serviceId, positionId, musicianId) {
+  async manualAssignSlot(serviceId, positionId, musicianId, autoRoster = false) {
     return this.overrideSlot(serviceId, {
       position_id: positionId,
       role_slot: 'primary',
       musician_id: musicianId,
+      auto_roster: autoRoster,
     });
   }
 
@@ -231,8 +267,7 @@ class ApiClient {
 
   // --- People Directory ---
   async getMusicians(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/musicians${query ? '?' + query : ''}`);
+    return this.request(`/musicians${buildQueryString(params)}`);
   }
 
   async getPeople(params = {}) {
@@ -259,10 +294,34 @@ class ApiClient {
     });
   }
 
+  // --- Positions Template ---
+  async getPositions() {
+    return this.request('/positions');
+  }
+
+  async createPosition(positionData) {
+    return this.request('/positions', {
+      method: 'POST',
+      body: JSON.stringify(positionData),
+    });
+  }
+
+  async updatePosition(id, positionData) {
+    return this.request(`/positions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(positionData),
+    });
+  }
+
+  async deletePosition(id) {
+    return this.request(`/positions/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // --- Worship Songs ---
   async getSongs(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/songs${query ? '?' + query : ''}`);
+    return this.request(`/songs${buildQueryString(params)}`);
   }
 
   async createSong(songData) {
@@ -280,8 +339,7 @@ class ApiClient {
 
   // --- Small Groups ---
   async getGroups(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return this.request(`/groups${query ? '?' + query : ''}`);
+    return this.request(`/groups${buildQueryString(params)}`);
   }
 
   async createGroup(groupData) {
@@ -322,19 +380,27 @@ class ApiClient {
   }
 
   async getAuditLogs(serviceId) {
-    return this.request('/notifications');
+    return this.request(`/notifications${serviceId ? '?service_id=' + encodeURIComponent(serviceId) : ''}`);
   }
 
   // --- Public Confirmation ---
+  async getPublicService(token) {
+    return this.request(`/public/avail/${token}`);
+  }
+
   async getPublicAvailability(token) {
     return this.request(`/public/avail/${token}`);
   }
 
-  async submitPublicResponse(token, status, notes = '') {
-    return this.request(`/public/avail/${token}/respond`, {
+  async submitPublicAvailability(token, musicianId, status) {
+    return this.request(`/public/avail/${token}`, {
       method: 'POST',
-      body: JSON.stringify({ status, notes }),
+      body: JSON.stringify({ musician_id: musicianId, status }),
     });
+  }
+
+  async submitPublicResponse(token, musicianId, status) {
+    return this.submitPublicAvailability(token, musicianId, status);
   }
 }
 

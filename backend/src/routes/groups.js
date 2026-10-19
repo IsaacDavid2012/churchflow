@@ -7,20 +7,25 @@ const { requireAuth } = require('../middleware/auth');
 router.get('/', async (req, res, next) => {
   try {
     const { category, search } = req.query;
-    let query = 'SELECT * FROM groups WHERE active = true';
+    let query = `
+      SELECT g.*, m.phone AS leader_phone
+      FROM groups g
+      LEFT JOIN musicians m ON m.id = g.leader_id
+      WHERE g.active = true
+    `;
     const params = [];
 
     if (category) {
       params.push(category);
-      query += ` AND category = $${params.length}`;
+      query += ` AND g.category = $${params.length}`;
     }
 
     if (search) {
       params.push(`%${search}%`);
-      query += ` AND (name ILIKE $${params.length} OR leader_name ILIKE $${params.length} OR location ILIKE $${params.length})`;
+      query += ` AND (g.name ILIKE $${params.length} OR g.leader_name ILIKE $${params.length} OR g.location ILIKE $${params.length})`;
     }
 
-    query += ' ORDER BY name ASC';
+    query += ' ORDER BY g.name ASC';
     const result = await db.query(query, params);
     res.json(result.rows);
   } catch (err) {
@@ -31,7 +36,10 @@ router.get('/', async (req, res, next) => {
 // GET /api/groups/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT * FROM groups WHERE id = $1', [req.params.id]);
+    const result = await db.query(
+      `SELECT g.*, m.phone AS leader_phone FROM groups g LEFT JOIN musicians m ON m.id = g.leader_id WHERE g.id = $1`,
+      [req.params.id]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
     res.json(result.rows[0]);
   } catch (err) {

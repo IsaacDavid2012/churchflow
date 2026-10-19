@@ -4,8 +4,8 @@ const { ROLES, hasRole } = require('../../../shared/roles');
 const JWT_SECRET = process.env.JWT_SECRET || 'servesync_jwt_super_secret_key_2026';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'servesync_jwt_refresh_secret_key_2026';
 
-const ACCESS_TOKEN_EXPIRY = '15m';
-const REFRESH_TOKEN_EXPIRY = '7d';
+const ACCESS_TOKEN_EXPIRY = '30d';
+const REFRESH_TOKEN_EXPIRY = '90d';
 
 /**
  * Generate Access Token (short-lived)

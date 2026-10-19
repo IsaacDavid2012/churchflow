@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const {
+  parseServiceDateTime,
   computeFairnessRankings,
   getEligibleCandidatesForPosition,
   autoShuffleService,
@@ -303,6 +304,38 @@ describe('ServeSync Auto-Shuffle & Fairness Engine', () => {
     const wlAssign = (await dbClient.query("SELECT * FROM assignments WHERE service_id = $1 AND position_id = $2 AND role_slot = 'primary'", [s, posWL])).rows[0];
     assert.strictEqual(wlAssign.musician_id, josh, 'Worship Leader position in lineup must be assigned to chosen leader Josh');
     assert.strictEqual(wlAssign.status, 'confirmed', 'Worship Leader position should be confirmed');
+  });
+
+  test('Deadline Auto-Promotion: Properly parses 12-hour AM/PM service_time and respects future vs past deadlines', async () => {
+    const dtMorning = parseServiceDateTime('2030-12-25', '10:00 AM');
+    assert.strictEqual(isNaN(dtMorning.getTime()), false, '10:00 AM should parse into a valid Date');
+    assert.strictEqual(dtMorning.getHours(), 10);
+
+    const dtEvening = parseServiceDateTime('2030-12-25', '7:30 PM');
+    assert.strictEqual(dtEvening.getHours(), 19);
+    assert.strictEqual(dtEvening.getMinutes(), 30);
+
+    const d1 = (await dbClient.query("INSERT INTO musicians (name, roles, active) VALUES ('Future Primary', ARRAY['Drums'], true) RETURNING id")).rows[0].id;
+    const d2 = (await dbClient.query("INSERT INTO musicians (name, roles, active) VALUES ('Future Backup', ARRAY['Drums'], true) RETURNING id")).rows[0].id;
+    const posDrums = (await dbClient.query("INSERT INTO positions_template (name, sort_order) VALUES ('Drums', 1) RETURNING id")).rows[0].id;
+
+    // 1. Future service (year 2030 with '10:00 AM') should NOT be treated as past deadline
+    const futureSvc = (await dbClient.query("INSERT INTO services (service_date, service_time, token, status, deadline_hours_before) VALUES ('2030-12-25', '10:00 AM', 'token-future', 'rostered', 48) RETURNING id")).rows[0].id;
+    await dbClient.query("INSERT INTO assignments (service_id, position_id, musician_id, role_slot, status) VALUES ($1, $2, $3, 'primary', 'pending')", [futureSvc, posDrums, d1]);
+    await dbClient.query("INSERT INTO assignments (service_id, position_id, musician_id, role_slot, status) VALUES ($1, $2, $3, 'backup', 'pending')", [futureSvc, posDrums, d2]);
+
+    const futureCheck = await checkDeadlineAndAutoPromote(dbClient, futureSvc);
+    assert.strictEqual(futureCheck.pastDeadline, false, 'Future service with 10:00 AM should not be past deadline');
+    assert.strictEqual(futureCheck.promotions.length, 0);
+
+    // 2. Past deadline service (year 2020 with '10:00 AM') should auto-promote backup to primary
+    const pastSvc = (await dbClient.query("INSERT INTO services (service_date, service_time, token, status, deadline_hours_before) VALUES ('2020-01-05', '10:00 AM', 'token-past', 'rostered', 48) RETURNING id")).rows[0].id;
+    await dbClient.query("INSERT INTO assignments (service_id, position_id, musician_id, role_slot, status) VALUES ($1, $2, $3, 'primary', 'pending')", [pastSvc, posDrums, d1]);
+    await dbClient.query("INSERT INTO assignments (service_id, position_id, musician_id, role_slot, status) VALUES ($1, $2, $3, 'backup', 'pending')", [pastSvc, posDrums, d2]);
+
+    const pastCheck = await checkDeadlineAndAutoPromote(dbClient, pastSvc);
+    assert.strictEqual(pastCheck.pastDeadline, true, 'Past service should be past deadline');
+    assert.strictEqual(pastCheck.promotions.length, 1, 'Pending primary should be replaced by backup');
   });
 });
 

@@ -56,14 +56,15 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
           api.getServices().catch(() => []),
         ]);
 
-      setChurch(churchData || {});
-      setChurchName(churchData?.name || 'Jesus My Rock Church');
-      setChurchPhone(churchData?.phone || '+60 17-600 1484');
-      setChurchEmail(churchData?.email || 'studioscreativeclicks@gmail.com');
-      setChurchWebsite(churchData?.website || 'https://creativeclicks.art');
-      setChurchAddress(churchData?.address || '123 Grace Avenue, Sanctuary Hall');
+      const prof = churchData?.profile || churchData || {};
+      setChurch(prof);
+      setChurchName(prof?.name || 'Jesus My Rock Church');
+      setChurchPhone(prof?.phone || '+60 3-7722 1484');
+      setChurchEmail(prof?.email || 'jesusmyrockchurch@gmail.com');
+      setChurchWebsite(prof?.website || 'https://www.instagram.com/jesusmyrockchurch/');
+      setChurchAddress(prof?.address || '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia');
 
-      setCampuses(campusData || []);
+      setCampuses((campusData || []).slice(0, 1));
       setMinistries(minData || []);
       setUsers(userData || []);
       setStats({
@@ -124,7 +125,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
             await api.deleteUser(u.id);
             fetchData();
           } catch (err) {
-            Alert.alert('Error', err.response?.data?.error || 'Could not delete user');
+            Alert.alert('Error', err.response?.data?.error || err.message || 'Could not delete user');
           }
         },
       },
@@ -145,22 +146,22 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       Alert.alert('Profile Saved', 'Church profile updated successfully.');
       fetchData();
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not update church');
+      Alert.alert('Error', err.response?.data?.error || err.message || 'Could not update church');
     } finally {
       setSavingChurch(false);
     }
   };
 
   const colors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
-    inputBg: isDark ? '#1e293b' : '#f1f5f9',
-    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+    primary: '#c59c6c',
+    primaryLight: isDark ? '#3a2815' : '#f5ede1',
+    inputBg: isDark ? '#1e293b' : '#fbf8f3',
+    badgeBg: isDark ? '#1e293b' : '#fbf8f3',
   };
 
   if (loading) {
@@ -184,7 +185,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
               {church?.name || 'Jesus My Rock Church'}
             </Text>
             <Text style={[styles.churchTagline, { color: colors.subText }]}>
-              Senior Pastors Marcus & Sarah Reed
+              {church?.lead_pastor || 'Pastor Joseph'}
             </Text>
           </View>
           <TouchableOpacity
@@ -201,15 +202,15 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={16} color={colors.subText} />
           <Text style={[styles.infoValue, { color: colors.text }]}>
-            {church?.address || '123 Grace Avenue, Sanctuary Hall'}
+            {church?.address || '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia'}
           </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Ionicons name="call-outline" size={16} color={colors.subText} />
-          <TouchableOpacity onPress={() => Linking.openURL(`tel:${church?.phone || '+60176001484'}`)}>
+          <TouchableOpacity onPress={() => Linking.openURL(`tel:${church?.phone || '+60377221484'}`)}>
             <Text style={[styles.infoValue, { color: colors.primary }]}>
-              {church?.phone || '+60 17-600 1484'}
+              {church?.phone || '+60 3-7722 1484'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -217,10 +218,10 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         <View style={styles.infoRow}>
           <Ionicons name="globe-outline" size={16} color={colors.subText} />
           <TouchableOpacity
-            onPress={() => Linking.openURL(church?.website || 'https://creativeclicks.art')}
+            onPress={() => Linking.openURL(church?.website || 'https://www.instagram.com/jesusmyrockchurch/')}
           >
             <Text style={[styles.infoValue, { color: '#2563eb' }]}>
-              {church?.website || 'https://creativeclicks.art'}
+              {church?.website || 'https://www.instagram.com/jesusmyrockchurch/'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -235,10 +236,6 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.statNum, { color: '#0284c7' }]}>{stats.people}</Text>
           <Text style={[styles.statLabel, { color: colors.subText }]}>Volunteers</Text>
-        </View>
-        <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.statNum, { color: '#16a34a' }]}>{stats.songs}</Text>
-          <Text style={[styles.statLabel, { color: colors.subText }]}>Songs</Text>
         </View>
         <View style={[styles.statTile, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.statNum, { color: '#9333ea' }]}>{stats.groups}</Text>
@@ -260,7 +257,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
           <Switch
             value={isDark}
             onValueChange={onToggleTheme}
-            trackColor={{ false: '#cbd5e1', true: '#dc2626' }}
+            trackColor={{ false: '#cbd5e1', true: '#c59c6c' }}
             thumbColor="#ffffff"
           />
         </View>
@@ -276,7 +273,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
             <Text style={[styles.prefSub, { color: colors.subText }]}>{user?.email}</Text>
           </View>
           <TouchableOpacity style={styles.signOutBtn} onPress={onLogout}>
-            <Ionicons name="log-out-outline" size={16} color="#dc2626" />
+            <Ionicons name="log-out-outline" size={16} color="#9e7343" />
             <Text style={styles.signOutBtnText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -626,13 +623,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f5ede1',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
   signOutBtnText: {
-    color: '#dc2626',
+    color: '#9e7343',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -668,14 +665,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f5ede1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   userAvatarText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#dc2626',
+    color: '#9e7343',
   },
   userNameText: {
     fontSize: 13,

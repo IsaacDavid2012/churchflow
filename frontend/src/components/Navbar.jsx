@@ -3,6 +3,9 @@ import {
   Calendar, 
   Users, 
   Music, 
+  HeartHandshake,
+  Sliders,
+  Bell,
   Building2, 
   ShieldCheck,
   LogOut, 
@@ -14,11 +17,13 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
   const tabs = [
     { id: 'services', label: 'Services', icon: Calendar },
     { id: 'people', label: 'People', icon: Users },
-    { id: 'songs', label: 'Song Library', icon: Music },
+    { id: 'groups', label: 'Groups', icon: HeartHandshake },
+    { id: 'positions', label: 'Positions', icon: Sliders },
+    { id: 'notifications', label: 'Audit Logs', icon: Bell },
     ...(user?.role === 'admin' || user?.role === 'pastor' 
       ? [{ id: 'users', label: 'Users', icon: ShieldCheck }] 
       : []),
-    { id: 'church', label: 'Church Settings', icon: Building2 },
+    { id: 'church', label: 'Church', icon: Building2 },
   ];
 
   return (
@@ -30,11 +35,11 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
             className="flex items-center space-x-3 cursor-pointer group" 
             onClick={() => setTab('services')}
           >
-            <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 p-1 flex items-center justify-center shadow-md shadow-red-500/5 group-hover:border-red-500/50 transition-all">
+            <div className="h-10 w-10 rounded-xl bg-white border border-red-200 p-1 flex items-center justify-center shadow-sm shadow-red-500/10 group-hover:border-red-600 transition-all">
               <img 
                 src="/churchflow-logo.png" 
-                alt="ChurchFlow Logo" 
-                className="h-full w-full object-contain filter drop-shadow" 
+                alt="JMR Logo" 
+                className="h-full w-full object-contain" 
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             </div>
@@ -75,31 +80,22 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
             })}
           </nav>
 
-          {/* User profile, Theme Toggle & Logout */}
+          {/* User profile & Logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Theme Toggle Button */}
-            <button
-              onClick={onToggleTheme}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 transition-all"
-              title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            >
-              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </button>
-
             {user && (
-              <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
-                <div className="w-6 h-6 rounded-full bg-red-600/15 dark:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center font-bold">
+              <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="w-6 h-6 rounded-full bg-red-600/15 text-red-600 flex items-center justify-center font-bold">
                   {user.name?.[0] || 'U'}
                 </div>
                 <div className="text-left hidden sm:block">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200 leading-tight">{user.name}</div>
-                  <div className="text-[10px] text-red-600 dark:text-red-400 capitalize">{user.role}</div>
+                  <div className="font-semibold text-slate-800 leading-tight">{user.name}</div>
+                  <div className="text-[10px] text-red-600 capitalize">{user.role}</div>
                 </div>
               </div>
             )}
             <button
               onClick={onLogout}
-              className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 border border-transparent hover:border-red-200 dark:hover:border-red-500/20 transition-colors"
+              className="p-2 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />

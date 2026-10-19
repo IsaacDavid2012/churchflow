@@ -80,6 +80,7 @@ async function runMigrations() {
           ALTER TABLE services ADD COLUMN IF NOT EXISTS campus_id UUID REFERENCES campuses(id) ON DELETE SET NULL;
           ALTER TABLE services ADD COLUMN IF NOT EXISTS theme VARCHAR(255);
           ALTER TABLE services ADD COLUMN IF NOT EXISTS deadline_hours_before INT DEFAULT 48;
+          ALTER TABLE services ADD COLUMN IF NOT EXISTS position_ids UUID[] DEFAULT NULL;
         END IF;
       END $$;
     `);

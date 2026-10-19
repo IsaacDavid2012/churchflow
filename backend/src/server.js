@@ -23,6 +23,8 @@ const PORT = process.env.PORT || 3000;
 
 // Trust reverse proxy (Cloudflare Tunnel / cloudflared)
 app.set('trust proxy', 1);
+app.set('etag', false);
+
 
 // CORS configuration (allow environment specified origin, church domains, and local dev)
 const allowedOrigins = process.env.CORS_ORIGIN 
@@ -72,12 +74,38 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Serve public static assets
-app.use(express.static(path.join(__dirname, '../public')));
+// Explicit APK download route with strict no-cache headers
+app.get(['/churchflow.apk', '/churchflow-latest.apk'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Content-Disposition', 'attachment; filename="ChurchFlow-v1.1.0.apk"');
+  res.sendFile(path.join(__dirname, '../public/churchflow.apk'));
+});
+
+// Serve public static assets (with no-cache so APK and public pages are always fresh)
+app.use(express.static(path.join(__dirname, '../public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
 
 // Musician-facing token URL routes to public HTML view
 app.get('/avail/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/avail.html'));
+});
+
+// Never cache API responses (live server data only)
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
 });
 
 // API Routes with rate limiters
@@ -94,8 +122,15 @@ app.use('/api/notifications', notificationsRoutes);
 // In production, serve React frontend build
 const frontendDist = path.join(__dirname, '../../frontend/dist');
 
-// Serve hashed static assets with caching, but never index.html
+// Marketing page as main root route (https://serve.creativeclicks.art/)
+app.get(['/', '/landing', '/about'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.sendFile(path.join(__dirname, '../public/landing.html'));
+});
+
+// Serve hashed static assets with caching, but never index.html on root
 app.use(express.static(frontendDist, {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -118,10 +153,9 @@ app.get('*', (req, res, next) => {
       res.status(200).send(`
         <!DOCTYPE html>
         <html>
-        <head><title>ServeSync — Jesus My Rock Church</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-        <body style="font-family: sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center;">
-          <h2>Jesus My Rock Church Management API is running!</h2>
-          <p>Planning Center alternative backend is active.</p>
+        <head><title>ChurchFlow — Worship Ministry OS</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="font-family: sans-serif; background: #ffffff; color: #0f172a; padding: 40px; text-align: center;">
+          <h2>ChurchFlow Worship Management API is running!</h2>
         </body>
         </html>
       `);

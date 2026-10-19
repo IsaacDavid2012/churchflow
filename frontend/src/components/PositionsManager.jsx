@@ -8,6 +8,7 @@ export default function PositionsManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPos, setEditingPos] = useState(null);
   const [name, setName] = useState('');
+  const [ministry, setMinistry] = useState('Media Team');
   const [sortOrder, setSortOrder] = useState('1');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +32,7 @@ export default function PositionsManager() {
   function openCreateModal() {
     setEditingPos(null);
     setName('');
+    setMinistry('Media Team');
     setSortOrder((positions.length + 1).toString());
     setError('');
     setIsModalOpen(true);
@@ -39,6 +41,7 @@ export default function PositionsManager() {
   function openEditModal(pos) {
     setEditingPos(pos);
     setName(pos.name);
+    setMinistry(pos.ministry || 'Media Team');
     setSortOrder(pos.sort_order.toString());
     setError('');
     setIsModalOpen(true);
@@ -56,9 +59,9 @@ export default function PositionsManager() {
 
     try {
       if (editingPos) {
-        await api.updatePosition(editingPos.id, { name, sort_order: parseInt(sortOrder, 10) });
+        await api.updatePosition(editingPos.id, { name, ministry, sort_order: parseInt(sortOrder, 10) });
       } else {
-        await api.createPosition({ name, sort_order: parseInt(sortOrder, 10) });
+        await api.createPosition({ name, ministry, sort_order: parseInt(sortOrder, 10) });
       }
       setIsModalOpen(false);
       loadPositions();
@@ -86,7 +89,7 @@ export default function PositionsManager() {
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Positions Template</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Configure the default instrument & AV lineup positions for each Sunday service.
+            Configure the default Media Team & Production lineup positions for each service.
           </p>
         </div>
         <button
@@ -116,9 +119,14 @@ export default function PositionsManager() {
                     #{pos.sort_order}
                   </div>
                   <div>
-                    <div className="font-bold text-slate-900 dark:text-white text-sm">{pos.name}</div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-slate-900 dark:text-white text-sm">{pos.name}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        {pos.ministry && pos.ministry !== 'Worship Team' ? pos.ministry : 'Media Team'}
+                      </span>
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400">
-                      Standard slot for auto-shuffle & fairness ranking
+                      Standard slot for Media Team lineup & fairness ranking
                     </div>
                   </div>
                 </div>
@@ -177,9 +185,27 @@ export default function PositionsManager() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Drums, Acoustic Guitar, Sound"
+                  placeholder="e.g. Camera 1, Livestream / OBS, ProPresenter Slides, Sound"
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Ministry / Department
+                </label>
+                <select
+                  value={ministry}
+                  onChange={(e) => setMinistry(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                >
+                  <option value="Media Team">Media Team</option>
+                  <option value="Production & Tech">Production & Tech</option>
+                  <option value="Worship Team">Worship Team</option>
+                  <option value="Ushers & Hospitality">Ushers & Hospitality</option>
+                  <option value="Kids Rock Ministry">Kids Rock Ministry</option>
+                  <option value="Prayer & Altar Team">Prayer & Altar Team</option>
+                </select>
               </div>
 
               <div>

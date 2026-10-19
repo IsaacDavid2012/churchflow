@@ -56,7 +56,7 @@ export default function PublicConfirmScreen({ token, onDone }) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <ActivityIndicator size="large" color="#c59c6c" />
       </View>
     );
   }
@@ -150,7 +150,7 @@ export default function PublicConfirmScreen({ token, onDone }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 20,
@@ -163,39 +163,44 @@ const styles = StyleSheet.create({
   churchName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#818cf8',
+    color: '#c59c6c',
   },
   churchTagline: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#64748b',
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#eadbc4',
+    shadowColor: '#c59c6c',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   serviceDate: {
-    color: '#818cf8',
+    color: '#9e7343',
     fontSize: 13,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   serviceTheme: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 4,
   },
   serviceMeta: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     marginTop: 4,
   },
   stepTitle: {
-    color: '#cbd5e1',
+    color: '#0f172a',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 10,
@@ -204,27 +209,28 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   musicianItem: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#fbf8f3',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#eadbc4',
   },
   musicianItemSelected: {
-    borderColor: '#6366f1',
-    backgroundColor: '#312e81',
+    borderColor: '#c59c6c',
+    backgroundColor: '#f5ede1',
   },
   musicianName: {
-    color: '#f8fafc',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '600',
   },
   musicianNameSelected: {
-    color: '#a5b4fc',
+    color: '#9e7343',
+    fontWeight: '700',
   },
   musicianRoles: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 12,
     marginTop: 2,
   },
@@ -236,11 +242,11 @@ const styles = StyleSheet.create({
   respondBtn: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
   },
   btnAvailable: {
-    backgroundColor: '#059669',
+    backgroundColor: '#16a34a',
   },
   btnDecline: {
     backgroundColor: '#dc2626',
@@ -262,19 +268,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   submittedTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: 'bold',
   },
   submittedSub: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 20,
   },
   btnSecondary: {
-    backgroundColor: '#334155',
+    backgroundColor: '#c59c6c',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -287,11 +293,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#ffffff',
     padding: 20,
   },
   errorText: {
-    color: '#ef4444',
+    color: '#dc2626',
     fontSize: 16,
     marginBottom: 16,
   },

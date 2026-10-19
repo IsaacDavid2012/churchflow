@@ -6,12 +6,12 @@ CREATE TABLE IF NOT EXISTS church_profile (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL DEFAULT 'Jesus My Rock Church',
     tagline VARCHAR(255) DEFAULT 'Standing Firm on Christ the Solid Rock',
-    lead_pastor VARCHAR(255) DEFAULT 'Pastor David & Sarah',
-    email VARCHAR(255) DEFAULT 'office@jesusmyrock.org',
-    phone VARCHAR(50) DEFAULT '+1 (555) 762-5762',
-    address TEXT DEFAULT '1200 Rock Boulevard, Sanctuary Suite 100',
-    website VARCHAR(255) DEFAULT 'https://servesync.creativeclicks.art',
-    primary_color VARCHAR(50) DEFAULT '#4f46e5',
+    lead_pastor VARCHAR(255) DEFAULT 'Pastor Joseph',
+    email VARCHAR(255) DEFAULT 'jesusmyrockchurch@gmail.com',
+    phone VARCHAR(50) DEFAULT '+60 3-7722 1484',
+    address TEXT DEFAULT '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
+    website VARCHAR(255) DEFAULT 'https://www.instagram.com/jesusmyrockchurch/',
+    primary_color VARCHAR(50) DEFAULT '#c59c6c',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS services (
     notes TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'draft', -- 'draft', 'availability_open', 'rostered', 'confirmed', 'completed'
     deadline_hours_before INT NOT NULL DEFAULT 48,
+    position_ids UUID[] DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

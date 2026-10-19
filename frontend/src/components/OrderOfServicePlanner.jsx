@@ -19,7 +19,6 @@ import {
 import { api } from '../api';
 
 const ITEM_TYPE_STYLES = {
-  song: { label: 'Worship Song', icon: Music, color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
   sermon: { label: 'Sermon / Message', icon: BookOpen, color: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
   media: { label: 'Media / Video', icon: Video, color: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
   prayer: { label: 'Prayer / Ministry', icon: Flame, color: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
@@ -30,19 +29,16 @@ const ITEM_TYPE_STYLES = {
 
 export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 AM' }) {
   const [items, setItems] = useState([]);
-  const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [itemForm, setItemForm] = useState({
-    item_type: 'song',
+    item_type: 'item',
     title: '',
     duration_minutes: 5,
     leader: '',
-    song_id: '',
-    song_key: '',
     notes: '',
   });
 
@@ -53,12 +49,8 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
   async function loadPlan() {
     setLoading(true);
     try {
-      const [planData, songData] = await Promise.all([
-        api.getPlanItems(serviceId),
-        api.getSongs(),
-      ]);
-      setItems(planData || []);
-      setSongs(songData || []);
+      const planData = await api.getPlanItems(serviceId);
+      setItems((planData || []).filter((i) => i.item_type !== 'song'));
     } catch (err) {
       console.error('Failed to load service plan:', err);
     } finally {
@@ -102,15 +94,13 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
   const timedItems = calculateTimings();
   const totalDuration = items.reduce((acc, curr) => acc + (curr.duration_minutes || 0), 0);
 
-  function handleOpenCreate(type = 'song') {
+  function handleOpenCreate(type = 'item') {
     setEditingItem(null);
     setItemForm({
       item_type: type,
       title: '',
-      duration_minutes: type === 'song' ? 6 : type === 'sermon' ? 35 : 5,
+      duration_minutes: type === 'sermon' ? 35 : 5,
       leader: '',
-      song_id: '',
-      song_key: '',
       notes: '',
     });
     setIsModalOpen(true);
@@ -123,27 +113,9 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
       title: item.title || '',
       duration_minutes: item.duration_minutes || 5,
       leader: item.leader || '',
-      song_id: item.song_id || '',
-      song_key: item.song_key || '',
       notes: item.notes || '',
     });
     setIsModalOpen(true);
-  }
-
-  function handleSelectSong(e) {
-    const sId = e.target.value;
-    const found = songs.find((s) => s.id === sId);
-    if (found) {
-      setItemForm({
-        ...itemForm,
-        song_id: found.id,
-        title: found.title,
-        song_key: found.default_key || 'C',
-        duration_minutes: itemForm.duration_minutes || 6,
-      });
-    } else {
-      setItemForm({ ...itemForm, song_id: '', song_key: '' });
-    }
   }
 
   async function handleSaveItem(e) {
@@ -189,24 +161,17 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
         <div>
           <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
             <Clock className="w-4 h-4 text-red-600 dark:text-red-400" />
-            Order of Service & Run Sheet (Planning Center Plans)
+            Order of Service & Run Sheet
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Auto-calculated flow of worship, sermon, media, and transitions. Total service length: <strong className="text-red-600 dark:text-red-400 font-bold">{totalDuration} minutes</strong> ({Math.floor(totalDuration/60)}h {totalDuration%60}m).
+            Auto-calculated flow of service segments, sermon, media, and transitions. Total service length: <strong className="text-red-600 dark:text-red-400 font-bold">{totalDuration} minutes</strong> ({Math.floor(totalDuration/60)}h {totalDuration%60}m).
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenCreate('song')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/20 cursor-pointer"
-          >
-            <Music className="w-3.5 h-3.5" />
-            <span>Add Song</span>
-          </button>
-          <button
             onClick={() => handleOpenCreate('item')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/20 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Item</span>
@@ -219,7 +184,7 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
         <div className="text-center py-16 bg-white dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 shadow-sm">
           <Clock className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
           <div className="font-bold text-sm text-slate-700 dark:text-slate-300">No items in this service plan yet</div>
-          <div className="text-xs text-slate-500 mt-1">Add worship songs, announcements, and sermon run-times above.</div>
+          <div className="text-xs text-slate-500 mt-1">Add announcements, prayers, and sermon run-times above.</div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -339,7 +304,6 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
                   onChange={(e) => setItemForm({ ...itemForm, item_type: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                 >
-                  <option value="song">Worship Song</option>
                   <option value="sermon">Sermon / Message</option>
                   <option value="media">Media / Video Countdown</option>
                   <option value="prayer">Prayer / Pastoral Welcome</option>
@@ -349,27 +313,11 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
                 </select>
               </div>
 
-              {itemForm.item_type === 'song' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Select from Song Library</label>
-                  <select
-                    value={itemForm.song_id}
-                    onChange={handleSelectSong}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
-                  >
-                    <option value="">-- Choose a Song or type custom title below --</option>
-                    {songs.map((s) => (
-                      <option key={s.id} value={s.id}>{s.title} ({s.artist || 'Unknown'} - Key: {s.default_key})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Item Title *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Firm Foundation (He Won't)"
+                  placeholder="e.g. Pastoral Welcome & Announcements"
                   value={itemForm.title}
                   onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })}
                   required
@@ -377,33 +325,21 @@ export default function OrderOfServicePlanner({ serviceId, serviceTime = '10:00 
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Duration (minutes)</label>
-                  <input
-                    type="number"
-                    value={itemForm.duration_minutes}
-                    onChange={(e) => setItemForm({ ...itemForm, duration_minutes: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Arrangement Key</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Bb or G"
-                    value={itemForm.song_key}
-                    onChange={(e) => setItemForm({ ...itemForm, song_key: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  value={itemForm.duration_minutes}
+                  onChange={(e) => setItemForm({ ...itemForm, duration_minutes: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Leader / Speaker</label>
                 <input
                   type="text"
-                  placeholder="e.g. Pastor David Mitchell or James Wilson"
+                  placeholder="e.g. Pastor Joseph"
                   value={itemForm.leader}
                   onChange={(e) => setItemForm({ ...itemForm, leader: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"

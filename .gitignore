@@ -19,6 +19,7 @@ frontend/dist/
 mobile/.expo/
 releases/
 backups/
+*.apk
 
 # Logs & Temporary files
 *.log

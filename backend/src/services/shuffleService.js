@@ -35,8 +35,38 @@ function matchesRole(positionName, musicianRoles) {
 
     // Sound / Audio / FOH
     if (
-      (p.includes('sound') || p.includes('audio') || p.includes('foh')) &&
-      (r.includes('sound') || r.includes('audio') || r.includes('foh'))
+      (p.includes('sound') || p.includes('audio') || p.includes('foh') || p.includes('mixer')) &&
+      (r.includes('sound') || r.includes('audio') || r.includes('foh') || r.includes('mixer'))
+    ) return true;
+
+    // Camera / Video
+    if (
+      (p.includes('camera') || p.includes('cam ') || p === 'cam' || p.includes('video')) &&
+      (r.includes('camera') || r.includes('cam') || r.includes('video'))
+    ) return true;
+
+    // Slides / ProPresenter / Projection
+    if (
+      (p.includes('slide') || p.includes('propresenter') || p.includes('projection') || p.includes('visual') || p.includes('screen')) &&
+      (r.includes('slide') || r.includes('propresenter') || r.includes('projection') || r.includes('visual') || r.includes('screen') || r.includes('media'))
+    ) return true;
+
+    // Livestream / OBS / Broadcast
+    if (
+      (p.includes('stream') || p.includes('obs') || p.includes('broadcast')) &&
+      (r.includes('stream') || r.includes('obs') || r.includes('broadcast') || r.includes('media'))
+    ) return true;
+
+    // Lighting / Lights
+    if (
+      (p.includes('light') || p.includes('dmx')) &&
+      (r.includes('light') || r.includes('dmx'))
+    ) return true;
+
+    // Photography / Social Media
+    if (
+      (p.includes('photo') || p.includes('social')) &&
+      (r.includes('photo') || r.includes('social'))
     ) return true;
 
     return p.includes(r) || r.includes(p);
@@ -136,7 +166,7 @@ function getEligibleCandidatesForPosition(
  * @returns {Promise<object>} Result containing assignments and notification log
  */
 async function autoShuffleService(dbClient, serviceId, options = {}) {
-  const { pool = 'auto', includeBackup = false } = options;
+  const { pool = 'auto', includeBackup = false, preserveExisting = false } = options;
 
   // 1. Fetch service details
   const serviceRes = await dbClient.query(
@@ -148,11 +178,20 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
   }
   const service = serviceRes.rows[0];
 
-  // 2. Fetch all positions ordered by sort_order
+  // 2. Fetch enabled positions for this service ordered by sort_order
+  const activePositionIds = Array.isArray(service.position_ids) && service.position_ids.length > 0 ? service.position_ids : null;
   const positionsRes = await dbClient.query(
-    'SELECT * FROM positions_template ORDER BY sort_order ASC, name ASC'
+    'SELECT * FROM positions_template WHERE ($1::uuid[] IS NULL OR id = ANY($1::uuid[])) ORDER BY sort_order ASC, name ASC',
+    [activePositionIds]
   );
   const positions = positionsRes.rows;
+
+  if (activePositionIds) {
+    await dbClient.query(
+      'DELETE FROM assignments WHERE service_id = $1 AND NOT (position_id = ANY($2::uuid[]))',
+      [serviceId, activePositionIds]
+    );
+  }
 
   // 3. Fetch availability for this service
   const availRes = await dbClient.query(
@@ -174,12 +213,12 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
     sourceDesc = 'from all active roster members';
   } else if (pool === 'available') {
     requireAvailable = true;
-    sourceDesc = `from ${availableMusicianIds.size} available musician(s)`;
+    sourceDesc = `from ${availableMusicianIds.size} available member(s)`;
   } else {
     // 'auto' mode: if we have available responses, use them; if 0 responses, use all active musicians
     if (availableMusicianIds.size > 0) {
       requireAvailable = true;
-      sourceDesc = `from ${availableMusicianIds.size} available musician(s)`;
+      sourceDesc = `from ${availableMusicianIds.size} available member(s)`;
     } else {
       requireAvailable = false;
       sourceDesc = 'from all active roster members (no availability responses recorded yet)';
@@ -194,17 +233,34 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
     await dbClient.query("DELETE FROM assignments WHERE service_id = $1 AND role_slot = 'backup'", [serviceId]);
   }
 
-  // 1. Identify / assign Worship Leader
+  // Optional: Preserve existing non-declined primary assignments when preserveExisting is true
+  const preservedByPosId = new Map();
+  if (preserveExisting) {
+    const existingRes = await dbClient.query(
+      "SELECT position_id, musician_id, status FROM assignments WHERE service_id = $1 AND role_slot = 'primary' AND musician_id IS NOT NULL AND status != 'declined'",
+      [serviceId]
+    );
+    existingRes.rows.forEach((row) => {
+      const mObj = fairnessRankings.find((m) => m.id === row.musician_id) || { id: row.musician_id, name: 'Assigned Member' };
+      preservedByPosId.set(row.position_id, { ...mObj, preservedStatus: row.status || 'confirmed' });
+    });
+  }
+
+  // 1. Identify / assign Worship Leader (if position exists)
   let chosenWorshipLeaderId = service.worship_leader_id;
   const wlPos = positions.find((p) => p.name.toLowerCase().includes('worship leader'));
 
   if (!chosenWorshipLeaderId && wlPos) {
+    const initialSetForWl = new Set();
+    for (const val of preservedByPosId.values()) {
+      if (val?.id) initialSetForWl.add(val.id);
+    }
     let wlCandidates = getEligibleCandidatesForPosition(
       fairnessRankings,
       wlPos.name,
       availableMusicianIds,
       declinedMusicianIds,
-      new Set(),
+      initialSetForWl,
       null,
       requireAvailable
     );
@@ -214,7 +270,7 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
         wlPos.name,
         availableMusicianIds,
         declinedMusicianIds,
-        new Set(),
+        initialSetForWl,
         null,
         false
       );
@@ -255,7 +311,9 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
   }
 
   // 3. Backtracking optimal matching for all remaining positions
-  const otherPositions = positions.filter((p) => !p.name.toLowerCase().includes('worship leader'));
+  const otherPositions = positions.filter(
+    (p) => !p.name.toLowerCase().includes('worship leader') && !preservedByPosId.has(p.id)
+  );
 
   // Sort positions by candidate scarcity (fewest candidates first) to prevent bottlenecks
   const sortedPositions = [...otherPositions].sort((a, b) => {
@@ -281,11 +339,14 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
 
   const initialAssigned = new Set();
   if (chosenWorshipLeaderId) initialAssigned.add(chosenWorshipLeaderId);
-  let matchedMap = solveMatch(0, initialAssigned, new Map());
+  for (const val of preservedByPosId.values()) {
+    if (val?.id) initialAssigned.add(val.id);
+  }
+  let matchedMap = solveMatch(0, initialAssigned, new Map(preservedByPosId));
 
   // Greedy fallback if full combination is constrained
   if (!matchedMap) {
-    matchedMap = new Map();
+    matchedMap = new Map(preservedByPosId);
     const greedyAssigned = new Set(initialAssigned);
     for (const pos of otherPositions) {
       const cands = getCandidatesForPos(pos.name, greedyAssigned);
@@ -302,14 +363,17 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
   // 4. Build assignments for each position in original sort_order
   for (const pos of positions) {
     const isWorshipLeaderPos = pos.name.toLowerCase().includes('worship leader');
+    const isPreserved = preservedByPosId.has(pos.id);
     let primaryCandidate = null;
     let backupCandidate = null;
 
-    if (isWorshipLeaderPos) {
+    if (isPreserved) {
+      primaryCandidate = preservedByPosId.get(pos.id);
+    } else if (isWorshipLeaderPos) {
       if (chosenWorshipLeaderId) {
         primaryCandidate = fairnessRankings.find((m) => m.id === chosenWorshipLeaderId) || {
           id: chosenWorshipLeaderId,
-          name: 'Worship Leader',
+          name: 'Team Leader',
         };
       }
     } else {
@@ -321,7 +385,9 @@ async function autoShuffleService(dbClient, serviceId, options = {}) {
         position_id: pos.id,
         musician_id: primaryCandidate.id,
         role_slot: 'primary',
-        status: isWorshipLeaderPos && chosenWorshipLeaderId ? 'confirmed' : 'pending',
+        status: isPreserved
+          ? (primaryCandidate.preservedStatus || 'confirmed')
+          : (isWorshipLeaderPos && chosenWorshipLeaderId ? 'confirmed' : 'pending'),
       });
     } else {
       assignmentsToSave.push({
@@ -674,6 +740,41 @@ async function manualOverrideSlot(dbClient, serviceId, positionId, roleSlot, mus
 }
 
 /**
+ * Parses service_date (Date object or YYYY-MM-DD string) and service_time (12h like "10:00 AM" or 24h like "10:00:00")
+ * into a valid JavaScript Date instance.
+ */
+function parseServiceDateTime(serviceDate, serviceTime) {
+  let dateStr;
+  if (serviceDate instanceof Date) {
+    const y = serviceDate.getFullYear();
+    const m = String(serviceDate.getMonth() + 1).padStart(2, '0');
+    const d = String(serviceDate.getDate()).padStart(2, '0');
+    dateStr = `${y}-${m}-${d}`;
+  } else {
+    dateStr = String(serviceDate || '').split('T')[0].trim();
+  }
+
+  let hours = 10;
+  let minutes = 0;
+  let seconds = 0;
+  const rawTime = String(serviceTime || '10:00 AM').trim();
+  const match = rawTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (match) {
+    hours = parseInt(match[1], 10);
+    minutes = parseInt(match[2], 10);
+    seconds = match[3] ? parseInt(match[3], 10) : 0;
+    const period = match[4] ? match[4].toUpperCase() : null;
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+  }
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  return new Date(`${dateStr}T${hh}:${mm}:${ss}`);
+}
+
+/**
  * Checks deadline for a service: if primary has not confirmed and deadline has passed,
  * auto-promote backup to primary (or auto-reschedule if no backup).
  */
@@ -682,12 +783,12 @@ async function checkDeadlineAndAutoPromote(dbClient, serviceId) {
   if (serviceRes.rows.length === 0) return { checked: false };
   const service = serviceRes.rows[0];
 
-  const serviceDateTime = new Date(`${service.service_date}T${service.service_time || '10:00:00'}`);
+  const serviceDateTime = parseServiceDateTime(service.service_date, service.service_time);
   const deadlineMs = (service.deadline_hours_before || 48) * 60 * 60 * 1000;
   const deadlineThreshold = new Date(serviceDateTime.getTime() - deadlineMs);
 
   const now = new Date();
-  if (now < deadlineThreshold) {
+  if (isNaN(deadlineThreshold.getTime()) || now < deadlineThreshold) {
     return { checked: true, pastDeadline: false, promotions: [] };
   }
 
@@ -760,6 +861,7 @@ async function checkDeadlineAndAutoPromote(dbClient, serviceId) {
 
 module.exports = {
   matchesRole,
+  parseServiceDateTime,
   computeFairnessRankings,
   getEligibleCandidatesForPosition,
   autoShuffleService,
@@ -767,3 +869,4 @@ module.exports = {
   manualOverrideSlot,
   checkDeadlineAndAutoPromote,
 };
+

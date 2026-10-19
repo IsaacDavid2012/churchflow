@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/positions
 router.post('/', async (req, res) => {
-  const { name, sort_order } = req.body;
+  const { name, ministry, sort_order } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Position name is required' });
   }
@@ -28,11 +28,11 @@ router.post('/', async (req, res) => {
   try {
     const result = await db.query(
       `
-      INSERT INTO positions_template (name, sort_order)
-      VALUES ($1, $2)
+      INSERT INTO positions_template (name, ministry, sort_order)
+      VALUES ($1, $2, $3)
       RETURNING *
     `,
-      [name.trim(), parseInt(sort_order || '0', 10)]
+      [name.trim(), ministry || 'Worship Team', parseInt(sort_order || '0', 10)]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
 // PUT /api/positions/:id
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, sort_order } = req.body;
+  const { name, ministry, sort_order } = req.body;
 
   try {
     const result = await db.query(
@@ -52,11 +52,12 @@ router.put('/:id', async (req, res) => {
       UPDATE positions_template
       SET 
         name = COALESCE($1, name),
-        sort_order = COALESCE($2, sort_order)
-      WHERE id = $3
+        ministry = COALESCE($2, ministry),
+        sort_order = COALESCE($3, sort_order)
+      WHERE id = $4
       RETURNING *
     `,
-      [name ? name.trim() : null, sort_order !== undefined ? parseInt(sort_order, 10) : null, id]
+      [name ? name.trim() : null, ministry || null, sort_order !== undefined ? parseInt(sort_order, 10) : null, id]
     );
 
     if (result.rows.length === 0) {

@@ -96,20 +96,20 @@ export const api = {
     request(`/services/${id}`, {
       method: 'DELETE',
     }),
-  setWorshipLeader: (id, worship_leader_id) =>
+  setWorshipLeader: (id, worship_leader_id, auto_roster = false) =>
     request(`/services/${id}/worship-leader`, {
       method: 'POST',
-      body: JSON.stringify({ worship_leader_id }),
+      body: JSON.stringify({ worship_leader_id, auto_roster }),
     }),
   shuffleLineup: (id, options = {}) =>
     request(`/services/${id}/shuffle`, {
       method: 'POST',
       body: JSON.stringify(options),
     }),
-  overrideSlot: (id, { position_id, role_slot, musician_id, notes }) =>
+  overrideSlot: (id, { position_id, role_slot, musician_id, notes, auto_roster = false }) =>
     request(`/services/${id}/assignments/override`, {
       method: 'POST',
-      body: JSON.stringify({ position_id, role_slot, musician_id, notes }),
+      body: JSON.stringify({ position_id, role_slot, musician_id, notes, auto_roster }),
     }),
   confirmLineup: (id) =>
     request(`/services/${id}/assignments/confirm`, {

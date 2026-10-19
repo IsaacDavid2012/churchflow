@@ -4,6 +4,7 @@ import {
   Text,
   View,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -70,22 +71,22 @@ export default function SongsScreen({ user, isDark = false }) {
       fetchSongs();
       Alert.alert('Song Added', `"${title}" has been added to the library.`);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not add song');
+      Alert.alert('Error', err.response?.data?.error || err.message || 'Could not add song');
     } finally {
       setSaving(false);
     }
   };
 
   const colors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
-    inputBg: isDark ? '#1e293b' : '#f1f5f9',
-    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+    primary: '#c59c6c',
+    primaryLight: isDark ? '#3a2815' : '#f5ede1',
+    inputBg: isDark ? '#1e293b' : '#fbf8f3',
+    badgeBg: isDark ? '#1e293b' : '#fbf8f3',
   };
 
   const filteredSongs = songs.filter((s) => {
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     ...Platform.select({
       ios: {
-        shadowColor: '#dc2626',
+        shadowColor: '#c59c6c',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,

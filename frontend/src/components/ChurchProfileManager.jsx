@@ -33,28 +33,23 @@ export default function ChurchProfileManager() {
   const [profile, setProfile] = useState({
     name: 'Jesus My Rock Church',
     tagline: 'Standing Firm on Christ the Solid Rock',
-    lead_pastor: 'Pastor David & Sarah Mitchell',
-    email: 'office@jesusmyrock.org',
-    phone: '+1 (555) 762-5762',
-    address: '1200 Rock Boulevard, Suite 100, Austin, TX',
-    website: 'https://serve.creativeclicks.art',
+    lead_pastor: 'Pastor Joseph',
+    email: 'jesusmyrockchurch@gmail.com',
+    phone: '+60 3-7722 1484',
+    address: '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
+    website: 'https://www.instagram.com/jesusmyrockchurch/',
   });
   const [stats, setStats] = useState({
     totalPeople: 0,
     totalServices: 0,
-    totalSongs: 0,
     totalGroups: 0,
-    totalCampuses: 0,
+    totalCampuses: 1,
   });
   const [campuses, setCampuses] = useState([]);
   const [ministries, setMinistries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  
-  // New campus modal/form
-  const [newCampus, setNewCampus] = useState({ name: '', address: '', is_main: false });
-  const [isAddingCampus, setIsAddingCampus] = useState(false);
 
   useEffect(() => {
     loadChurchData();
@@ -70,7 +65,7 @@ export default function ChurchProfileManager() {
       ]);
       if (churchRes.profile) setProfile(churchRes.profile);
       if (churchRes.stats) setStats(churchRes.stats);
-      setCampuses(campusesRes || []);
+      setCampuses(campusesRes ? campusesRes.slice(0, 1) : []);
       setMinistries(ministriesRes || []);
     } catch (err) {
       console.error('Failed to load church profile:', err);
@@ -93,19 +88,6 @@ export default function ChurchProfileManager() {
     }
   }
 
-  async function handleAddCampus(e) {
-    e.preventDefault();
-    if (!newCampus.name.trim()) return;
-    try {
-      const added = await api.createCampus(newCampus);
-      setCampuses([...campuses, added]);
-      setNewCampus({ name: '', address: '', is_main: false });
-      setIsAddingCampus(false);
-    } catch (err) {
-      alert(err.message || 'Failed to add campus');
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-slate-500 dark:text-slate-400">
@@ -118,50 +100,46 @@ export default function ChurchProfileManager() {
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-red-950 border border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-md">
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-start space-x-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 flex items-center justify-center shadow-xl shadow-red-500/30 flex-shrink-0">
-              <Building2 className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center shadow-sm flex-shrink-0">
+              <Building2 className="w-8 h-8 text-red-600" />
             </div>
             <div>
               <div className="flex items-center space-x-3 flex-wrap gap-y-1">
-                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">{profile.name}</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
-                  Planning Center Core
+                <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{profile.name}</h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
+                  Petaling Jaya, Malaysia
                 </span>
               </div>
-              <p className="text-slate-300 text-xs mt-1">{profile.tagline}</p>
-              <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-300">
-                <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-red-400" /> {profile.lead_pastor}</span>
-                <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-red-400" /> {profile.address}</span>
-                <span className="flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-red-400" /> {profile.website}</span>
+              <p className="text-slate-600 text-xs mt-1">{profile.tagline}</p>
+              <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-600">
+                <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-red-600" /> {profile.lead_pastor}</span>
+                <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-red-600" /> {profile.address}</span>
+                <span className="flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-red-600" /> {profile.website}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Church Key Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-slate-800/80">
-          <div className="bg-slate-900/80 backdrop-blur rounded-xl p-3.5 border border-slate-800">
-            <div className="text-xs text-slate-400">Total Directory</div>
-            <div className="text-xl font-bold text-white mt-1">{stats.totalPeople} <span className="text-xs font-normal text-slate-400">people</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-100">
+          <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+            <div className="text-xs text-slate-500">Total Directory</div>
+            <div className="text-xl font-bold text-slate-900 mt-1">{stats.totalPeople} <span className="text-xs font-normal text-slate-500">people</span></div>
           </div>
-          <div className="bg-slate-900/80 backdrop-blur rounded-xl p-3.5 border border-slate-800">
-            <div className="text-xs text-slate-400">Campuses</div>
-            <div className="text-xl font-bold text-red-400 mt-1">{campuses.length}</div>
+          <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+            <div className="text-xs text-slate-500">Campus</div>
+            <div className="text-xl font-bold text-red-600 mt-1">1 <span className="text-xs font-normal text-slate-500">Damansara Perdana</span></div>
           </div>
-          <div className="bg-slate-900/80 backdrop-blur rounded-xl p-3.5 border border-slate-800">
-            <div className="text-xs text-slate-400">Ministries</div>
-            <div className="text-xl font-bold text-blue-400 mt-1">{ministries.length}</div>
+          <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+            <div className="text-xs text-slate-500">Ministries</div>
+            <div className="text-xl font-bold text-blue-600 mt-1">{ministries.length}</div>
           </div>
-          <div className="bg-slate-900/80 backdrop-blur rounded-xl p-3.5 border border-slate-800">
-            <div className="text-xs text-slate-400">Song Library</div>
-            <div className="text-xl font-bold text-emerald-400 mt-1">{stats.totalSongs} <span className="text-xs font-normal text-slate-400">songs</span></div>
-          </div>
-          <div className="bg-slate-900/80 backdrop-blur rounded-xl p-3.5 border border-slate-800">
-            <div className="text-xs text-slate-400">Life Groups</div>
-            <div className="text-xl font-bold text-amber-400 mt-1">{stats.totalGroups} <span className="text-xs font-normal text-slate-400">groups</span></div>
+          <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+            <div className="text-xs text-slate-500">Life Groups</div>
+            <div className="text-xl font-bold text-amber-600 mt-1">{stats.totalGroups} <span className="text-xs font-normal text-slate-500">groups</span></div>
           </div>
         </div>
       </div>
@@ -272,74 +250,43 @@ export default function ChurchProfileManager() {
           </form>
         </div>
 
-        {/* Right Column: Campuses & Ministries */}
+        {/* Right Column: Campus & Ministries */}
         <div className="space-y-6">
-          {/* Campuses Card */}
+          {/* Single Campus Card */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm transition-colors">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-red-600 dark:text-red-400" />
-                Campuses & Locations
+                Campus Location
               </h2>
-              <button
-                onClick={() => setIsAddingCampus(!isAddingCampus)}
-                className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Campus
-              </button>
             </div>
 
-            {isAddingCampus && (
-              <form onSubmit={handleAddCampus} className="mb-4 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                <input
-                  type="text"
-                  placeholder="Campus Name (e.g. North Campus)"
-                  value={newCampus.name}
-                  onChange={(e) => setNewCampus({ ...newCampus, name: e.target.value })}
-                  required
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white"
-                />
-                <input
-                  type="text"
-                  placeholder="Address or Online URL"
-                  value={newCampus.address}
-                  onChange={(e) => setNewCampus({ ...newCampus, address: e.target.value })}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white"
-                />
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCampus(false)}
-                    className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 px-2 py-1"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="text-xs bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1 rounded-lg"
-                  >
-                    Save
-                  </button>
-                </div>
-              </form>
-            )}
-
             <div className="space-y-2.5">
-              {campuses.map((campus) => (
-                <div key={campus.id} className="flex items-start justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{campus.name}</span>
-                      {campus.is_main && (
+              {campuses.length > 0 ? (
+                campuses.map((campus) => (
+                  <div key={campus.id} className="flex items-start justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{campus.name}</span>
                         <span className="text-[10px] uppercase font-bold bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-300 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-500/30">
-                          Main
+                          Main Sanctuary
                         </span>
-                      )}
+                      </div>
+                      {campus.address && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{campus.address}</p>}
                     </div>
-                    {campus.address && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{campus.address}</p>}
                   </div>
+                ))
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-slate-900 dark:text-slate-100">Damansara Perdana Sanctuary</span>
+                    <span className="text-[10px] uppercase font-bold bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-300 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-500/30">
+                      Main Sanctuary
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{profile.address}</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 

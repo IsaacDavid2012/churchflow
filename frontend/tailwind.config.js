@@ -1,3 +1,17 @@
+const jmrGold = {
+  50: '#fbf8f3',
+  100: '#f5ede1',
+  200: '#eadbc4',
+  300: '#dcc29e',
+  400: '#d0af83',
+  500: '#b38856',
+  600: '#c59c6c',
+  700: '#9e7343',
+  800: '#825d35',
+  900: '#6a4c2b',
+  950: '#3a2815',
+};
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -8,19 +22,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#fef2f2',
-          100: '#fee2e2',
-          200: '#fecaca',
-          300: '#fca5a5',
-          400: '#f87171',
-          500: '#ef4444',
-          600: '#dc2626',
-          700: '#b91c1c',
-          800: '#991b1b',
-          900: '#7f1d1d',
-          950: '#450a0a',
-        }
+        brand: jmrGold,
+        red: jmrGold,
+        rose: jmrGold,
       }
     },
   },

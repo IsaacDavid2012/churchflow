@@ -4,8 +4,8 @@
   "description": "Worship Team Scheduling & Service Planning Portal for Jesus My Rock Church",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#090d16",
-  "theme_color": "#4f46e5",
+  "background_color": "#ffffff",
+  "theme_color": "#c59c6c",
   "icons": [
     {
       "src": "/pwa-192x192.png",

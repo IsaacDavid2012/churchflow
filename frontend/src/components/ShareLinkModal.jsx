@@ -22,26 +22,7 @@ export default function ShareLinkModal({
     : 'https://serve.creativeclicks.art';
   const url = `${baseUrl}/avail/${token}`;
 
-  let lineupLines = [];
-  if (worshipLeaderName) {
-    lineupLines.push(`• 🎤 Worship Leader: ${worshipLeaderName}`);
-  }
-  if (positions && positions.length > 0) {
-    positions.forEach((p) => {
-      const posName = p.position_name || p.positionName || p.name || 'Position';
-      const primary = p.primary_musician_name || p.primary_musician?.name || p.primary?.name;
-      // Avoid duplicate worship leader row if already added
-      if (primary && (!worshipLeaderName || !posName.toLowerCase().includes('worship leader'))) {
-        lineupLines.push(`• ${posName}: ${primary}`);
-      }
-    });
-  }
-
-  const lineupSection = lineupLines.length > 0
-    ? `👥 *Team Lineup:*\n${lineupLines.join('\n')}\n\n`
-    : '';
-
-  const fullShareText = `🎸 *ChurchFlow — Jesus My Rock Church*\n📅 *${serviceDate}*${campusName ? ` • ${campusName}` : ''}${theme ? `\n📖 Theme: ${theme}` : ''}\n\n${lineupSection}👉 *Please tap below to confirm your availability or decline:*\n${url}`;
+  const fullShareText = `🎸 *ChurchFlow — Jesus My Rock Church*\n📅 *${serviceDate}*\n\n👉 *Please tap below to confirm your availability or decline:*\n${url}`;
 
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullShareText)}`;
 
@@ -64,7 +45,7 @@ export default function ShareLinkModal({
           <div className="flex items-center space-x-2">
             <Link className="w-5 h-5 text-red-600 dark:text-red-400" />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Share Draft Lineup & Link</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Share Volunteer Availability Link</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">Volunteers can confirm or decline in 1 tap</p>
             </div>
           </div>
@@ -89,7 +70,7 @@ export default function ShareLinkModal({
             className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-950/20 cursor-pointer block text-center"
           >
             <MessageSquare className="w-4 h-4" />
-            <span>Send Lineup & Link via WhatsApp</span>
+            <span>Send Availability Link via WhatsApp</span>
           </a>
 
           <div className="grid grid-cols-2 gap-2">

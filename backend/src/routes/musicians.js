@@ -64,6 +64,8 @@ router.get('/', async (req, res) => {
         m.email,
         m.phone,
         m.roles,
+        m.roles[1] AS primary_instrument,
+        ('Worship Leader' = ANY(m.roles)) AS can_lead_worship,
         m.ministry,
         m.status,
         m.household_id,
@@ -175,13 +177,17 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/musicians
 router.post('/', async (req, res) => {
-  const { name, email, phone, roles, ministry, status, household_id, household_role, birthday, gender, address, notes, active } = req.body;
+  const { name, email, phone, roles, primary_instrument, ministry, status, household_id, household_role, birthday, gender, address, notes, active } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
   }
 
   try {
-    const rolesArray = Array.isArray(roles) ? roles : [];
+    const rolesArray = Array.isArray(roles)
+      ? roles
+      : primary_instrument && String(primary_instrument).trim()
+        ? [String(primary_instrument).trim()]
+        : [];
     const result = await db.query(
       `
       INSERT INTO musicians (

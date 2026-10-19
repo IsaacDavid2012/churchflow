@@ -12,6 +12,8 @@ export default function ManualOverrideModal({
   roleSlot,
   currentMusicianId,
   onOverrideSaved,
+  autoFillRest = false,
+  onToggleAutoFillRest,
 }) {
   const [candidates, setCandidates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -53,17 +55,16 @@ export default function ManualOverrideModal({
         role_slot: roleSlot,
         musician_id: selectedId || null,
         notes,
+        auto_roster: Boolean(autoFillRest && selectedId),
       });
       onOverrideSaved();
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to override slot');
+      setError(err.message || 'Failed to assign slot');
     } finally {
       setSaving(false);
     }
   }
-
-
 
   if (!isOpen) return null;
 
@@ -78,9 +79,11 @@ export default function ManualOverrideModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Assign Musician: {positionName}</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Assign Team Member: {positionName}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Select a team member to assign to the {positionName} position.
+              {autoFillRest
+                ? `Auto-Fill Rest is ON: Selecting a member for ${positionName} will also auto-fill the remaining positions.`
+                : `Select a team member for ${positionName} (only this position will be set).`}
             </p>
           </div>
           <button
@@ -102,7 +105,7 @@ export default function ManualOverrideModal({
           <div className="flex items-center justify-between mt-3 px-1 text-xs">
             <span className="text-red-600 dark:text-red-400 font-bold">
               {showOnlyQualified
-                ? `Showing ${qualifiedCandidates.length} musician${qualifiedCandidates.length === 1 ? '' : 's'} tagged for ${positionName}`
+                ? `Showing ${qualifiedCandidates.length} member${qualifiedCandidates.length === 1 ? '' : 's'} tagged for ${positionName}`
                 : `Showing all ${candidates.length} team members`}
             </span>
             <button
@@ -138,13 +141,13 @@ export default function ManualOverrideModal({
 
               {displayedCandidates.length === 0 ? (
                 <div className="p-6 text-center rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs space-y-2">
-                  <p>No musicians currently tagged for <strong>{positionName}</strong>.</p>
+                  <p>No team members currently tagged for <strong>{positionName}</strong>.</p>
                   <button
                     type="button"
                     onClick={() => setShowOnlyQualified(false)}
                     className="px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-300 font-bold"
                   >
-                    Show all musicians ({candidates.length})
+                    Show all team members ({candidates.length})
                   </button>
                 </div>
               ) : (
@@ -167,11 +170,6 @@ export default function ManualOverrideModal({
                         <div>
                           <div className="flex items-center space-x-2">
                             <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">{m.name}</span>
-                            {m.is_worship_leader && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
-                                Worship Leader
-                              </span>
-                            )}
                             {m.currently_assigned_as && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
                                 Assigned: {m.currently_assigned_as}
@@ -200,7 +198,7 @@ export default function ManualOverrideModal({
                             {/* Role match badge */}
                             {m.has_role ? (
                               <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                Plays {positionName}
+                                Tagged for {positionName}
                               </span>
                             ) : (
                               <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400/80">
@@ -227,11 +225,28 @@ export default function ManualOverrideModal({
           )}
         </div>
 
-        {/* Notes & Save */}
+        {/* Notes, Auto-Fill Toggle & Save */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0 space-y-3">
+          {onToggleAutoFillRest && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Auto-fill remaining positions when saving this person
+              </span>
+              <button
+                type="button"
+                onClick={onToggleAutoFillRest}
+                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                  autoFillRest ? 'bg-red-600 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'
+                }`}
+              >
+                <span className="bg-white w-4 h-4 rounded-full shadow-sm" />
+              </button>
+            </div>
+          )}
+
           <input
             type="text"
-            placeholder="Optional override note (e.g. Special arrangement)"
+            placeholder="Optional assignment note"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
@@ -251,7 +266,7 @@ export default function ManualOverrideModal({
               disabled={saving}
               className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-lg shadow-red-600/20 disabled:opacity-50"
             >
-              {saving ? 'Applying...' : 'Apply Override'}
+              {saving ? 'Saving...' : autoFillRest && selectedId ? 'Assign & Auto-Fill Rest' : 'Save Assignment'}
             </button>
           </div>
         </div>

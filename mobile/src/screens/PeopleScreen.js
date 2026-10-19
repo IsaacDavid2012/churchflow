@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  RefreshControl,
+  ScrollView,
   Modal,
   Alert,
   Linking,
@@ -15,32 +17,39 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
-const MINISTRIES = ['All', 'Worship', 'Production', 'Ushers', 'Kids Church', 'Hospitality'];
+const MINISTRIES = ['All', 'Media Team', 'Production', 'Worship'];
 
 export default function PeopleScreen({ user, isDark = false }) {
   const [people, setPeople] = useState([]);
+  const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedMinistry, setSelectedMinistry] = useState('All');
 
-  // Add Member Modal
+  // Add / Edit Member Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPerson, setEditingPerson] = useState(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [instrument, setInstrument] = useState('Vocals');
-  const [ministry, setMinistry] = useState('Worship');
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [ministry, setMinistry] = useState('Media Team');
   const [saving, setSaving] = useState(false);
 
   const fetchPeople = async () => {
     try {
-      setLoading(true);
-      const data = await api.getMusicians();
-      setPeople(data || []);
+      const [data, posData] = await Promise.all([
+        api.getMusicians({ active: 'true' }),
+        api.getPositions().catch(() => []),
+      ]);
+      setPeople(Array.isArray(data) ? data : []);
+      setPositions(Array.isArray(posData) ? posData : []);
     } catch (err) {
       console.error('Fetch people error:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -48,61 +57,112 @@ export default function PeopleScreen({ user, isDark = false }) {
     fetchPeople();
   }, []);
 
-  const handleAddPerson = async () => {
-    if (!name.trim() || !email.trim()) {
-      Alert.alert('Required Fields', 'Please enter at least a Name and Email address.');
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPeople();
+  };
+
+  const handleOpenAddModal = async () => {
+    setEditingPerson(null);
+    setName('');
+    setEmail('');
+    setPhone('');
+    setSelectedRoles([]);
+    setMinistry('Media Team');
+    try {
+      const posList = await api.getPositions();
+      if (Array.isArray(posList)) setPositions(posList);
+    } catch (e) {}
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = async (person) => {
+    setEditingPerson(person);
+    setName(person.name || '');
+    setEmail(person.email || '');
+    setPhone(person.phone || '');
+    setSelectedRoles(Array.isArray(person.roles) ? [...person.roles] : (person.primary_instrument ? [person.primary_instrument] : []));
+    setMinistry(person.ministry || 'Media Team');
+    try {
+      const posList = await api.getPositions();
+      if (Array.isArray(posList)) setPositions(posList);
+    } catch (e) {}
+    setIsModalOpen(true);
+  };
+
+  const toggleRole = (roleName) => {
+    setSelectedRoles((prev) => {
+      const exists = prev.some((r) => r.toLowerCase() === roleName.toLowerCase());
+      return exists
+        ? prev.filter((r) => r.toLowerCase() !== roleName.toLowerCase())
+        : [...prev, roleName];
+    });
+  };
+
+  const handleSavePerson = async () => {
+    if (!name.trim()) {
+      Alert.alert('Required Field', 'Please enter the member full name.');
       return;
     }
 
     setSaving(true);
     try {
-      await api.createMusician({
+      const payload = {
         name: name.trim(),
-        email: email.trim(),
+        email: email.trim() || undefined,
         phone: phone.trim() || undefined,
-        primary_instrument: instrument,
+        roles: selectedRoles,
         ministry: ministry,
-      });
+      };
+
+      if (editingPerson) {
+        await api.updateMusician(editingPerson.id, payload);
+        Alert.alert('Member Updated', `${name}'s roles and profile have been updated.`);
+      } else {
+        await api.createMusician(payload);
+        Alert.alert('Member Added', `${name} has been added to ChurchFlow.`);
+      }
 
       setIsModalOpen(false);
-      setName('');
-      setEmail('');
-      setPhone('');
       fetchPeople();
-      Alert.alert('Volunteer Added', `${name} has been added to ChurchFlow.`);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not add volunteer');
+      Alert.alert('Error', err.response?.data?.error || err.message || 'Could not save member');
     } finally {
       setSaving(false);
     }
   };
 
   const colors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
-    inputBg: isDark ? '#1e293b' : '#f1f5f9',
-    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+    primary: '#c59c6c',
+    primaryLight: isDark ? '#3a2815' : '#f5ede1',
+    inputBg: isDark ? '#1e293b' : '#fbf8f3',
+    badgeBg: isDark ? '#1e293b' : '#fbf8f3',
   };
 
   const filteredPeople = people.filter((p) => {
+    const rolesStr = Array.isArray(p.roles) ? p.roles.join(' ') : (p.primary_instrument || '');
     const matchesSearch =
       (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
       (p.email || '').toLowerCase().includes(search.toLowerCase()) ||
-      (p.primary_instrument || '').toLowerCase().includes(search.toLowerCase());
+      rolesStr.toLowerCase().includes(search.toLowerCase());
 
     const matchesMin =
       selectedMinistry === 'All' ||
-      (p.ministry || 'Worship').toLowerCase() === selectedMinistry.toLowerCase();
+      (p.ministry || 'Media Team').toLowerCase().includes(selectedMinistry.toLowerCase());
 
     return matchesSearch && matchesMin;
   });
 
   const renderPersonCard = ({ item }) => {
+    const memberRoles = Array.isArray(item.roles) && item.roles.length > 0
+      ? item.roles
+      : (item.primary_instrument ? [item.primary_instrument] : []);
+
     return (
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.cardHeaderRow}>
@@ -113,21 +173,31 @@ export default function PeopleScreen({ user, isDark = false }) {
           </View>
 
           <View style={styles.personDetails}>
-            <Text style={[styles.personName, { color: colors.text }]}>{item.name}</Text>
-            <View style={styles.roleTagsRow}>
-              <View style={[styles.roleChip, { backgroundColor: colors.badgeBg }]}>
-                <Text style={[styles.roleChipText, { color: colors.text }]}>
-                  {item.primary_instrument || 'Volunteer'}
-                </Text>
-              </View>
-              {item.can_lead_worship ? (
-                <View style={styles.worshipLeaderBadge}>
-                  <Text style={styles.worshipLeaderBadgeText}>👑 Leader</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={[styles.personName, { color: colors.text }]}>{item.name}</Text>
+              <TouchableOpacity
+                onPress={() => handleOpenEditModal(item)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.badgeBg }}
+              >
+                <Ionicons name="create-outline" size={14} color={colors.primary} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>Edit Roles</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.roleTagsRow, { flexWrap: 'wrap' }]}>
+              {memberRoles.length > 0 ? (
+                memberRoles.map((r, idx) => (
+                  <View key={idx} style={[styles.roleChip, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.roleChipText, { color: colors.primary }]}>{r}</Text>
+                  </View>
+                ))
+              ) : (
+                <View style={[styles.roleChip, { backgroundColor: colors.badgeBg }]}>
+                  <Text style={[styles.roleChipText, { color: colors.subText }]}>No roles ticked</Text>
                 </View>
-              ) : null}
+              )}
             </View>
             <Text style={[styles.lastServedText, { color: colors.subText }]}>
-              Last served: {item.last_served_date || 'Never'}
+              Last served: {item.last_served_date ? String(item.last_served_date).split('T')[0] : 'Never'}
             </Text>
           </View>
         </View>
@@ -168,6 +238,14 @@ export default function PeopleScreen({ user, isDark = false }) {
     );
   };
 
+  const allRoleOptions = (() => {
+    const posNames = positions.map((p) => p.name);
+    const extras = selectedRoles.filter(
+      (r) => !posNames.some((n) => n.toLowerCase() === r.toLowerCase())
+    );
+    return [...posNames, ...extras];
+  })();
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       {/* Search Bar */}
@@ -178,7 +256,7 @@ export default function PeopleScreen({ user, isDark = false }) {
             style={[styles.searchInput, { color: colors.text }]}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search volunteers by name, skill..."
+            placeholder="Search members by name, role..."
             placeholderTextColor={colors.subText}
           />
           {search ? (
@@ -230,12 +308,13 @@ export default function PeopleScreen({ user, isDark = false }) {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderPersonCard}
           contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={48} color={colors.subText} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Volunteers Found</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Members Found</Text>
               <Text style={[styles.emptySubtitle, { color: colors.subText }]}>
-                {search ? 'Try a different search term.' : 'Add volunteers to your directory.'}
+                {search ? 'Try a different search term.' : 'Add members to your directory.'}
               </Text>
             </View>
           }
@@ -246,61 +325,120 @@ export default function PeopleScreen({ user, isDark = false }) {
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         activeOpacity={0.85}
-        onPress={() => setIsModalOpen(true)}
+        onPress={handleOpenAddModal}
       >
         <Ionicons name="person-add" size={20} color="#ffffff" />
         <Text style={styles.fabText}>Add Member</Text>
       </TouchableOpacity>
 
-      {/* Add Member Bottom Sheet Modal */}
+      {/* Add / Edit Member Bottom Sheet Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Church Volunteer</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {editingPerson ? 'Edit Member & Roles' : 'Add Team Member'}
+              </Text>
               <TouchableOpacity onPress={() => setIsModalOpen(false)}>
                 <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.inputLabel, { color: colors.subText }]}>Full Name *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Marcus Reed"
-              placeholderTextColor={colors.subText}
-            />
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Full Name *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Isaac"
+                placeholderTextColor={colors.subText}
+              />
 
-            <Text style={[styles.inputLabel, { color: colors.subText }]}>Email Address *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholder="marcus@churchflow.art"
-              placeholderTextColor={colors.subText}
-            />
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Email Address</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholder="isaac@jesusmyrock.org"
+                placeholderTextColor={colors.subText}
+              />
 
-            <Text style={[styles.inputLabel, { color: colors.subText }]}>Phone / WhatsApp Number</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="+60176001484"
-              placeholderTextColor={colors.subText}
-            />
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Phone / WhatsApp Number</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="+60176001484"
+                placeholderTextColor={colors.subText}
+              />
 
-            <Text style={[styles.inputLabel, { color: colors.subText }]}>Primary Role / Skill</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={instrument}
-              onChangeText={setInstrument}
-              placeholder="e.g. Lead Guitar, Audio Engineer, Vocalist"
-              placeholderTextColor={colors.subText}
-            />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 6 }}>
+                <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>
+                  Positions & Roles (Tick what they can do) ({selectedRoles.length})
+                </Text>
+                {allRoleOptions.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const allTicked = allRoleOptions.every((opt) =>
+                        selectedRoles.some((r) => r.toLowerCase() === opt.toLowerCase())
+                      );
+                      setSelectedRoles(allTicked ? [] : [...allRoleOptions]);
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                      {allRoleOptions.every((opt) =>
+                        selectedRoles.some((r) => r.toLowerCase() === opt.toLowerCase())
+                      )
+                        ? 'Clear All'
+                        : 'Select All'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                {allRoleOptions.map((roleName) => {
+                  const isTicked = selectedRoles.some(
+                    (r) => r.toLowerCase() === roleName.toLowerCase()
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={roleName}
+                      onPress={() => toggleRole(roleName)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: isTicked ? colors.primary : colors.border,
+                        backgroundColor: isTicked ? colors.primaryLight : colors.inputBg,
+                      }}
+                    >
+                      <Ionicons
+                        name={isTicked ? 'checkbox' : 'square-outline'}
+                        size={16}
+                        color={isTicked ? colors.primary : colors.subText}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: isTicked ? colors.primary : colors.text,
+                        }}
+                      >
+                        {roleName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
 
             <View style={styles.modalActionRow}>
               <TouchableOpacity
@@ -311,13 +449,15 @@ export default function PeopleScreen({ user, isDark = false }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.submitBtn, { backgroundColor: colors.primary }]}
-                onPress={handleAddPerson}
+                onPress={handleSavePerson}
                 disabled={saving}
               >
                 {saving ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Save Volunteer</Text>
+                  <Text style={styles.submitBtnText}>
+                    {editingPerson ? 'Update Member' : 'Save Member'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -397,14 +537,14 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f5ede1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#dc2626',
+    color: '#9e7343',
   },
   personDetails: {
     flex: 1,
@@ -486,7 +626,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     ...Platform.select({
       ios: {
-        shadowColor: '#dc2626',
+        shadowColor: '#c59c6c',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,

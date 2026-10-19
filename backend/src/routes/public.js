@@ -20,6 +20,7 @@ router.get('/avail/:token', async (req, res) => {
         s.notes,
         s.status,
         s.deadline_hours_before,
+        s.position_ids,
         c.name AS campus_name,
         wl.name AS worship_leader_name,
         wl.id AS worship_leader_id
@@ -36,6 +37,7 @@ router.get('/avail/:token', async (req, res) => {
     }
 
     const service = serviceRes.rows[0];
+    const activePositionIds = Array.isArray(service.position_ids) && service.position_ids.length > 0 ? service.position_ids : null;
 
     // 2. Fetch current drafted assignments for this service
     const assignRes = await db.query(
@@ -54,9 +56,10 @@ router.get('/avail/:token', async (req, res) => {
       FROM positions_template p
       LEFT JOIN assignments a ON a.position_id = p.id AND a.service_id = $1
       LEFT JOIN musicians m ON m.id = a.musician_id
+      WHERE ($2::uuid[] IS NULL OR p.id = ANY($2::uuid[]))
       ORDER BY p.sort_order ASC, a.role_slot ASC
     `,
-      [service.id]
+      [service.id, activePositionIds]
     );
 
     // 3. Fetch all active musicians with their current availability for this service
@@ -143,8 +146,33 @@ router.post('/avail/:token', async (req, res) => {
 
     let reShuffleResult = null;
 
-    // 4. If musician declined, trigger live auto-promotion / re-shuffle if they were assigned
-    if (status === 'declined') {
+    // 4. If musician confirmed available, mark their active assignment(s) for this service as 'confirmed'
+    if (status === 'available') {
+      const confirmRes = await db.query(
+        `
+        UPDATE assignments
+        SET status = 'confirmed'
+        WHERE service_id = $1 AND musician_id = $2 AND status IN ('pending', 'promoted')
+        RETURNING id, position_id, role_slot
+      `,
+        [service.id, musician_id]
+      );
+
+      if (confirmRes.rows.length > 0) {
+        await db.query(
+          `
+          INSERT INTO notifications_log (service_id, type, message, metadata)
+          VALUES ($1, 'availability_change', $2, $3)
+        `,
+          [
+            service.id,
+            `[Confirmed] ${musician.name} confirmed availability for the service lineup.`,
+            JSON.stringify({ musicianId: musician_id, musicianName: musician.name, status: 'confirmed' }),
+          ]
+        );
+      }
+    } else if (status === 'declined') {
+      // If musician declined, trigger live auto-promotion / re-shuffle if they were assigned
       reShuffleResult = await handleMusicianDeclined(db, service.id, musician_id);
     }
 

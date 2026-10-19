@@ -31,14 +31,36 @@ router.get('/', async (req, res) => {
         s.notes,
         s.status,
         s.deadline_hours_before,
+        s.position_ids,
         s.created_at,
         s.updated_at,
         wl.name AS worship_leader_name,
-        (SELECT COUNT(*) FROM service_plan_items spi WHERE spi.service_id = s.id) AS plan_items_count,
+        (SELECT COUNT(*) FROM service_plan_items spi WHERE spi.service_id = s.id AND spi.item_type != 'song') AS plan_items_count,
+        (SELECT COUNT(*) FROM positions_template pt_c WHERE s.position_ids IS NULL OR pt_c.id = ANY(s.position_ids)) AS required_positions_count,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'positionName', pt.name,
+                'primary', json_build_object('name', m_asg.name)
+              )
+              ORDER BY pt.sort_order ASC, pt.name ASC
+            )
+            FROM assignments asg_l
+            JOIN positions_template pt ON pt.id = asg_l.position_id
+            JOIN musicians m_asg ON m_asg.id = asg_l.musician_id
+            WHERE asg_l.service_id = s.id
+              AND asg_l.role_slot = 'primary'
+              AND asg_l.musician_id IS NOT NULL
+              AND asg_l.status != 'declined'
+              AND (s.position_ids IS NULL OR pt.id = ANY(s.position_ids))
+          ),
+          '[]'::json
+        ) AS lineup,
         COUNT(DISTINCT a.musician_id) FILTER (WHERE a.status = 'available') AS available_count,
         COUNT(DISTINCT a.musician_id) FILTER (WHERE a.status = 'declined') AS declined_count,
-        COUNT(DISTINCT asg.id) FILTER (WHERE asg.musician_id IS NOT NULL AND asg.status = 'confirmed') AS confirmed_assignments_count,
-        COUNT(DISTINCT asg.id) FILTER (WHERE asg.musician_id IS NOT NULL) AS total_assignments_count
+        COUNT(DISTINCT asg.id) FILTER (WHERE asg.musician_id IS NOT NULL AND asg.status = 'confirmed' AND (s.position_ids IS NULL OR asg.position_id = ANY(s.position_ids))) AS confirmed_assignments_count,
+        COUNT(DISTINCT asg.id) FILTER (WHERE asg.musician_id IS NOT NULL AND (s.position_ids IS NULL OR asg.position_id = ANY(s.position_ids))) AS total_assignments_count
       FROM services s
       LEFT JOIN campuses c ON c.id = s.campus_id
       LEFT JOIN musicians wl ON wl.id = s.worship_leader_id
@@ -58,17 +80,18 @@ router.get('/', async (req, res) => {
 
 // POST /api/services - Create a new service
 router.post('/', async (req, res) => {
-  const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before } = req.body;
+  const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before, position_ids } = req.body;
   if (!service_date) {
     return res.status(400).json({ error: 'Service date is required' });
   }
 
   try {
     const token = uuidv4();
+    const resolvedPositionIds = Array.isArray(position_ids) && position_ids.length > 0 ? position_ids : null;
     const result = await db.query(
       `
-      INSERT INTO services (service_date, service_time, service_type, campus_id, theme, token, notes, status, deadline_hours_before)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'availability_open', $8)
+      INSERT INTO services (service_date, service_time, service_type, campus_id, theme, token, notes, status, deadline_hours_before, position_ids)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'availability_open', $8, $9)
       RETURNING *
     `,
       [
@@ -80,6 +103,7 @@ router.post('/', async (req, res) => {
         token,
         notes || '',
         parseInt(deadline_hours_before || '48', 10),
+        resolvedPositionIds,
       ]
     );
 
@@ -94,7 +118,7 @@ router.post('/', async (req, res) => {
       [
         service.id,
         `New service created for ${service.service_date}`,
-        JSON.stringify({ createdBy: req.user.name, serviceDate: service.service_date }),
+        JSON.stringify({ createdBy: req.user.name, serviceDate: service.service_date, positionIds: resolvedPositionIds }),
       ]
     );
 
@@ -108,7 +132,7 @@ router.post('/', async (req, res) => {
 // PUT /api/services/:id - Update service details
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before, status } = req.body;
+  const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before, status, position_ids } = req.body;
 
   try {
     const result = await db.query(
@@ -118,13 +142,14 @@ router.put('/:id', async (req, res) => {
         service_date = COALESCE($1, service_date),
         service_time = COALESCE($2, service_time),
         service_type = COALESCE($3, service_type),
-        campus_id = $4,
+        campus_id = COALESCE($4, campus_id),
         theme = COALESCE($5, theme),
         notes = COALESCE($6, notes),
         deadline_hours_before = COALESCE($7, deadline_hours_before),
         status = COALESCE($8, status),
+        position_ids = COALESCE($9, position_ids),
         updated_at = NOW()
-      WHERE id = $9
+      WHERE id = $10
       RETURNING *
     `,
       [
@@ -136,6 +161,7 @@ router.put('/:id', async (req, res) => {
         notes,
         deadline_hours_before !== undefined ? parseInt(deadline_hours_before, 10) : undefined,
         status,
+        Array.isArray(position_ids) && position_ids.length > 0 ? position_ids : null,
         id
       ]
     );
@@ -187,6 +213,7 @@ router.get('/:id', async (req, res) => {
         s.notes,
         s.status,
         s.deadline_hours_before,
+        s.position_ids,
         s.created_at,
         s.updated_at,
         wl.name AS worship_leader_name,
@@ -205,8 +232,12 @@ router.get('/:id', async (req, res) => {
     }
     const service = serviceRes.rows[0];
 
-    // 2. Fetch all positions
-    const posRes = await db.query('SELECT * FROM positions_template ORDER BY sort_order ASC, name ASC');
+    // 2. Fetch enabled positions for this service (or all positions if position_ids is NULL)
+    const activePositionIds = Array.isArray(service.position_ids) && service.position_ids.length > 0 ? service.position_ids : null;
+    const posRes = await db.query(
+      'SELECT * FROM positions_template WHERE ($1::uuid[] IS NULL OR id = ANY($1::uuid[])) ORDER BY sort_order ASC, name ASC',
+      [activePositionIds]
+    );
     const positions = posRes.rows;
 
     // 3. Fetch assignments with musician details
@@ -376,7 +407,7 @@ router.get('/:id/plan', async (req, res) => {
 // POST /api/services/:id/plan - Add an item to Order of Service
 router.post('/:id/plan', async (req, res) => {
   const { id } = req.params;
-  const { item_type, title, duration_minutes, leader, song_id, song_key, notes } = req.body;
+  const { item_type, title, duration_minutes, leader, presenter, song_id, song_key, notes } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: 'Item title is required' });
@@ -400,7 +431,7 @@ router.post('/:id/plan', async (req, res) => {
         item_type || 'item',
         title.trim(),
         duration_minutes ? parseInt(duration_minutes, 10) : 5,
-        leader || '',
+        leader || presenter || '',
         song_id || null,
         song_key || null,
         notes || ''
@@ -417,9 +448,10 @@ router.post('/:id/plan', async (req, res) => {
 // PUT /api/services/:id/plan/:itemId - Update an Order of Service item
 router.put('/:id/plan/:itemId', async (req, res) => {
   const { id, itemId } = req.params;
-  const { item_type, title, duration_minutes, leader, song_id, song_key, notes, item_order } = req.body;
+  const { item_type, title, duration_minutes, leader, presenter, song_id, song_key, notes, item_order } = req.body;
 
   try {
+    const resolvedLeader = leader !== undefined ? leader : presenter;
     const result = await db.query(
       `
       UPDATE service_plan_items
@@ -439,7 +471,7 @@ router.put('/:id/plan/:itemId', async (req, res) => {
         item_type,
         title ? title.trim() : undefined,
         duration_minutes !== undefined ? parseInt(duration_minutes, 10) : undefined,
-        leader,
+        resolvedLeader,
         song_id || null,
         song_key || null,
         notes,
@@ -476,7 +508,7 @@ router.delete('/:id/plan/:itemId', async (req, res) => {
 // POST /api/services/:id/select-worship-leader or /:id/worship-leader
 router.post(['/:id/select-worship-leader', '/:id/worship-leader'], async (req, res) => {
   const { id } = req.params;
-  const { worship_leader_id, auto_roster = true } = req.body;
+  const { worship_leader_id, auto_roster = false } = req.body;
 
   try {
     const sRes = await db.query('SELECT * FROM services WHERE id = $1', [id]);
@@ -493,7 +525,7 @@ router.post(['/:id/select-worship-leader', '/:id/worship-leader'], async (req, r
       id,
     ]);
 
-    const wlPosRes = await db.query("SELECT id FROM positions_template WHERE LOWER(name) LIKE '%worship leader%' LIMIT 1");
+    const wlPosRes = await db.query("SELECT id FROM positions_template WHERE LOWER(name) LIKE '%worship leader%' OR LOWER(name) LIKE '%team lead%' LIMIT 1");
     if (wlPosRes.rows.length > 0) {
       const wlPosId = wlPosRes.rows[0].id;
       if (worship_leader_id) {
@@ -514,21 +546,21 @@ router.post(['/:id/select-worship-leader', '/:id/worship-leader'], async (req, r
     }
 
     let shuffleResult = null;
-    if (worship_leader_id && auto_roster) {
-      // Automatically draft lineup: 1 person per instrument/position, no backup required
+    if (worship_leader_id && auto_roster === true) {
+      // Only auto-draft the rest of the lineup if auto_roster toggle is explicitly enabled
       shuffleResult = await autoShuffleService(db, id, { includeBackup: false });
     }
 
-    const msg = `Worship Leader set to ${wlName} by ${req.user.name}${shuffleResult ? ' and team auto-scheduled (1 person per slot).' : '.'}`;
+    const msg = `Team Leader set to ${wlName} by ${req.user.name}${shuffleResult ? ' and remaining slots auto-scheduled.' : '.'}`;
     await db.query(
       'INSERT INTO notifications_log (service_id, type, message, metadata) VALUES ($1, $2, $3, $4)',
-      [id, 'worship_leader_selected', msg, JSON.stringify({ worshipLeaderId: worship_leader_id, updatedBy: req.user.name, shuffleResult })]
+      [id, 'worship_leader_selected', msg, JSON.stringify({ worshipLeaderId: worship_leader_id, autoRoster: auto_roster, updatedBy: req.user.name, shuffleResult })]
     );
 
     res.json({ success: true, message: msg, worship_leader_id, shuffleResult });
   } catch (err) {
     console.error('Select worship leader error:', err);
-    res.status(500).json({ error: 'Failed to update worship leader' });
+    res.status(500).json({ error: 'Failed to update team leader' });
   }
 });
 
@@ -559,35 +591,40 @@ router.post('/:id/shuffle', async (req, res) => {
 // POST /api/services/:id/override or /:id/assignments/override
 router.post(['/:id/override', '/:id/assignments/override'], async (req, res) => {
   const { id } = req.params;
-  const { position_id, role_slot, musician_id } = req.body;
+  const { position_id, role_slot, musician_id, notes, auto_roster = false } = req.body;
 
   if (!position_id || !role_slot) {
     return res.status(400).json({ error: 'position_id and role_slot are required' });
   }
 
   try {
-    const result = await manualOverrideSlot(db, id, position_id, role_slot, musician_id || null);
+    const result = await manualOverrideSlot(db, id, position_id, role_slot, musician_id || null, notes || '');
 
     const posRes = await db.query('SELECT name FROM positions_template WHERE id = $1', [position_id]);
     const posName = posRes.rows[0]?.name || 'Position';
     let musName = 'Unassigned';
     if (musician_id) {
       const mRes = await db.query('SELECT name FROM musicians WHERE id = $1', [musician_id]);
-      musName = mRes.rows[0]?.name || 'Musician';
+      musName = mRes.rows[0]?.name || 'Member';
     }
 
-    const msg = `Manual override: ${posName} (${role_slot}) set to ${musName} by ${req.user.name}`;
+    let shuffleResult = null;
+    if (musician_id && auto_roster === true) {
+      shuffleResult = await autoShuffleService(db, id, { includeBackup: false, preserveExisting: true });
+    }
+
+    const msg = `Manual assignment: ${posName} set to ${musName} by ${req.user.name}${shuffleResult ? ' (and remaining positions auto-filled).' : ''}`;
     await db.query(
       'INSERT INTO notifications_log (service_id, type, message, metadata) VALUES ($1, $2, $3, $4)',
       [
         id,
         'manual_override',
         msg,
-        JSON.stringify({ positionId: position_id, roleSlot: role_slot, musicianId: musician_id, updatedBy: req.user.name }),
+        JSON.stringify({ positionId: position_id, roleSlot: role_slot, musicianId: musician_id, autoRoster: auto_roster, updatedBy: req.user.name }),
       ]
     );
 
-    res.json({ success: true, message: msg, assignment: result });
+    res.json({ success: true, message: msg, assignment: result, shuffleResult });
   } catch (err) {
     console.error('Manual override error:', err);
     res.status(500).json({ error: err.message || 'Manual override failed' });

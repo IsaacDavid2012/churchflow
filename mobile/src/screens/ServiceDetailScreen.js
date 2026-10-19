@@ -15,10 +15,26 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
+const SERVICE_TYPES = [
+  'Sunday Morning Celebration',
+  'Sunday Evening Praise & Word',
+  'Midweek Encounter & Prayer',
+  'Youth Revolution (Friday)',
+  'Night of Worship & Prophetic',
+  'Special Gathering',
+];
+
+const SERVICE_STATUSES = [
+  { id: 'draft', label: 'Draft' },
+  { id: 'published', label: 'Published' },
+  { id: 'confirmed', label: 'Confirmed' },
+];
+
 export default function ServiceDetailScreen({ service, onBack, user, isDark = false }) {
   const [activeTab, setActiveTab] = useState('lineup'); // 'lineup' | 'runsheet' | 'availability' | 'logs'
   const [loading, setLoading] = useState(true);
   const [serviceInfo, setServiceInfo] = useState(service);
+  const [campuses, setCampuses] = useState([]);
   const [lineup, setLineup] = useState([]);
   const [planItems, setPlanItems] = useState([]);
   const [availability, setAvailability] = useState({ available: [], declined: [] });
@@ -32,10 +48,24 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isWorshipLeaderModalOpen, setIsWorshipLeaderModalOpen] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [autoFillRest, setAutoFillRest] = useState(false);
+  const [confirmingLineup, setConfirmingLineup] = useState(false);
+
+  // Edit Service Details Form State
+  const [isEditServiceModalOpen, setIsEditServiceModalOpen] = useState(false);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('10:00 AM');
+  const [editType, setEditType] = useState('Sunday Morning Celebration');
+  const [editTheme, setEditTheme] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editCampusId, setEditCampusId] = useState('');
+  const [editStatus, setEditStatus] = useState('draft');
+  const [savingService, setSavingService] = useState(false);
+  const [deletingService, setDeletingService] = useState(false);
 
   // Plan Item Form State
   const [planTitle, setPlanTitle] = useState('');
-  const [planType, setPlanType] = useState('song');
+  const [planType, setPlanType] = useState('media');
   const [planDuration, setPlanDuration] = useState('5');
   const [planPresenter, setPlanPresenter] = useState('');
   const [planNotes, setPlanNotes] = useState('');
@@ -44,30 +74,28 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const fetchServiceData = async () => {
     try {
       setLoading(true);
-      const [svcData, musiciansData, logsData] = await Promise.all([
+      const [svcData, musiciansData, logsData, campusesData] = await Promise.all([
         api.getService(service.id),
         api.getMusicians().catch(() => []),
         api.getAuditLogs(service.id).catch(() => []),
+        api.getCampuses().catch(() => []),
       ]);
 
       if (svcData) {
         setServiceInfo(svcData.service || service);
         setLineup(Array.isArray(svcData.lineup) ? svcData.lineup : []);
-        setPlanItems(Array.isArray(svcData.plan) ? svcData.plan : []);
+        const items = (svcData.planItems || svcData.plan || []).filter((i) => i.item_type !== 'song');
+        setPlanItems(Array.isArray(items) ? items : []);
         setAvailability(svcData.availability || { available: [], declined: [] });
       }
 
       setAuditLogs(Array.isArray(logsData) ? logsData : []);
 
-      // Filter worship leaders from musicians list
       if (Array.isArray(musiciansData)) {
-        const leaders = musiciansData.filter(
-          (m) =>
-            m.roles?.some((r) => r.toLowerCase().includes('worship') || r.toLowerCase().includes('leader')) ||
-            m.can_lead_worship ||
-            m.status === 'leader'
-        );
-        setWorshipLeaders(leaders.length > 0 ? leaders : musiciansData);
+        setWorshipLeaders(musiciansData);
+      }
+      if (Array.isArray(campusesData)) {
+        setCampuses(campusesData);
       }
     } catch (err) {
       console.error('Fetch service detail error:', err);
@@ -80,13 +108,88 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     fetchServiceData();
   }, [service.id]);
 
+  const handleOpenEditModal = () => {
+    setEditDate(serviceInfo?.service_date ? serviceInfo.service_date.split('T')[0] : '');
+    setEditTime(serviceInfo?.service_time || '10:00 AM');
+    setEditType(serviceInfo?.service_type || 'Sunday Morning Celebration');
+    setEditTheme(serviceInfo?.theme || '');
+    setEditNotes(serviceInfo?.notes || '');
+    setEditCampusId(serviceInfo?.campus_id || (campuses[0]?.id || ''));
+    setEditStatus(serviceInfo?.status || 'draft');
+    setIsEditServiceModalOpen(true);
+  };
+
+  const handleSaveServiceDetails = async () => {
+    if (!editDate.trim()) {
+      Alert.alert('Missing Date', 'Please enter a service date (YYYY-MM-DD)');
+      return;
+    }
+
+    setSavingService(true);
+    try {
+      const updated = await api.updateService(service.id, {
+        service_date: editDate.trim(),
+        service_time: editTime.trim(),
+        service_type: editType,
+        theme: editTheme.trim() || undefined,
+        notes: editNotes.trim() || undefined,
+        campus_id: editCampusId || undefined,
+        status: editStatus,
+      });
+
+      const matchedCampus = campuses.find((c) => c.id === editCampusId);
+      setServiceInfo((prev) => ({
+        ...prev,
+        ...updated,
+        campus_name: matchedCampus?.name || prev.campus_name,
+      }));
+      setIsEditServiceModalOpen(false);
+      Alert.alert('Service Updated', 'Service details have been updated.');
+    } catch (err) {
+      console.error('Update service error:', err);
+      Alert.alert('Error', err.message || 'Failed to update service details');
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handleDeleteService = () => {
+    Alert.alert(
+      'Delete Service',
+      `Are you sure you want to permanently delete the "${serviceInfo?.service_type || 'Service'}" on ${serviceInfo?.service_date}? This will delete all roster assignments, availability, and run sheet items for this service.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingService(true);
+            try {
+              await api.deleteService(service.id);
+              if (isEditServiceModalOpen) {
+                setIsEditServiceModalOpen(false);
+              }
+              Alert.alert('Service Deleted', 'The service has been permanently deleted.');
+              onBack();
+            } catch (err) {
+              console.error('Delete service error:', err);
+              Alert.alert('Delete Failed', err.message || 'Failed to delete service');
+              setDeletingService(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleOpenAssignModal = async (slot) => {
     setSelectedSlot(slot);
     setIsAssignModalOpen(true);
     setLoadingCandidates(true);
     try {
       const cList = await api.getCandidates(service.id, slot.positionId);
-      setCandidates(Array.isArray(cList) ? cList : []);
+      const list = Array.isArray(cList) ? cList : (cList?.candidates || []);
+      setCandidates(list);
     } catch (err) {
       console.error('Fetch candidates error:', err);
       setCandidates([]);
@@ -102,30 +205,49 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
         position_id: selectedSlot.positionId,
         role_slot: 'primary',
         musician_id: musicianId,
+        auto_roster: Boolean(autoFillRest && musicianId),
       });
       setIsAssignModalOpen(false);
       fetchServiceData();
-      Alert.alert('Roster Updated', 'Volunteer assigned to position.');
+      Alert.alert(
+        'Roster Updated',
+        autoFillRest && musicianId
+          ? 'Member assigned and remaining open slots auto-filled!'
+          : 'Member assigned to position.'
+      );
     } catch (err) {
-      Alert.alert('Assignment Error', err.message || 'Could not assign volunteer');
+      Alert.alert('Assignment Error', err.message || 'Could not assign member');
     }
   };
 
   const handleSelectWorshipLeader = async (musicianId) => {
     try {
-      await api.setWorshipLeader(service.id, musicianId);
+      await api.setWorshipLeader(service.id, musicianId, Boolean(autoFillRest));
       setIsWorshipLeaderModalOpen(false);
       fetchServiceData();
-      Alert.alert('Worship Leader Updated', 'Leader set and lineup refreshed.');
+      Alert.alert('Team Lead Updated', autoFillRest ? 'Lead set and remaining slots auto-filled.' : 'Team Lead updated.');
     } catch (err) {
-      Alert.alert('Error', err.message || 'Could not update worship leader');
+      Alert.alert('Error', err.message || 'Could not update team lead');
+    }
+  };
+
+  const handleConfirmLineup = async () => {
+    setConfirmingLineup(true);
+    try {
+      await api.confirmLineup(service.id);
+      await fetchServiceData();
+      Alert.alert('Lineup Confirmed', 'Final lineup is confirmed! You can now share the final lineup for WhatsApp.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to confirm lineup');
+    } finally {
+      setConfirmingLineup(false);
     }
   };
 
   const handleAutoSchedule = async () => {
     Alert.alert(
-      'Auto-Fill Lineup',
-      'Generate fair volunteer rotation based on availability and serving frequency?',
+      'Run Auto-Roster',
+      'Generate fair team rotation based on availability and serving frequency?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -133,7 +255,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           onPress: async () => {
             try {
               setLoading(true);
-              await api.shuffleLineup(service.id, { pool: 'available_and_unresponsive' });
+              await api.shuffleLineup(service.id, { pool: 'auto' });
               fetchServiceData();
               Alert.alert('Success', 'Lineup roster updated!');
             } catch (err) {
@@ -146,32 +268,57 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     );
   };
 
-  const handleShareWhatsApp = () => {
-    const lines = [
-      `⛪ *ChurchFlow Lineup - ${serviceInfo?.service_type || 'Sunday Service'}*`,
-      `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
-      `🏛️ *Campus:* ${serviceInfo?.campus_name || 'Main Sanctuary'}`,
-      serviceInfo?.theme ? `📖 *Theme:* "${serviceInfo.theme}"` : '',
-      `\n👥 *Stage Lineup:*`,
-    ];
-
-    lineup.forEach((slot) => {
-      const name = slot.primary?.name || 'Open Position';
-      const statusIcon = slot.primary?.status === 'confirmed' ? '✅' : '⏳';
-      lines.push(`• *${slot.positionName}:* ${name} ${statusIcon}`);
+  const getFormattedFinalLineupText = () => {
+    const displayedSlots = lineup.filter(
+      (s) => autoFillRest || !(s.positionName || '').toLowerCase().includes('worship leader')
+    );
+    const lineupLines = [];
+    displayedSlots.forEach((slot) => {
+      if (slot.primary?.name) {
+        lineupLines.push(`• ${slot.positionName}: ${slot.primary.name}`);
+      }
     });
+    return [
+      `📅 *Date:* ${serviceInfo?.service_date}`,
+      `⏰ *Time:* ${serviceInfo?.service_time || '10:00 AM'}`,
+      '',
+      `👥 *Final Lineup:*`,
+      ...(lineupLines.length > 0 ? lineupLines : ['• No assignments yet']),
+    ].join('\n');
+  };
 
-    lines.push(`\n🔗 Confirm your serving status: https://serve.creativeclicks.art`);
+  const handleShareWhatsApp = () => {
+    const isLineupConfirmed = serviceInfo?.status === 'confirmed';
+    let messageText = '';
 
-    const text = encodeURIComponent(lines.filter(Boolean).join('\n'));
-    Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
-      Linking.openURL(`https://api.whatsapp.com/send?text=${text}`);
+    if (isLineupConfirmed) {
+      messageText = getFormattedFinalLineupText();
+    } else {
+      const publicLink = serviceInfo?.token
+        ? `https://serve.creativeclicks.art/avail/${serviceInfo.token}`
+        : 'https://serve.creativeclicks.art';
+      messageText = [
+        `⛪ *Jesus My Rock Church — ${serviceInfo?.service_type || 'Sunday Service'}*`,
+        `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
+        serviceInfo?.campus_name ? `📍 *Campus:* ${serviceInfo.campus_name}` : '',
+        serviceInfo?.theme ? `📖 *Theme:* "${serviceInfo.theme}"` : '',
+        '',
+        `👉 *Confirm Your Availability:*`,
+        publicLink,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    const encoded = encodeURIComponent(messageText);
+    Linking.openURL(`whatsapp://send?text=${encoded}`).catch(() => {
+      Linking.openURL(`https://api.whatsapp.com/send?text=${encoded}`);
     });
   };
 
   const handleAddPlanItem = async () => {
     if (!planTitle.trim()) {
-      Alert.alert('Missing Title', 'Please enter an item title (e.g. Song name, Sermon).');
+      Alert.alert('Missing Title', 'Please enter an item title (e.g. Countdown, Sermon).');
       return;
     }
 
@@ -181,6 +328,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
         title: planTitle.trim(),
         item_type: planType,
         duration_minutes: parseInt(planDuration, 10) || 5,
+        leader: planPresenter.trim() || undefined,
         presenter: planPresenter.trim() || undefined,
         notes: planNotes.trim() || undefined,
         sequence_order: planItems.length + 1,
@@ -200,15 +348,15 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   };
 
   const colors = {
-    bg: isDark ? '#020617' : '#f8fafc',
+    bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
-    border: isDark ? '#1e293b' : '#e2e8f0',
+    border: isDark ? '#1e293b' : '#eadbc4',
     text: isDark ? '#ffffff' : '#0f172a',
     subText: isDark ? '#94a3b8' : '#64748b',
-    primary: '#dc2626',
-    primaryLight: isDark ? '#3b0d0c' : '#fee2e2',
-    inputBg: isDark ? '#1e293b' : '#f1f5f9',
-    badgeBg: isDark ? '#1e293b' : '#f1f5f9',
+    primary: '#c59c6c',
+    primaryLight: isDark ? '#3a2815' : '#f5ede1',
+    inputBg: isDark ? '#1e293b' : '#fbf8f3',
+    badgeBg: isDark ? '#1e293b' : '#fbf8f3',
   };
 
   const getRoleIcon = (role) => {
@@ -252,9 +400,25 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.shareIconBtn} onPress={handleShareWhatsApp}>
-          <Ionicons name="logo-whatsapp" size={22} color="#16a34a" />
-        </TouchableOpacity>
+        <View style={styles.topBarActions}>
+          <TouchableOpacity
+            style={[styles.topActionBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+            onPress={handleOpenEditModal}
+          >
+            <Ionicons name="create-outline" size={17} color={colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.topActionBtn, styles.deleteTopBtn]}
+            onPress={handleDeleteService}
+          >
+            <Ionicons name="trash-outline" size={17} color="#ef4444" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.shareIconBtn} onPress={handleShareWhatsApp}>
+            <Ionicons name="logo-whatsapp" size={20} color="#16a34a" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Segmented Tabs */}
@@ -309,42 +473,152 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     {serviceInfo?.theme ? `"${serviceInfo.theme}"` : serviceInfo?.service_type}
                   </Text>
                   <Text style={[styles.heroCampus, { color: colors.subText }]}>
-                    📍 {serviceInfo?.campus_name || 'Sanctuary Campus'}
+                    📍 {serviceInfo?.campus_name || 'Damansara Perdana Sanctuary'}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.autoFillBtn, { backgroundColor: colors.primary }]}
-                  onPress={handleAutoSchedule}
-                >
-                  <Ionicons name="sparkles" size={14} color="#fff" />
-                  <Text style={styles.autoFillBtnText}>Auto-Fill</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TouchableOpacity
+                    style={[styles.autoFillBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleAutoSchedule}
+                  >
+                    <Ionicons name="sparkles" size={14} color="#fff" />
+                    <Text style={styles.autoFillBtnText}>Auto-Roster</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.autoFillBtn, { backgroundColor: '#059669' }]}
+                    onPress={handleConfirmLineup}
+                    disabled={confirmingLineup}
+                  >
+                    <Ionicons name="checkmark-done" size={14} color="#fff" />
+                    <Text style={styles.autoFillBtnText}>
+                      {serviceInfo?.status === 'confirmed' ? 'Re-Confirm' : 'Confirm'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Worship Leader Tile */}
+              {/* Service Management Actions Row */}
+              <View style={[styles.heroActionsRow, { borderTopColor: colors.border }]}>
+                <TouchableOpacity
+                  style={[styles.heroActionPill, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                  onPress={handleOpenEditModal}
+                >
+                  <Ionicons name="create-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.heroActionPillText, { color: colors.text }]}>Edit Details</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.heroActionPill, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                  onPress={handleDeleteService}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Text style={[styles.heroActionPillText, { color: '#ef4444' }]}>Delete Service</Text>
+                </TouchableOpacity>
+
+                {serviceInfo?.notes ? (
+                  <View style={{ flex: 1, marginLeft: 4 }}>
+                    <Text style={[styles.heroNotesPreview, { color: colors.subText }]} numberOfLines={1}>
+                      📝 {serviceInfo.notes}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Toggle: Set 1 & Auto-Fill Rest (Default OFF for Media Team) */}
               <TouchableOpacity
-                style={[styles.leaderBanner, { backgroundColor: colors.primaryLight }]}
-                onPress={() => setIsWorshipLeaderModalOpen(true)}
+                style={[
+                  styles.leaderBanner,
+                  {
+                    backgroundColor: autoFillRest ? colors.primaryLight : colors.inputBg,
+                    borderWidth: 1,
+                    borderColor: autoFillRest ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setAutoFillRest(!autoFillRest)}
               >
-                <View style={styles.crownCircle}>
-                  <Text style={{ fontSize: 16 }}>👑</Text>
-                </View>
+                <Ionicons
+                  name={autoFillRest ? 'toggle' : 'toggle-outline'}
+                  size={24}
+                  color={autoFillRest ? colors.primary : colors.subText}
+                />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[styles.leaderTag, { color: colors.primary }]}>Assigned Worship Leader</Text>
-                  <Text style={[styles.leaderName, { color: colors.text }]}>
-                    {serviceInfo?.worship_leader_name || 'Tap to assign Worship Leader'}
+                  <Text style={[styles.leaderTag, { color: autoFillRest ? colors.primary : colors.subText }]}>
+                    Set 1 & Auto-Fill Rest: {autoFillRest ? 'ON' : 'OFF'}
+                  </Text>
+                  <Text style={[styles.leaderName, { color: colors.text, fontSize: 12 }]}>
+                    {autoFillRest
+                      ? 'Assigning 1 person auto-fills remaining open positions'
+                      : 'Media Team Mode: Assign each position individually'}
                   </Text>
                 </View>
-                <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
               </TouchableOpacity>
+
+              {/* Team Lead Tile (Only shown when Auto-Fill Rest is ON) */}
+              {autoFillRest && (
+                <TouchableOpacity
+                  style={[styles.leaderBanner, { backgroundColor: colors.primaryLight }]}
+                  onPress={() => setIsWorshipLeaderModalOpen(true)}
+                >
+                  <View style={styles.crownCircle}>
+                    <Text style={{ fontSize: 16 }}>🎬</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.leaderTag, { color: colors.primary }]}>Assigned Team Lead</Text>
+                    <Text style={[styles.leaderName, { color: colors.text }]}>
+                      {serviceInfo?.worship_leader_name || 'Tap to assign Team Lead'}
+                    </Text>
+                  </View>
+                  <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+
+              {/* Final Lineup Confirmed — Share for WhatsApp */}
+              {serviceInfo?.status === 'confirmed' && (
+                <View
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: '#ecfdf5',
+                    borderWidth: 1,
+                    borderColor: '#6ee7b7',
+                  }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857', marginBottom: 6 }}>
+                    ✅ FINAL LINEUP CONFIRMED — READY FOR WHATSAPP
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#064e3b', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', marginBottom: 10 }}>
+                    {getFormattedFinalLineupText()}
+                  </Text>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#059669',
+                      paddingVertical: 10,
+                      borderRadius: 10,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                    onPress={handleShareWhatsApp}
+                  >
+                    <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+                      Send Final Lineup to WhatsApp
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             {/* Lineup Slots List */}
             <Text style={[styles.sectionHeading, { color: colors.text }]}>
-              Stage Lineup & Ministry Roles
+              Media & Team Lineup Positions
             </Text>
 
-            {lineup.map((slot) => {
+            {lineup
+              .filter((slot) => autoFillRest || !(slot.positionName || '').toLowerCase().includes('worship leader'))
+              .map((slot) => {
               const primary = slot.primary;
               const isConfirmed = primary?.status === 'confirmed';
               const isDeclined = primary?.status === 'declined';
@@ -487,9 +761,9 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     <Text style={[styles.itemTypeTag, { color: colors.primary }]}>
                       {(item.item_type || 'segment').toUpperCase()}
                     </Text>
-                    {item.presenter ? (
+                    {item.leader || item.presenter ? (
                       <Text style={[styles.itemPresenter, { color: colors.subText }]}>
-                        Lead: {item.presenter}
+                        Lead: {item.leader || item.presenter}
                       </Text>
                     ) : null}
                     {item.notes ? (
@@ -717,13 +991,13 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
                 value={planTitle}
                 onChangeText={setPlanTitle}
-                placeholder="e.g. Song: Way Maker"
+                placeholder="e.g. 5-Minute Countdown Video"
                 placeholderTextColor={colors.subText}
               />
 
               <Text style={[styles.inputLabel, { color: colors.subText }]}>Item Type</Text>
               <View style={styles.pillsWrap}>
-                {['song', 'sermon', 'welcome', 'prayer', 'announcement'].map((t) => (
+                {['media', 'sermon', 'welcome', 'prayer', 'announcement'].map((t) => (
                   <TouchableOpacity
                     key={t}
                     style={[
@@ -793,6 +1067,182 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
           </View>
         </View>
       </Modal>
+
+      {/* Edit Service Details Modal */}
+      <Modal visible={isEditServiceModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="create" size={20} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Service Details</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsEditServiceModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Date (YYYY-MM-DD) *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={editDate}
+                onChangeText={setEditDate}
+                placeholder="2026-09-20"
+                placeholderTextColor={colors.subText}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Time *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={editTime}
+                onChangeText={setEditTime}
+                placeholder="10:00 AM"
+                placeholderTextColor={colors.subText}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Service Type *</Text>
+              <View style={styles.pillsWrap}>
+                {SERVICE_TYPES.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.choicePill,
+                      {
+                        borderColor: editType === t ? colors.primary : colors.border,
+                        backgroundColor: editType === t ? colors.primaryLight : colors.inputBg,
+                      },
+                    ]}
+                    onPress={() => setEditType(t)}
+                  >
+                    <Text
+                      style={[
+                        styles.choicePillText,
+                        { color: editType === t ? colors.primary : colors.text },
+                      ]}
+                    >
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {campuses.length > 0 && (
+                <>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Campus / Location</Text>
+                  <View style={styles.pillsWrap}>
+                    {campuses.map((c) => (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[
+                          styles.choicePill,
+                          {
+                            borderColor: editCampusId === c.id ? colors.primary : colors.border,
+                            backgroundColor: editCampusId === c.id ? colors.primaryLight : colors.inputBg,
+                          },
+                        ]}
+                        onPress={() => setEditCampusId(c.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.choicePillText,
+                            { color: editCampusId === c.id ? colors.primary : colors.text },
+                          ]}
+                        >
+                          📍 {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Status</Text>
+              <View style={styles.pillsWrap}>
+                {SERVICE_STATUSES.map((st) => (
+                  <TouchableOpacity
+                    key={st.id}
+                    style={[
+                      styles.choicePill,
+                      {
+                        borderColor: editStatus === st.id ? colors.primary : colors.border,
+                        backgroundColor: editStatus === st.id ? colors.primaryLight : colors.inputBg,
+                      },
+                    ]}
+                    onPress={() => setEditStatus(st.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.choicePillText,
+                        { color: editStatus === st.id ? colors.primary : colors.text },
+                      ]}
+                    >
+                      {st.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Sermon / Service Theme</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={editTheme}
+                onChangeText={setEditTheme}
+                placeholder="e.g. Unshakable Faith"
+                placeholderTextColor={colors.subText}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Notes & Instructions</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                value={editNotes}
+                onChangeText={setEditNotes}
+                multiline
+                numberOfLines={3}
+                placeholderTextColor={colors.subText}
+              />
+            </ScrollView>
+
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={[styles.deleteModalBtn, { borderColor: '#fca5a5', backgroundColor: '#fff1f2' }]}
+                onPress={handleDeleteService}
+                disabled={deletingService}
+              >
+                {deletingService ? (
+                  <ActivityIndicator size="small" color="#ef4444" />
+                ) : (
+                  <>
+                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    <Text style={[styles.deleteModalBtnText, { color: '#ef4444' }]}>Delete</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={{ flex: 1 }} />
+
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsEditServiceModalOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.primary }]}
+                onPress={handleSaveServiceDetails}
+                disabled={savingService}
+              >
+                {savingService ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -833,8 +1283,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  topActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteTopBtn: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff1f2',
+  },
   shareIconBtn: {
-    padding: 8,
+    padding: 6,
   },
   segmentedBar: {
     flexDirection: 'row',
@@ -871,6 +1338,31 @@ const styles = StyleSheet.create({
   heroCampus: {
     fontSize: 12,
     marginTop: 2,
+  },
+  heroActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  heroActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  heroActionPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  heroNotesPreview: {
+    fontSize: 11,
+    fontStyle: 'italic',
   },
   autoFillBtn: {
     flexDirection: 'row',
@@ -1083,14 +1575,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f5ede1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   availAvatarText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#dc2626',
+    color: '#9e7343',
   },
   availName: {
     fontSize: 13,
@@ -1165,14 +1657,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f5ede1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   candAvatarText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#dc2626',
+    color: '#9e7343',
   },
   candName: {
     fontSize: 14,
@@ -1234,5 +1726,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  deleteModalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  deleteModalBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  textArea: {
+    height: 68,
+    paddingVertical: 8,
+    textAlignVertical: 'top',
   },
 });

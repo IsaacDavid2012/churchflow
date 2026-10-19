@@ -14,12 +14,13 @@ import {
   FileText
 } from 'lucide-react';
 import { formatServiceDate, formatMonthShort, formatDayNumber } from '../utils/date';
-import { copyToClipboard } from '../utils/clipboard';
+import { copyToClipboard, formatFinalLineupForWhatsApp } from '../utils/clipboard';
 import { api } from '../api';
 import ShareLinkModal from './ShareLinkModal';
 
 export default function ServiceList({ services, onSelectService, onCreateClick, onServiceDeleted }) {
   const [copiedToken, setCopiedToken] = useState(null);
+  const [copiedFinalId, setCopiedFinalId] = useState(null);
   const [shareModal, setShareModal] = useState({ isOpen: false, serviceDate: '', token: '' });
   const [deletingId, setDeletingId] = useState(null);
 
@@ -60,6 +61,16 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
         campusName: service.campus_name,
         theme: service.theme,
       });
+    }
+  }
+
+  async function copyFinalLineup(e, service) {
+    e.stopPropagation();
+    const text = formatFinalLineupForWhatsApp(service, service.lineup || []);
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopiedFinalId(service.id);
+      setTimeout(() => setCopiedFinalId(null), 2500);
     }
   }
 
@@ -114,7 +125,7 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
             Services & Run Sheets
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Planning Center Services plans for Jesus My Rock Church — Order of Service, song keys, and multi-team scheduling.
+            Service plans for Jesus My Rock Church — Order of Service and multi-team volunteer scheduling.
           </p>
         </div>
         <button
@@ -132,7 +143,7 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
           <Calendar className="w-12 h-12 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No service plans scheduled yet</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            Create your first worship service date to start planning songs and collecting team availability.
+            Create your first worship service date to start planning the run sheet and collecting team availability.
           </p>
           <button
             onClick={onCreateClick}
@@ -146,6 +157,7 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
         <div className="grid grid-cols-1 gap-3.5">
           {services.map((service) => {
             const isCopied = copiedToken === service.token;
+            const isCopiedFinal = copiedFinalId === service.id;
 
             return (
               <div
@@ -190,9 +202,9 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
                             Theme: "{service.theme}"
                           </span>
                         )}
-                        {service.worship_leader_name && (
+                        {service.worship_leader_name && typeof window !== 'undefined' && localStorage.getItem('servesync_auto_fill_rest') === 'true' && (
                           <span className="text-red-700 dark:text-red-400 font-semibold">
-                            🎤 WL: {service.worship_leader_name}
+                            🎬 Lead: {service.worship_leader_name}
                           </span>
                         )}
                       </div>
@@ -216,30 +228,48 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
                       </div>
                     </div>
 
-                    {/* Copy Link button */}
+                    {/* Action buttons */}
                     <div className="flex items-center space-x-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => copyShareLink(e, service)}
-                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                          isCopied
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
-                        }`}
-                        title="Copy Volunteer Availability Link"
-                      >
-                        {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-red-500" />}
-                        <span>{isCopied ? 'Copied!' : 'Volunteer Link'}</span>
-                      </button>
+                      {service.status === 'confirmed' ? (
+                        <button
+                          type="button"
+                          onClick={(e) => copyFinalLineup(e, service)}
+                          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isCopiedFinal
+                              ? 'bg-emerald-700 text-white'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                          }`}
+                          title="Copy Final Lineup for WhatsApp"
+                        >
+                          {isCopiedFinal ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{isCopiedFinal ? 'Copied for WhatsApp!' : 'Copy Final Lineup'}</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => copyShareLink(e, service)}
+                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              isCopied
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                            }`}
+                            title="Copy Volunteer Availability Link"
+                          >
+                            {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-red-500" />}
+                            <span>{isCopied ? 'Copied!' : 'Volunteer Link'}</span>
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={(e) => openShareDialog(e, service)}
-                        className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-                        title="Open Share Options"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
+                          <button
+                            type="button"
+                            onClick={(e) => openShareDialog(e, service)}
+                            className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                            title="Open Share Link Options"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
 
                       <button
                         type="button"
