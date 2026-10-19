@@ -151,23 +151,6 @@ async function runMigrations() {
     // Run core schema
     await client.query(sql);
 
-    // Seed default church ministries if none active
-    const activeGroupsCount = await client.query('SELECT COUNT(*) FROM groups WHERE active = true');
-    if (parseInt(activeGroupsCount.rows[0].count, 10) === 0) {
-      await client.query(`
-        INSERT INTO groups (name, category, leader_name, leader_phone, meeting_day, meeting_time, location, description, member_count, active)
-        VALUES 
-          ('Worship Ministry', 'Worship & Music', 'Isaac David', '+60 17-600 1484', 'Thursday', '8:00 PM', 'Main Sanctuary', 'Vocalists, band musicians, and worship leaders leading the congregation into God''s presence each Sunday.', 12, true),
-          ('Production & Tech Ministry', 'Production & Tech', 'Alvin & Tech Team', '+60 12-345 6789', 'Sunday', '8:30 AM', 'FOH Sound Booth & Control Center', 'Audio engineering (FOH), live-stream broadcasting, lighting, ProPresenter lyrics, and camera operations.', 6, true),
-          ('Media & Communications', 'Media & Tech', 'Media Lead', '+60 16-987 6543', 'Sunday', '9:00 AM', 'Media Suite', 'Photography, videography, social media, and digital church communications.', 5, true),
-          ('Hospitality & Ushering', 'Hospitality & Welcome', 'Sharon & Ushering Team', '+60 11-234 5678', 'Sunday', '9:15 AM', 'Church Foyer & Welcome Desk', 'Welcoming newcomers, greeting church members, ushering, and coordinating refreshments.', 8, true),
-          ('Prayer & Intercession', 'Prayer & Pastoral Care', 'Prayer Team', '+60 18-765 4321', 'Wednesday', '8:00 PM', 'Prayer Room / Sanctuary', 'Pre-service intercession, weekly prayer encounter meetings, and prophetic altar ministry.', 10, true),
-          ('Rock Kids & NextGen', 'NextGen & Children', 'Kids Director', '+60 19-876 5432', 'Sunday', '10:00 AM', 'Kids Sanctuary Room 2', 'Sunday school curriculum, worship, games, and discipleship for toddlers to youth.', 7, true)
-        ON CONFLICT DO NOTHING;
-      `);
-      console.log('Seeded default Church Ministries into groups table.');
-    }
-
     // Sync roles between users and musicians
     await client.query(`
       UPDATE musicians m
@@ -176,31 +159,6 @@ async function runMigrations() {
       WHERE (m.user_id = u.id OR LOWER(m.email) = LOWER(u.email) OR LOWER(m.name) = LOWER(u.name))
         AND m.role != u.role;
     `);
-
-    // Seed sample announcements if none exist
-    const announcementsCount = await client.query('SELECT COUNT(*) FROM ministry_announcements');
-    if (parseInt(announcementsCount.rows[0].count, 10) === 0) {
-      const worshipGroup = await client.query("SELECT id FROM groups WHERE name ILIKE '%Worship%' LIMIT 1");
-      const prodGroup = await client.query("SELECT id FROM groups WHERE name ILIKE '%Production%' LIMIT 1");
-
-      if (worshipGroup.rows.length > 0) {
-        await client.query(`
-          INSERT INTO ministry_announcements (ministry_id, author_name, author_role, title, content, is_pinned)
-          VALUES 
-            ($1, 'Isaac David', 'admin', 'Welcome to the Worship Ministry Classroom! 🎵', 'Praise God team! This is our dedicated ministry stream for song charts, setlists, and rehearsal briefings. Thursday rehearsals start promptly at 8:00 PM. Please review your charts beforehand!', true),
-            ($1, 'Josh', 'manager', 'Sunday Morning Celebration Songlist Update', 'This Sunday we will be singing: 1. Firm Foundation (He Won''t) [Key D], 2. Goodness of God [Key G], 3. Holy Forever [Key A]. Let''s come with prepared hearts!', false)
-        `, [worshipGroup.rows[0].id]);
-      }
-
-      if (prodGroup.rows.length > 0) {
-        await client.query(`
-          INSERT INTO ministry_announcements (ministry_id, author_name, author_role, title, content, is_pinned)
-          VALUES 
-            ($1, 'Alvin & Tech Team', 'manager', 'FOH Sound & OBS Livestream Checklist', 'Team, please ensure all wireless mic battery levels are checked at 8:30 AM before pre-service prayer. The new Behringer X32 scene has been saved under "Sunday Main".', true)
-        `, [prodGroup.rows[0].id]);
-      }
-      console.log('Seeded initial Ministry Classroom announcements.');
-    }
 
     await client.query('COMMIT');
     console.log('Migrations executed successfully!');
