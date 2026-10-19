@@ -60,6 +60,8 @@ export default function PeopleManager({ currentUser }) {
   // Modals
   const [isPersonModalOpen, setIsPersonModalOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
+  const [newPositionName, setNewPositionName] = useState('');
+  const [addingPosition, setAddingPosition] = useState(false);
   const [personForm, setPersonForm] = useState({
     name: '',
     email: '',
@@ -95,6 +97,7 @@ export default function PeopleManager({ currentUser }) {
 
   function handleOpenCreatePerson() {
     setEditingPerson(null);
+    setNewPositionName('');
     setPersonForm({
       name: '',
       email: '',
@@ -110,6 +113,7 @@ export default function PeopleManager({ currentUser }) {
 
   function handleOpenEditPerson(p) {
     setEditingPerson(p);
+    setNewPositionName('');
     setPersonForm({
       name: p.name || '',
       email: p.email || '',
@@ -132,6 +136,48 @@ export default function PeopleManager({ currentUser }) {
         : [...currentRoles, roleName];
       return { ...prev, roles: nextRoles };
     });
+  }
+
+  async function handleAddNewPosition(e) {
+    if (e) e.preventDefault();
+    const trimmed = newPositionName.trim();
+    if (!trimmed) return;
+
+    setAddingPosition(true);
+    try {
+      const created = await api.createPosition({
+        name: trimmed,
+        ministry: personForm.ministry || 'Media Team',
+        color: '#6366f1',
+      });
+      const newPos = created || { name: trimmed, ministry: personForm.ministry || 'Media Team' };
+      setPositions((prev) => {
+        if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+        return [...prev, newPos];
+      });
+      setPersonForm((prev) => {
+        const currentRoles = Array.isArray(prev.roles) ? prev.roles : [];
+        if (!currentRoles.some((r) => r.toLowerCase() === trimmed.toLowerCase())) {
+          return { ...prev, roles: [...currentRoles, trimmed] };
+        }
+        return prev;
+      });
+      setNewPositionName('');
+    } catch (err) {
+      console.error('Failed to create position:', err);
+      // Fallback local append
+      setPositions((prev) => {
+        if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+        return [...prev, { name: trimmed, ministry: personForm.ministry || 'Media Team' }];
+      });
+      setPersonForm((prev) => ({
+        ...prev,
+        roles: [...(prev.roles || []).filter((r) => r.toLowerCase() !== trimmed.toLowerCase()), trimmed],
+      }));
+      setNewPositionName('');
+    } finally {
+      setAddingPosition(false);
+    }
   }
 
   async function handleSavePerson(e) {
@@ -582,6 +628,32 @@ export default function PeopleManager({ currentUser }) {
                     </div>
                   );
                 })()}
+
+                {/* Inline custom position creator */}
+                <div className="flex items-center space-x-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                  <input
+                    type="text"
+                    value={newPositionName}
+                    onChange={(e) => setNewPositionName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddNewPosition();
+                      }
+                    }}
+                    placeholder="Add custom position (e.g. Lead Guitar, Audio Engineer)..."
+                    className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddNewPosition}
+                    disabled={!newPositionName.trim() || addingPosition}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold disabled:opacity-50 flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{addingPosition ? 'Adding...' : '+ Add Position'}</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-slate-200 dark:border-slate-800">

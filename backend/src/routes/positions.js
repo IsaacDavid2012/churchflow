@@ -30,6 +30,8 @@ router.post('/', async (req, res) => {
       `
       INSERT INTO positions_template (name, ministry, sort_order)
       VALUES ($1, $2, $3)
+      ON CONFLICT (name) DO UPDATE SET
+        ministry = COALESCE(EXCLUDED.ministry, positions_template.ministry)
       RETURNING *
     `,
       [name.trim(), ministry || 'Worship Team', parseInt(sort_order || '0', 10)]

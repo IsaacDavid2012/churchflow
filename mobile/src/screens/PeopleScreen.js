@@ -40,6 +40,8 @@ export default function PeopleScreen({ user, isDark = false }) {
   const [role, setRole] = useState('member');
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [ministry, setMinistry] = useState('Media Team');
+  const [customPosition, setCustomPosition] = useState('');
+  const [addingCustomPosition, setAddingCustomPosition] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchPeople = async () => {
@@ -75,6 +77,7 @@ export default function PeopleScreen({ user, isDark = false }) {
     setRole('member');
     setSelectedRoles([]);
     setMinistry('Media Team');
+    setCustomPosition('');
     try {
       const posList = await api.getPositions();
       if (Array.isArray(posList)) setPositions(posList);
@@ -90,6 +93,7 @@ export default function PeopleScreen({ user, isDark = false }) {
     setRole(person.role || 'member');
     setSelectedRoles(Array.isArray(person.roles) ? [...person.roles] : (person.primary_instrument ? [person.primary_instrument] : []));
     setMinistry(person.ministry || 'Media Team');
+    setCustomPosition('');
     try {
       const posList = await api.getPositions();
       if (Array.isArray(posList)) setPositions(posList);
@@ -104,6 +108,47 @@ export default function PeopleScreen({ user, isDark = false }) {
         ? prev.filter((r) => r.toLowerCase() !== roleName.toLowerCase())
         : [...prev, roleName];
     });
+  };
+
+  const handleAddNewPosition = async () => {
+    const trimmed = customPosition.trim();
+    if (!trimmed) return;
+
+    setAddingCustomPosition(true);
+    try {
+      const created = await api.createPosition({
+        name: trimmed,
+        ministry: ministry || 'Media Team',
+        color: '#c59c6c',
+      });
+      const newPos = created || { name: trimmed, ministry: ministry || 'Media Team' };
+      setPositions((prev) => {
+        if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+        return [...prev, newPos];
+      });
+      setSelectedRoles((prev) => {
+        if (!prev.some((r) => r.toLowerCase() === trimmed.toLowerCase())) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
+      setCustomPosition('');
+    } catch (err) {
+      console.error('Failed to create position:', err);
+      setPositions((prev) => {
+        if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+        return [...prev, { name: trimmed, ministry: ministry || 'Media Team' }];
+      });
+      setSelectedRoles((prev) => {
+        if (!prev.some((r) => r.toLowerCase() === trimmed.toLowerCase())) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
+      setCustomPosition('');
+    } finally {
+      setAddingCustomPosition(false);
+    }
   };
 
   const handleSavePerson = async () => {
@@ -522,7 +567,7 @@ export default function PeopleScreen({ user, isDark = false }) {
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 6 }}>
                 <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>
-                  Positions & Roles (Tick what they can do) ({selectedRoles.length})
+                  Positions & Roles ({selectedRoles.length} selected)
                 </Text>
                 {allRoleOptions.length > 0 && (
                   <TouchableOpacity
@@ -542,6 +587,58 @@ export default function PeopleScreen({ user, isDark = false }) {
                     </Text>
                   </TouchableOpacity>
                 )}
+              </View>
+
+              {/* Inline Custom Position Adder */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      flex: 1,
+                      marginBottom: 0,
+                      backgroundColor: colors.inputBg,
+                      color: colors.text,
+                      borderColor: colors.border,
+                      height: 38,
+                      paddingVertical: 4,
+                      fontSize: 12,
+                    },
+                  ]}
+                  value={customPosition}
+                  onChangeText={setCustomPosition}
+                  placeholder="Add custom position (e.g. Lead Guitar)..."
+                  placeholderTextColor={colors.subText}
+                  onSubmitEditing={handleAddNewPosition}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  onPress={handleAddNewPosition}
+                  disabled={!customPosition.trim() || addingCustomPosition}
+                  style={{
+                    backgroundColor: colors.primary,
+                    paddingHorizontal: 12,
+                    height: 38,
+                    borderRadius: 10,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    gap: 4,
+                    opacity: !customPosition.trim() || addingCustomPosition ? 0.6 : 1,
+                  }}
+                >
+                  <Ionicons name="add" size={16} color="#ffffff" />
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>
+                    {addingCustomPosition ? 'Adding...' : 'Add'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
