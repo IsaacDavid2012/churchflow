@@ -20,6 +20,7 @@ mobile/.expo/
 releases/
 backups/
 *.apk
+!/churchflow.apk
 
 # Logs & Temporary files
 *.log
