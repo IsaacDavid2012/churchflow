@@ -264,6 +264,24 @@ class ApiClient {
     return this.request(`/services/${serviceId}/candidates/${positionId}`);
   }
 
+  // --- WhatsApp Automation Gateway ---
+  async getWhatsAppStatus() {
+    return this.request('/services/whatsapp/status');
+  }
+
+  async sendWhatsAppNotifyAll(serviceId) {
+    return this.request(`/services/${serviceId}/whatsapp-notify-all`, {
+      method: 'POST',
+    });
+  }
+
+  async broadcastWhatsAppRunSheet(serviceId, groupId) {
+    return this.request(`/services/${serviceId}/whatsapp-broadcast`, {
+      method: 'POST',
+      body: JSON.stringify({ group_id: groupId }),
+    });
+  }
+
   // --- Service Plan (Run Sheet) ---
   async getPlanItems(serviceId) {
     return this.request(`/services/${serviceId}/plan`);

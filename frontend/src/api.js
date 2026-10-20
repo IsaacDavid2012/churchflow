@@ -132,6 +132,18 @@ export const api = {
   getCandidates: (serviceId, positionId) =>
     request(`/services/${serviceId}/candidates/${positionId}`),
 
+  // WhatsApp Automation Gateway
+  getWhatsAppStatus: () => request('/services/whatsapp/status'),
+  sendWhatsAppNotifyAll: (serviceId) =>
+    request(`/services/${serviceId}/whatsapp-notify-all`, {
+      method: 'POST',
+    }),
+  broadcastWhatsAppRunSheet: (serviceId, groupId) =>
+    request(`/services/${serviceId}/whatsapp-broadcast`, {
+      method: 'POST',
+      body: JSON.stringify({ group_id: groupId }),
+    }),
+
   // Service Plan / Order of Service (Run Sheet)
   getPlanItems: (serviceId) => request(`/services/${serviceId}/plan`),
   addPlanItem: (serviceId, data) =>

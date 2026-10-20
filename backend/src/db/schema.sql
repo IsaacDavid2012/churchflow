@@ -104,6 +104,26 @@ CREATE INDEX IF NOT EXISTS idx_musicians_status ON musicians(status);
 CREATE INDEX IF NOT EXISTS idx_musicians_ministry ON musicians(ministry);
 CREATE INDEX IF NOT EXISTS idx_musicians_household ON musicians(household_id);
 
+-- Small Groups / Life Groups (Planning Center Groups)
+CREATE TABLE IF NOT EXISTS groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(100) DEFAULT 'Life Group',
+    leader_name VARCHAR(255),
+    leader_id UUID REFERENCES musicians(id) ON DELETE SET NULL,
+    meeting_day VARCHAR(50) DEFAULT 'Wednesday',
+    meeting_time VARCHAR(50) DEFAULT '7:00 PM',
+    location VARCHAR(255) DEFAULT 'Fellowship Hall Room 201',
+    description TEXT,
+    member_count INT DEFAULT 0,
+    leader_phone VARCHAR(50),
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_groups_category ON groups(category);
+
 -- Positions Template (Ministry role templates)
 CREATE TABLE IF NOT EXISTS positions_template (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -231,26 +251,6 @@ CREATE TABLE IF NOT EXISTS assignments (
 CREATE INDEX IF NOT EXISTS idx_assignments_service ON assignments(service_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_musician ON assignments(musician_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status);
-
--- Small Groups / Life Groups (Planning Center Groups)
-CREATE TABLE IF NOT EXISTS groups (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(100) DEFAULT 'Life Group',
-    leader_name VARCHAR(255),
-    leader_id UUID REFERENCES musicians(id) ON DELETE SET NULL,
-    meeting_day VARCHAR(50) DEFAULT 'Wednesday',
-    meeting_time VARCHAR(50) DEFAULT '7:00 PM',
-    location VARCHAR(255) DEFAULT 'Fellowship Hall Room 201',
-    description TEXT,
-    member_count INT DEFAULT 0,
-    leader_phone VARCHAR(50),
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_groups_category ON groups(category);
 
 -- Notifications log (Audit trail for auto-shuffles, backup promotions, decline-reshuffles, admin actions)
 CREATE TABLE IF NOT EXISTS notifications_log (

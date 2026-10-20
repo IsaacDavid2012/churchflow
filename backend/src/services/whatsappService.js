@@ -123,7 +123,38 @@ Please confirm your attendance in 1 tap (secured with 4-digit PIN):
 
 _Jesus My Rock Church Management Ecosystem_`;
 
-  return sendMessage(musician.phone, text);
+  return module.exports.sendMessage(musician.phone, text);
+}
+
+/**
+ * Send a 24h Deadline WhatsApp Reminder to a volunteer who hasn't confirmed yet
+ */
+async function sendVolunteerReminderNudge({ musician, service, positionName, hoursRemaining = 24 }) {
+  if (!musician || !musician.phone) {
+    return { success: false, error: 'Volunteer has no phone number on record' };
+  }
+
+  const token = service.token;
+  const link = `${PUBLIC_BASE_URL}/avail/${token}`;
+  const sDate = service.service_date || 'upcoming service';
+  const sTime = service.service_time || '10:00 AM';
+  const sType = service.service_type || 'Upcoming Service';
+
+  const text = `⏰ *ChurchFlow Serving Reminder*
+
+Hi *${musician.name}*, just a friendly reminder regarding your roster:
+🗓️ *${sType}*
+⏰ *${sDate} at ${sTime}*
+🎸 Role: *${positionName || 'Team Member'}*
+⏳ *${hoursRemaining}h remaining* until service deadline
+
+You are currently marked as *Pending*. Please tap below to confirm or decline with your 4-digit PIN:
+👉 ${link}
+
+Thank you for serving with gladness! 🙏
+_Jesus My Rock Church_`;
+
+  return module.exports.sendMessage(musician.phone, text);
 }
 
 /**
@@ -151,7 +182,7 @@ Please tap below to confirm if you can make it:
 
 Thank you for standing in the gap! 🙏`;
 
-  return sendMessage(musician.phone, text);
+  return module.exports.sendMessage(musician.phone, text);
 }
 
 /**
@@ -169,7 +200,7 @@ ${declinedByName ? `${declinedByName} declined ` : ''}*${positionName}* for *${s
 The slot is currently vacant. Please check the lineup and assign a replacement:
 👉 ${PUBLIC_BASE_URL}/services/${service.id || ''}`;
 
-  return sendMessage(leaderPhone, text);
+  return module.exports.sendMessage(leaderPhone, text);
 }
 
 /**
@@ -211,13 +242,14 @@ ${service.campus_name ? `🏛️ Campus: ${service.campus_name}\n` : ''}${servic
 
   msg += `\n───────────────────────\n🔗 View dynamic live run-sheet:\n${PUBLIC_BASE_URL}/avail/${service.token || ''}`;
 
-  return sendMessage(groupId, msg);
+  return module.exports.sendMessage(groupId, msg);
 }
 
 module.exports = {
   isReady,
   sendMessage,
   sendVolunteerRsvpInvite,
+  sendVolunteerReminderNudge,
   sendEmergencyPromotionAlert,
   sendLeaderUnfilledSlotAlert,
   broadcastServiceRunSheet,

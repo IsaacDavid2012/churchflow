@@ -87,6 +87,7 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
     e.stopPropagation();
     setShareModal({
       isOpen: true,
+      serviceId: service.id,
       serviceDate: formatServiceDate(service.service_date),
       token: service.token,
       worshipLeaderName: service.worship_leader_name,
@@ -312,6 +313,7 @@ export default function ServiceList({ services, onSelectService, onCreateClick, 
       <ShareLinkModal
         isOpen={shareModal.isOpen}
         onClose={() => setShareModal({ ...shareModal, isOpen: false })}
+        serviceId={shareModal.serviceId}
         serviceDate={shareModal.serviceDate}
         token={shareModal.token}
         worshipLeaderName={shareModal.worshipLeaderName}

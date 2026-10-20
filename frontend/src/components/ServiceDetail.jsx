@@ -470,6 +470,7 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
       <ShareLinkModal
         isOpen={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
+        serviceId={service.id}
         serviceDate={formatServiceDate(service.service_date)}
         token={service.token}
         worshipLeaderName={service.worship_leader_name}

@@ -87,6 +87,16 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const [planNotes, setPlanNotes] = useState('');
   const [savingPlan, setSavingPlan] = useState(false);
 
+  // WhatsApp Automation Modal State
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [waReady, setWaReady] = useState(false);
+  const [checkingWa, setCheckingWa] = useState(false);
+  const [sendingWaInvites, setSendingWaInvites] = useState(false);
+  const [waInviteResult, setWaInviteResult] = useState(null);
+  const [waBroadcastGroupId, setWaBroadcastGroupId] = useState('');
+  const [broadcastingWa, setBroadcastingWa] = useState(false);
+  const [waBroadcastResult, setWaBroadcastResult] = useState(null);
+
   const fetchServiceData = async () => {
     try {
       setLoading(true);
@@ -383,6 +393,19 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   };
 
   const handleShareWhatsApp = () => {
+    setIsWhatsAppModalOpen(true);
+    setCheckingWa(true);
+    setWaInviteResult(null);
+    setWaBroadcastResult(null);
+    api.getWhatsAppStatus()
+      .then((res) => {
+        setWaReady(res.ready === true);
+      })
+      .catch(() => setWaReady(false))
+      .finally(() => setCheckingWa(false));
+  };
+
+  const handleManualShareWhatsApp = () => {
     const isLineupConfirmed = serviceInfo?.status === 'confirmed';
     let messageText = '';
 
@@ -409,6 +432,49 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     Linking.openURL(`whatsapp://send?text=${encoded}`).catch(() => {
       Linking.openURL(`https://api.whatsapp.com/send?text=${encoded}`);
     });
+  };
+
+  const handleSendInvitesToAll = async () => {
+    if (!service?.id) return;
+    setSendingWaInvites(true);
+    setWaInviteResult(null);
+
+    try {
+      const res = await api.sendWhatsAppNotifyAll(service.id);
+      setWaInviteResult({
+        success: true,
+        message: `Dispatched invitations to ${res.dispatched} of ${res.total} scheduled volunteers!`,
+      });
+      fetchServiceData();
+    } catch (err) {
+      setWaInviteResult({
+        success: false,
+        message: err.message || 'Failed to dispatch WhatsApp invitations',
+      });
+    } finally {
+      setSendingWaInvites(false);
+    }
+  };
+
+  const handleBroadcastRunSheet = async () => {
+    if (!service?.id || !waBroadcastGroupId.trim()) return;
+    setBroadcastingWa(true);
+    setWaBroadcastResult(null);
+
+    try {
+      const res = await api.broadcastWhatsAppRunSheet(service.id, waBroadcastGroupId.trim());
+      setWaBroadcastResult({
+        success: true,
+        message: `Run-sheet successfully sent to group (${res.recipient})!`,
+      });
+    } catch (err) {
+      setWaBroadcastResult({
+        success: false,
+        message: err.message || 'Failed to broadcast run sheet',
+      });
+    } finally {
+      setBroadcastingWa(false);
+    }
   };
 
   const handleAddPlanItem = async () => {
@@ -1433,6 +1499,255 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* WhatsApp Automation Gateway Modal */}
+      <Modal visible={isWhatsAppModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="logo-whatsapp" size={22} color="#16a34a" />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>WhatsApp Share & Alert</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsWhatsAppModalOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              {/* WhatsApp Server Status Banner */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 10,
+                  borderRadius: 10,
+                  marginBottom: 14,
+                  backgroundColor: isDark ? '#0b1d14' : '#ecfdf5',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#14532d' : '#a7f3d0',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: waReady ? '#10b981' : '#f59e0b',
+                    }}
+                  />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#6ee7b7' : '#047857' }}>
+                    {checkingWa ? 'Checking Bot Gateway...' : waReady ? 'ChurchFlow Bot Gateway ONLINE' : 'Gateway Offline / Local Only'}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 10, color: isDark ? '#34d399' : '#059669', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                  +60 3-2703 9047
+                </Text>
+              </View>
+
+              {/* Action 1: 1-Tap Auto Dispatch to All Volunteers */}
+              <View
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? '#1e293b' : '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#334155' : '#e2e8f0',
+                  marginBottom: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Ionicons name="flash" size={15} color="#16a34a" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                    1-Tap Auto-Send RSVP Invites
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.subText, marginBottom: 10, lineHeight: 16 }}>
+                  Sends personalized WhatsApp messages to all scheduled volunteers with their 1-tap PIN login RSVP links.
+                </Text>
+
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#16a34a',
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    opacity: sendingWaInvites ? 0.7 : 1,
+                  }}
+                  onPress={handleSendInvitesToAll}
+                  disabled={sendingWaInvites}
+                >
+                  {sendingWaInvites ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="paper-plane" size={16} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                        Send Invites to All Volunteers
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {waInviteResult && (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      borderRadius: 6,
+                      backgroundColor: waInviteResult.success
+                        ? (isDark ? '#064e3b' : '#ecfdf5')
+                        : (isDark ? '#7f1d1d' : '#fef2f2'),
+                      borderWidth: 1,
+                      borderColor: waInviteResult.success
+                        ? (isDark ? '#059669' : '#a7f3d0')
+                        : (isDark ? '#dc2626' : '#fca5a5'),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: waInviteResult.success
+                          ? (isDark ? '#6ee7b7' : '#047857')
+                          : (isDark ? '#fca5a5' : '#b91c1c'),
+                        fontWeight: '600',
+                      }}
+                    >
+                      {waInviteResult.message}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Action 2: Broadcast Run-Sheet to Group */}
+              <View
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? '#1e293b' : '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#334155' : '#e2e8f0',
+                  marginBottom: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Ionicons name="radio" size={15} color="#3b82f6" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                    Broadcast Run-Sheet to Group
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.subText, marginBottom: 8, lineHeight: 16 }}>
+                  Post complete order of service and songs to your worship team WhatsApp group.
+                </Text>
+
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        flex: 1,
+                        height: 38,
+                        fontSize: 11,
+                        marginBottom: 0,
+                        backgroundColor: colors.inputBg,
+                        color: colors.text,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    value={waBroadcastGroupId}
+                    onChangeText={setWaBroadcastGroupId}
+                    placeholder="Group JID or Phone number"
+                    placeholderTextColor={colors.subText}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: isDark ? '#334155' : '#1e293b',
+                      paddingHorizontal: 12,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 8,
+                      opacity: broadcastingWa || !waBroadcastGroupId.trim() ? 0.5 : 1,
+                    }}
+                    onPress={handleBroadcastRunSheet}
+                    disabled={broadcastingWa || !waBroadcastGroupId.trim()}
+                  >
+                    {broadcastingWa ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Post</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {waBroadcastResult && (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      borderRadius: 6,
+                      backgroundColor: waBroadcastResult.success
+                        ? (isDark ? '#064e3b' : '#ecfdf5')
+                        : (isDark ? '#7f1d1d' : '#fef2f2'),
+                      borderWidth: 1,
+                      borderColor: waBroadcastResult.success
+                        ? (isDark ? '#059669' : '#a7f3d0')
+                        : (isDark ? '#dc2626' : '#fca5a5'),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: waBroadcastResult.success
+                          ? (isDark ? '#6ee7b7' : '#047857')
+                          : (isDark ? '#fca5a5' : '#b91c1c'),
+                        fontWeight: '600',
+                      }}
+                    >
+                      {waBroadcastResult.message}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Action 3: Manual WhatsApp Open */}
+              <TouchableOpacity
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+                onPress={handleManualShareWhatsApp}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color="#16a34a" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                  Open WhatsApp App (Manual Share)
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.cancelBtn, { borderColor: colors.border, marginTop: 10, alignSelf: 'center', width: '100%' }]}
+              onPress={() => setIsWhatsAppModalOpen(false)}
+            >
+              <Text style={[styles.cancelBtnText, { color: colors.text, textAlign: 'center' }]}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
