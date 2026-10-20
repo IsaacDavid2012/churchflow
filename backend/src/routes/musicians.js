@@ -36,8 +36,8 @@ router.get('/households', async (req, res) => {
   }
 });
 
-// POST /api/musicians/households - Create a household
-router.post('/households', async (req, res) => {
+// POST /api/musicians/households - Create a household (Admin, Pastor, Manager only)
+router.post('/households', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { name, primary_phone, address } = req.body;
   if (!name) return res.status(400).json({ error: 'Household name is required' });
 
@@ -178,8 +178,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/musicians
-router.post('/', async (req, res) => {
+// POST /api/musicians - Create a person (Admin, Pastor, Manager only)
+router.post('/', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { name, email, phone, roles, primary_instrument, ministry, status, household_id, household_role, birthday, gender, address, notes, active } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
@@ -229,7 +229,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/musicians/:id
+// PUT /api/musicians/:id - Update person (Self-service for members, or Admin/Pastor/Manager)
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { name, email, phone, roles, ministry, status, household_id, household_role, birthday, gender, address, notes, active, role } = req.body;
@@ -240,9 +240,26 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Person not found' });
     }
 
+    const target = check.rows[0];
+    const userRole = normalizeRole(req.user?.role);
+    const isSelf = (target.user_id && target.user_id === req.user?.id) || 
+                   (target.email && req.user?.email && target.email.toLowerCase() === req.user.email.toLowerCase());
+    const isLeaderOrHigher = hasRole(userRole, [ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]);
+
+    // Non-leaders can only edit their own profile
+    if (!isLeaderOrHigher && !isSelf) {
+      return res.status(403).json({ error: 'Permission denied. You can only update your own profile.' });
+    }
+
+    // Members updating themselves cannot modify privileged fields
+    if (!isLeaderOrHigher && isSelf) {
+      if (role !== undefined || status !== undefined || active !== undefined || notes !== undefined) {
+        return res.status(403).json({ error: 'Permission denied. Members cannot modify role, status, active state, or leader notes.' });
+      }
+    }
+
     // Role changes are strictly restricted to Admin ("only admin can change roles")
-    if (role !== undefined && normalizeRole(role) !== normalizeRole(check.rows[0].role)) {
-      const userRole = normalizeRole(req.user?.role);
+    if (role !== undefined && normalizeRole(role) !== normalizeRole(target.role)) {
       if (!hasRole(userRole, ROLES.ADMIN)) {
         return res.status(403).json({ error: 'Permission denied. Only Admins can change user roles.' });
       }

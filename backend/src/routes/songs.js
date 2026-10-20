@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { ROLES } = require('../../../shared/roles');
 
 // GET /api/songs - List all songs with search & sorting
 router.get('/', async (req, res, next) => {
@@ -39,8 +40,8 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/songs
-router.post('/', requireAuth, async (req, res, next) => {
+// POST /api/songs (Admin, Pastor, Manager only)
+router.post('/', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res, next) => {
   try {
     const { title, artist, default_key, bpm, time_signature, ccli_number, lyrics_preview, chart_url, youtube_url } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
@@ -67,8 +68,8 @@ router.post('/', requireAuth, async (req, res, next) => {
   }
 });
 
-// PUT /api/songs/:id
-router.put('/:id', requireAuth, async (req, res, next) => {
+// PUT /api/songs/:id (Admin, Pastor, Manager only)
+router.put('/:id', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res, next) => {
   try {
     const { title, artist, default_key, bpm, time_signature, ccli_number, lyrics_preview, chart_url, youtube_url } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
@@ -108,8 +109,8 @@ router.put('/:id', requireAuth, async (req, res, next) => {
   }
 });
 
-// DELETE /api/songs/:id
-router.delete('/:id', requireAuth, async (req, res, next) => {
+// DELETE /api/songs/:id (Admin and Pastor only - Managers and Members cannot delete songs)
+router.delete('/:id', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res, next) => {
   try {
     const result = await db.query('DELETE FROM songs WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Song not found' });

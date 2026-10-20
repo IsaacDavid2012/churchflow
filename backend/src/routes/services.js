@@ -131,8 +131,8 @@ router.post('/', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LE
   }
 });
 
-// PUT /api/services/:id - Update service details
-router.put('/:id', async (req, res) => {
+// PUT /api/services/:id - Update service details (Admin, Pastor, Manager only)
+router.put('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { service_date, service_time, service_type, campus_id, theme, notes, deadline_hours_before, status, position_ids } = req.body;
 
@@ -406,8 +406,8 @@ router.get('/:id/plan', async (req, res) => {
   }
 });
 
-// POST /api/services/:id/plan - Add an item to Order of Service
-router.post('/:id/plan', async (req, res) => {
+// POST /api/services/:id/plan - Add an item to Order of Service (Admin, Pastor, Manager only)
+router.post('/:id/plan', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { item_type, title, duration_minutes, leader, presenter, song_id, song_key, notes } = req.body;
 
@@ -447,8 +447,8 @@ router.post('/:id/plan', async (req, res) => {
   }
 });
 
-// PUT /api/services/:id/plan/:itemId - Update an Order of Service item
-router.put('/:id/plan/:itemId', async (req, res) => {
+// PUT /api/services/:id/plan/:itemId - Update an Order of Service item (Admin, Pastor, Manager only)
+router.put('/:id/plan/:itemId', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id, itemId } = req.params;
   const { item_type, title, duration_minutes, leader, presenter, song_id, song_key, notes, item_order } = req.body;
 
@@ -491,8 +491,8 @@ router.put('/:id/plan/:itemId', async (req, res) => {
   }
 });
 
-// DELETE /api/services/:id/plan/:itemId - Delete an Order of Service item
-router.delete('/:id/plan/:itemId', async (req, res) => {
+// DELETE /api/services/:id/plan/:itemId - Delete an Order of Service item (Admin, Pastor, Manager only)
+router.delete('/:id/plan/:itemId', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id, itemId } = req.params;
   try {
     const result = await db.query(
@@ -507,8 +507,8 @@ router.delete('/:id/plan/:itemId', async (req, res) => {
   }
 });
 
-// POST /api/services/:id/select-worship-leader or /:id/worship-leader
-router.post(['/:id/select-worship-leader', '/:id/worship-leader'], async (req, res) => {
+// POST /api/services/:id/select-worship-leader or /:id/worship-leader (Admin, Pastor, Manager only)
+router.post(['/:id/select-worship-leader', '/:id/worship-leader'], requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { worship_leader_id, auto_roster = false } = req.body;
 
@@ -590,8 +590,8 @@ router.post('/:id/shuffle', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGE
   }
 });
 
-// POST /api/services/:id/override or /:id/assignments/override
-router.post(['/:id/override', '/:id/assignments/override'], async (req, res) => {
+// POST /api/services/:id/override or /:id/assignments/override (Admin, Pastor, Manager only)
+router.post(['/:id/override', '/:id/assignments/override'], requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { position_id, role_slot, musician_id, notes, auto_roster = false } = req.body;
 
@@ -633,8 +633,8 @@ router.post(['/:id/override', '/:id/assignments/override'], async (req, res) => 
   }
 });
 
-// POST /api/services/:id/confirm or /:id/assignments/confirm
-router.post(['/:id/confirm', '/:id/assignments/confirm'], async (req, res) => {
+// POST /api/services/:id/confirm or /:id/assignments/confirm (Admin, Pastor, Manager only)
+router.post(['/:id/confirm', '/:id/assignments/confirm'], requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   try {
     const sRes = await db.query(
@@ -662,8 +662,8 @@ router.post(['/:id/confirm', '/:id/assignments/confirm'], async (req, res) => {
   }
 });
 
-// POST /api/services/:id/check-deadline
-router.post('/:id/check-deadline', async (req, res) => {
+// POST /api/services/:id/check-deadline (Admin, Pastor, Manager only)
+router.post('/:id/check-deadline', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await checkDeadlineAndAutoPromote(db, id);

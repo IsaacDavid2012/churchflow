@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+const { ROLES } = require('../../../shared/roles');
 
 router.use(authMiddleware);
 
@@ -28,8 +29,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/positions
-router.post('/', async (req, res) => {
+// POST /api/positions (Admin, Pastor, Manager only)
+router.post('/', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { name, ministry, ministry_id, sort_order } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Position name is required' });
@@ -71,8 +72,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/positions/:id
-router.put('/:id', async (req, res) => {
+// PUT /api/positions/:id (Admin, Pastor, Manager only)
+router.put('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
   const { name, ministry, ministry_id, sort_order } = req.body;
 
@@ -123,8 +124,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/positions/:id
-router.delete('/:id', async (req, res) => {
+// DELETE /api/positions/:id (Admin and Pastor only - Managers and Members cannot delete positions)
+router.delete('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(

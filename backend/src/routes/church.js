@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { ROLES } = require('../../../shared/roles');
 
 // GET /api/church - Get church profile and overview stats
 router.get('/', async (req, res, next) => {
@@ -39,8 +40,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/church - Update church profile
-router.put('/', requireAuth, async (req, res, next) => {
+// PUT /api/church - Update church profile (Admin and Pastor only)
+router.put('/', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res, next) => {
   try {
     const { name, tagline, lead_pastor, email, phone, address, website, primary_color } = req.body;
     
@@ -87,8 +88,8 @@ router.get('/campuses', async (req, res, next) => {
   }
 });
 
-// POST /api/church/campuses
-router.post('/campuses', requireAuth, async (req, res, next) => {
+// POST /api/church/campuses (Admin and Pastor only)
+router.post('/campuses', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res, next) => {
   try {
     const { name, address, is_main } = req.body;
     if (!name) return res.status(400).json({ error: 'Campus name is required' });
@@ -120,8 +121,8 @@ router.get('/ministries', async (req, res, next) => {
   }
 });
 
-// POST /api/church/ministries
-router.post('/ministries', requireAuth, async (req, res, next) => {
+// POST /api/church/ministries (Admin and Pastor only)
+router.post('/ministries', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res, next) => {
   try {
     const { name, description, icon, color, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: 'Ministry name is required' });
