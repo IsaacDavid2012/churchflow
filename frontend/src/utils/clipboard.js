@@ -40,9 +40,9 @@ export async function copyToClipboard(text) {
 }
 
 /**
- * Formats the confirmed final lineup with Date, Time, and Lineup for WhatsApp.
+ * Formats the confirmed final lineup with Date, Time, Lineup, and full Worship Setlist for WhatsApp.
  */
-export function formatFinalLineupForWhatsApp(service, lineup = []) {
+export function formatFinalLineupForWhatsApp(service, lineup = [], planItems = []) {
   if (!service) return '';
 
   const dateStr = formatServiceDate(service.service_date, {
@@ -64,23 +64,70 @@ export function formatFinalLineupForWhatsApp(service, lineup = []) {
       return;
     }
     if (musicianName) {
-      lineupLines.push(`• ${posName}: ${musicianName}`);
+      lineupLines.push(`• *${posName}*: ${musicianName}`);
     } else if (wlName && posName.toLowerCase().includes('worship leader')) {
-      lineupLines.push(`• ${posName}: ${wlName}`);
+      lineupLines.push(`• *${posName}*: ${wlName}`);
     }
   });
 
+  const setlistLines = [];
+  if (planItems && planItems.length > 0) {
+    planItems.forEach((p, idx) => {
+      const duration = p.duration_minutes ? ` (${p.duration_minutes}m)` : '';
+      const keyStr = p.song_key || p.key ? ` [Key ${p.song_key || p.key}]` : '';
+      const presenter = p.leader || p.presenter ? ` — ${p.leader || p.presenter}` : '';
+      setlistLines.push(`${idx + 1}. *${p.song_title || p.title}*${keyStr}${duration}${presenter}`);
+    });
+  }
+
+  const publicLink = service.token
+    ? `https://serve.creativeclicks.art/avail/${service.token}`
+    : 'https://serve.creativeclicks.art';
+
   const serviceTypeStr = service.service_type || 'Sunday Service';
   const lines = [
-    `⛪ *Jesus My Rock Church — ${serviceTypeStr}*`,
+    `🕊️ *Jesus My Rock Church — Lineup & Setlist Finalised!*`,
+    `🗓️ *${serviceTypeStr}*`,
     `📅 *Date:* ${dateStr}`,
     `⏰ *Time:* ${timeStr}`,
     service.campus_name ? `📍 *Campus:* ${service.campus_name}` : '',
-    service.theme ? `📖 *Theme:* "${service.theme}"` : '',
+    service.theme ? `🎯 *Theme:* "${service.theme}"` : '',
     '',
-    `👥 *Final Lineup:*`,
-    ...(lineupLines.length > 0 ? lineupLines : ['• No assignments yet']),
+    `✅ *FINAL SERVING LINEUP:*`,
+    ...(lineupLines.length > 0 ? lineupLines : ['• No assignments recorded']),
+    ...(setlistLines.length > 0 ? ['', '🎵 *WORSHIP SETLIST & RUN SHEET:*', ...setlistLines] : []),
+    '',
+    `👉 *View dynamic live run-sheet:*`,
+    publicLink,
+    '',
+    `See everyone on Sunday! Let's worship with gladness! 🙌`,
   ].filter(Boolean);
 
   return lines.join('\n');
 }
+
+/**
+ * Formats a SongBook Setlist with song titles, keys, and tempos for WhatsApp sharing.
+ */
+export function formatSetlistForWhatsApp(setlist) {
+  if (!setlist) return '';
+  const songs = setlist.songs || [];
+  const songLines = songs.map((s, idx) => {
+    const key = s.key ? ` [Key ${s.key}]` : '';
+    const tempo = s.tempo ? ` (${s.tempo} BPM)` : '';
+    const artist = s.artist ? ` - ${s.artist}` : '';
+    return `${idx + 1}. *${s.title}*${artist}${key}${tempo}`;
+  });
+
+  return [
+    `🎵 *Worship Setlist: ${setlist.name || 'Worship Set'}*`,
+    `⛪ *Jesus My Rock Worship*`,
+    setlist.description ? `📝 ${setlist.description}` : '',
+    '',
+    `*Songs (${songs.length}):*`,
+    ...(songLines.length > 0 ? songLines : ['• No songs in this setlist']),
+    '',
+    `🔗 https://serve.creativeclicks.art/songbook`,
+  ].filter(Boolean).join('\n');
+}
+

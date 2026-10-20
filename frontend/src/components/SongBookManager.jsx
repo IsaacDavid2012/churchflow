@@ -35,6 +35,7 @@ import {
   Users
 } from 'lucide-react';
 import { api } from '../api';
+import { copyToClipboard, formatSetlistForWhatsApp } from '../utils/clipboard';
 
 const SHARP_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -223,6 +224,25 @@ export default function SongBookManager({ currentUser }) {
     const nextIndex = currentIndex + direction;
     if (nextIndex >= 0 && nextIndex < selectedSetlist.songs.length) {
       handleSelectSong(selectedSetlist.songs[nextIndex], selectedSetlist);
+    }
+  }
+
+  // Share Setlist to WhatsApp & Clipboard
+  async function handleShareSetlist(sl) {
+    if (!sl) return;
+    try {
+      let fullSet = sl;
+      if (!sl.songs || sl.songs.length === 0) {
+        fullSet = await api.getSongbookSetlist(sl.id);
+      }
+      const text = formatSetlistForWhatsApp(fullSet);
+      const copied = await copyToClipboard(text);
+      showToast(copied ? 'Setlist copied for WhatsApp!' : 'Setlist ready to share!');
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+    } catch (err) {
+      console.error('Failed to share setlist:', err);
+      showToast('Failed to share setlist: ' + err.message, 'error');
     }
   }
 
@@ -883,13 +903,23 @@ export default function SongBookManager({ currentUser }) {
                             {count} song{count !== 1 ? 's' : ''} • {sl.ownerType === 'team' ? 'Jesus My Rock Team' : 'Personal'}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShareSetlist(sl);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 transition-all cursor-pointer"
+                            title="Share Setlist via WhatsApp"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteSetlist(sl.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
                             title="Delete Setlist"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -955,6 +985,14 @@ export default function SongBookManager({ currentUser }) {
                         title="Next song in setlist"
                       >
                         <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleShareSetlist(selectedSetlist)}
+                        className="ml-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-green-600/10 text-green-600 hover:bg-green-600/20 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Share Setlist via WhatsApp"
+                      >
+                        <Share2 className="w-3 h-3" />
+                        <span>Share Setlist</span>
                       </button>
                     </div>
                   )}

@@ -158,6 +158,53 @@ _Jesus My Rock Church_`;
 }
 
 /**
+ * Send Lineup Finalised & Setlist notification to a confirmed/scheduled volunteer
+ * Informs the volunteer that the lineup has been locked in and sends out the final setlist,
+ * without asking them to confirm again.
+ */
+async function sendLineupFinalisedAlert({ musician, service, positionName, setlistSongs = [] }) {
+  if (!musician || !musician.phone) {
+    return { success: false, error: 'Volunteer has no phone number on record' };
+  }
+
+  const token = service.token;
+  const link = `${PUBLIC_BASE_URL}/avail/${token}`;
+  const sDate = service.service_date || 'Sunday';
+  const sTime = service.service_time || '10:00 AM';
+  const sType = service.service_type || 'Sunday Celebration';
+
+  let songListText = '';
+  if (setlistSongs && setlistSongs.length > 0) {
+    songListText =
+      '\n🎵 *Worship Setlist & Order of Service:*\n' +
+      setlistSongs
+        .map((s, idx) => {
+          const duration = s.duration_minutes ? ` (${s.duration_minutes}m)` : '';
+          const keyStr = s.song_key || s.key ? ` [Key ${s.song_key || s.key}]` : '';
+          const presenter = s.leader || s.presenter ? ` — ${s.leader || s.presenter}` : '';
+          return `${idx + 1}. *${s.title}*${keyStr}${duration}${presenter}`;
+        })
+        .join('\n') +
+      '\n';
+  }
+
+  const text = `🕊️ *ChurchFlow: Serving Lineup Finalised*
+
+Hi *${musician.name}*! The roster & lineup for this Sunday has been *finalised & locked in*:
+🗓️ *${sType}*
+⏰ *${sDate} at ${sTime}*
+🎸 Your Role: *${positionName || 'Team Member'}*
+${service.theme ? `🎯 Theme: "${service.theme}"\n` : ''}${songListText}
+👉 View live dynamic schedule & run-sheet:
+${link}
+
+Thank you for serving with gladness! Let's worship together this Sunday! 🙌
+_Jesus My Rock Church_`;
+
+  return module.exports.sendMessage(musician.phone, text);
+}
+
+/**
  * Send an Instant Emergency Backup Promotion Alert
  */
 async function sendEmergencyPromotionAlert({ musician, service, positionName, declinedByName }) {
@@ -249,6 +296,7 @@ module.exports = {
   isReady,
   sendMessage,
   sendVolunteerRsvpInvite,
+  sendLineupFinalisedAlert,
   sendVolunteerReminderNudge,
   sendEmergencyPromotionAlert,
   sendLeaderUnfilledSlotAlert,

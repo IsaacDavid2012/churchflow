@@ -107,7 +107,7 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
 
   async function handleCopyFinalLineup() {
     if (!data?.service) return;
-    const text = formatFinalLineupForWhatsApp(data.service, data.lineup);
+    const text = formatFinalLineupForWhatsApp(data.service, data.lineup, data.planItems);
     const success = await copyToClipboard(text);
     if (success) {
       setCopiedFinalLineup(true);
@@ -372,6 +372,7 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
         <LineupReview
           service={service}
           lineup={lineup}
+          planItems={planItems || []}
           availability={{ available_count: availCount, declined_count: declinedCount }}
           onLineupChanged={loadServiceDetails}
           onOverrideClick={openOverrideModal}
@@ -472,12 +473,16 @@ export default function ServiceDetail({ serviceId, onBack, user }) {
         onClose={() => setShareModalOpen(false)}
         serviceId={service.id}
         serviceDate={formatServiceDate(service.service_date)}
+        serviceTime={service.service_time || '10:00 AM'}
         token={service.token}
         worshipLeaderName={service.worship_leader_name}
         positions={lineup}
         campusName={service.campus_name}
         theme={service.theme}
         serviceType={service.service_type}
+        serviceStatus={service.status}
+        lineup={lineup}
+        planItems={planItems || []}
       />
     </div>
   );

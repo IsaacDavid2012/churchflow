@@ -7,6 +7,7 @@ import { copyToClipboard, formatFinalLineupForWhatsApp } from '../utils/clipboar
 export default function LineupReview({
   service,
   lineup,
+  planItems = [],
   availability,
   onLineupChanged,
   onOverrideClick,
@@ -59,7 +60,7 @@ export default function LineupReview({
   }
 
   async function handleCopyFinalLineup() {
-    const text = formatFinalLineupForWhatsApp(service, lineup);
+    const text = formatFinalLineupForWhatsApp(service, lineup, planItems);
     const success = await copyToClipboard(text);
     if (success) {
       setCopiedWhatsApp(true);
@@ -172,11 +173,15 @@ export default function LineupReview({
           <button
             type="button"
             onClick={handleConfirmLineup}
-            disabled={confirming}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 disabled:opacity-50 transition-all cursor-pointer"
+            disabled={confirming || isLineupConfirmed}
+            className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-lg transition-all ${
+              isLineupConfirmed
+                ? 'bg-slate-700 dark:bg-slate-800 text-slate-300 border border-slate-600 dark:border-slate-700 cursor-default opacity-85'
+                : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25 disabled:opacity-50 cursor-pointer'
+            }`}
           >
             <CheckCheck className="w-3.5 h-3.5" />
-            <span>{isLineupConfirmed ? 'Re-Confirm Lineup' : 'Confirm Lineup'}</span>
+            <span>{isLineupConfirmed ? '✓ Lineup Finalised' : 'Confirm Lineup'}</span>
           </button>
 
           {isLineupConfirmed && (
@@ -188,10 +193,10 @@ export default function LineupReview({
                   ? 'bg-emerald-700 text-white shadow-emerald-700/25'
                   : 'bg-green-600 hover:bg-green-500 text-white shadow-green-600/25'
               }`}
-              title="Copy confirmed final lineup (Date, Time & Lineup) for WhatsApp"
+              title="Copy confirmed final lineup & setlist for WhatsApp"
             >
               {copiedWhatsApp ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedWhatsApp ? 'Copied for WhatsApp!' : 'Copy Final Lineup for WhatsApp'}</span>
+              <span>{copiedWhatsApp ? 'Copied for WhatsApp!' : 'Copy Final Lineup & Setlist'}</span>
             </button>
           )}
         </div>
@@ -199,27 +204,37 @@ export default function LineupReview({
 
       {isLineupConfirmed && (
         <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5 flex-1">
+          <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider">
               <CheckCheck className="w-4 h-4" />
-              <span>Final Lineup Confirmed — Ready for WhatsApp</span>
+              <span>Final Lineup & Setlist Confirmed — Ready for WhatsApp</span>
             </div>
-            <pre className="text-xs text-slate-800 dark:text-slate-200 font-mono bg-white dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl p-3 whitespace-pre-wrap leading-relaxed">
-              {formatFinalLineupForWhatsApp(service, lineup)}
+            <pre className="text-xs text-slate-800 dark:text-slate-200 font-mono bg-white dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl p-3 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+              {formatFinalLineupForWhatsApp(service, lineup, planItems)}
             </pre>
           </div>
-          <button
-            type="button"
-            onClick={handleCopyFinalLineup}
-            className={`flex items-center justify-center space-x-2 px-5 py-3 rounded-xl text-xs font-bold shadow-lg transition-all cursor-pointer shrink-0 ${
-              copiedWhatsApp
-                ? 'bg-emerald-700 text-white shadow-emerald-700/25'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25'
-            }`}
-          >
-            {copiedWhatsApp ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            <span>{copiedWhatsApp ? 'Copied to Clipboard!' : 'Copy Final Lineup for WhatsApp'}</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyFinalLineup}
+              className={`w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg transition-all cursor-pointer ${
+                copiedWhatsApp
+                  ? 'bg-emerald-700 text-white shadow-emerald-700/25'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25'
+              }`}
+            >
+              {copiedWhatsApp ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedWhatsApp ? 'Copied!' : 'Copy to Clipboard'}</span>
+            </button>
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(formatFinalLineupForWhatsApp(service, lineup, planItems))}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/25 transition-all cursor-pointer"
+            >
+              <span>Share via WhatsApp</span>
+            </a>
+          </div>
         </div>
       )}
 

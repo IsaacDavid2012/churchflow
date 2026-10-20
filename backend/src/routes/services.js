@@ -760,7 +760,9 @@ router.get('/whatsapp/status', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MAN
   }
 });
 
-// POST /api/services/:id/whatsapp-notify-all - Send direct RSVP links to all scheduled primary volunteers
+// POST /api/services/:id/whatsapp-notify-all - Send direct alerts to all scheduled primary volunteers
+// If service is confirmed/finalised, sends Lineup Finalised & Setlist notification (does NOT ask for confirmation).
+// If service is pending, sends RSVP attendance invitation.
 router.post('/:id/whatsapp-notify-all', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
   const { id } = req.params;
 
@@ -782,6 +784,28 @@ router.post('/:id/whatsapp-notify-all', requireRole([ROLES.ADMIN, ROLES.PASTOR, 
       [id]
     );
 
+    const isFinalised = service.status === 'confirmed';
+
+    // If finalised, fetch setlist songs from service_plan_items
+    let setlistSongs = [];
+    if (isFinalised) {
+      const planRes = await db.query(
+        `SELECT spi.*, sng.title AS song_title, sng.default_key AS song_key
+         FROM service_plan_items spi
+         LEFT JOIN songs sng ON sng.id = spi.song_id
+         WHERE spi.service_id = $1
+         ORDER BY spi.item_order ASC`,
+        [id]
+      );
+      setlistSongs = planRes.rows.map((r) => ({
+        title: r.song_title || r.title,
+        key: r.song_key,
+        duration_minutes: r.duration_minutes,
+        leader: r.leader,
+        presenter: r.presenter,
+      }));
+    }
+
     const results = [];
     for (const row of assignRes.rows) {
       if (!row.musician_phone) {
@@ -789,11 +813,21 @@ router.post('/:id/whatsapp-notify-all', requireRole([ROLES.ADMIN, ROLES.PASTOR, 
         continue;
       }
 
-      const sendRes = await whatsappService.sendVolunteerRsvpInvite({
-        musician: { id: row.musician_id, name: row.musician_name, phone: row.musician_phone },
-        service,
-        positionName: row.position_name,
-      });
+      let sendRes;
+      if (isFinalised) {
+        sendRes = await whatsappService.sendLineupFinalisedAlert({
+          musician: { id: row.musician_id, name: row.musician_name, phone: row.musician_phone },
+          service,
+          positionName: row.position_name,
+          setlistSongs,
+        });
+      } else {
+        sendRes = await whatsappService.sendVolunteerRsvpInvite({
+          musician: { id: row.musician_id, name: row.musician_name, phone: row.musician_phone },
+          service,
+          positionName: row.position_name,
+        });
+      }
 
       results.push({
         musician: row.musician_name,
@@ -809,13 +843,14 @@ router.post('/:id/whatsapp-notify-all', requireRole([ROLES.ADMIN, ROLES.PASTOR, 
     res.json({
       success: true,
       service_id: id,
+      finalised: isFinalised,
       total: assignRes.rows.length,
       dispatched: results.filter((r) => r.status === 'sent').length,
       details: results,
     });
   } catch (err) {
     console.error('WhatsApp notify all error:', err);
-    res.status(500).json({ error: 'Failed to dispatch WhatsApp invites' });
+    res.status(500).json({ error: 'Failed to dispatch WhatsApp notifications' });
   }
 });
 

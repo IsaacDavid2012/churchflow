@@ -12,6 +12,8 @@ import {
   Alert,
   Platform,
   SafeAreaView,
+  Share,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -49,6 +51,31 @@ function getTransposedKey(originalKey, semitones) {
   if (semitones === 0 || !originalKey) return originalKey || 'C';
   return transposeChord(originalKey, semitones);
 }
+
+const formatSetlistText = (setlist) => {
+  if (!setlist) return '';
+  const songs = Array.isArray(setlist.songs) ? setlist.songs : [];
+  const lines = [
+    `🎵 *Worship Setlist: ${setlist.name || 'Worship Set'}*`,
+    `⛪ *Jesus My Rock Worship*`,
+    setlist.description ? `📝 ${setlist.description}` : '',
+    '',
+    `*Songs (${songs.length}):*`,
+  ];
+  if (songs.length === 0) {
+    lines.push('• No songs in this setlist yet');
+  } else {
+    songs.forEach((s, idx) => {
+      const keyStr = s.key ? ` [Key ${s.key}]` : '';
+      const tempoStr = s.tempo ? ` (${s.tempo} BPM)` : '';
+      const artistStr = s.artist ? ` - ${s.artist}` : '';
+      lines.push(`${idx + 1}. *${s.title}*${artistStr}${keyStr}${tempoStr}`);
+    });
+  }
+  lines.push('');
+  lines.push('🔗 https://serve.creativeclicks.art/songbook');
+  return lines.filter(Boolean).join('\n');
+};
 
 export default function SongBookScreen({ user, isDark = false }) {
   const [activeTab, setActiveTab] = useState('user'); // 'user' (My Songs) | 'team' (Jesus My Rock) | 'setlists' | 'online'
@@ -172,6 +199,25 @@ export default function SongBookScreen({ user, isDark = false }) {
     const nextIndex = currentIndex + direction;
     if (nextIndex >= 0 && nextIndex < selectedSetlist.songs.length) {
       openSongReader(selectedSetlist.songs[nextIndex], selectedSetlist);
+    }
+  };
+
+  const handleShareSetlist = async (setlist) => {
+    if (!setlist) return;
+    try {
+      let fullSet = setlist;
+      if (!Array.isArray(setlist.songs) || setlist.songs.length === 0) {
+        fullSet = await api.getSongbookSetlist(setlist.id);
+      }
+      const text = formatSetlistText(fullSet);
+      await Share.share({
+        title: `Worship Setlist: ${fullSet.name || 'Setlist'}`,
+        message: text,
+      });
+    } catch (err) {
+      if (err.message && !err.message.includes('dismissed')) {
+        Alert.alert('Share Error', err.message || 'Could not share setlist');
+      }
     }
   };
 
@@ -571,13 +617,22 @@ export default function SongBookScreen({ user, isDark = false }) {
                 onPress={() => openSetlist(item)}
                 activeOpacity={0.7}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                   <Ionicons name="folder-open" size={24} color={colors.primary} />
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={[styles.setlistName, { color: colors.text }]}>{item.name}</Text>
                     <Text style={[styles.setlistSub, { color: colors.subText }]}>{count} songs in set</Text>
                   </View>
                 </View>
+
+                <TouchableOpacity
+                  style={{ padding: 8, marginRight: 4 }}
+                  onPress={() => handleShareSetlist(item)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="share-social-outline" size={20} color="#16a34a" />
+                </TouchableOpacity>
+
                 <Ionicons name="chevron-forward" size={18} color={colors.subText} />
               </TouchableOpacity>
             );
@@ -648,6 +703,16 @@ export default function SongBookScreen({ user, isDark = false }) {
                   <Ionicons name="chevron-forward" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
+            )}
+
+            {selectedSetlist && (
+              <TouchableOpacity
+                onPress={() => handleShareSetlist(selectedSetlist)}
+                style={{ padding: 6, marginRight: 6 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="share-social-outline" size={22} color="#16a34a" />
+              </TouchableOpacity>
             )}
 
             <TouchableOpacity

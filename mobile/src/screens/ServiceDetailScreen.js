@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -44,6 +45,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   const [campuses, setCampuses] = useState([]);
   const [lineup, setLineup] = useState([]);
   const [planItems, setPlanItems] = useState([]);
+  const [allPlanItems, setAllPlanItems] = useState([]);
   const [availability, setAvailability] = useState({ available: [], declined: [] });
   const [auditLogs, setAuditLogs] = useState([]);
   const [worshipLeaders, setWorshipLeaders] = useState([]);
@@ -111,7 +113,9 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       if (svcData) {
         setServiceInfo(svcData.service || service);
         setLineup(Array.isArray(svcData.lineup) ? svcData.lineup : []);
-        const items = (svcData.planItems || svcData.plan || []).filter((i) => i.item_type !== 'song');
+        const rawPlan = svcData.planItems || svcData.plan || [];
+        setAllPlanItems(Array.isArray(rawPlan) ? rawPlan : []);
+        const items = (Array.isArray(rawPlan) ? rawPlan : []).filter((i) => i.item_type !== 'song');
         setPlanItems(Array.isArray(items) ? items : []);
         setAvailability(svcData.availability || { available: [], declined: [] });
       }
@@ -377,19 +381,105 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
     const lineupLines = [];
     displayedSlots.forEach((slot) => {
       if (slot.primary?.name) {
-        lineupLines.push(`• ${slot.positionName}: ${slot.primary.name}`);
+        lineupLines.push(`• *${slot.positionName}*: ${slot.primary.name}`);
       }
     });
+
+    const setlistLines = [];
+    const allItems = allPlanItems.length > 0 ? allPlanItems : planItems;
+    if (allItems && allItems.length > 0) {
+      allItems.forEach((p, idx) => {
+        const duration = p.duration_minutes ? ` (${p.duration_minutes}m)` : '';
+        const keyStr = p.song_key || p.key ? ` [Key ${p.song_key || p.key}]` : '';
+        const presenter = p.leader || p.presenter ? ` — ${p.leader || p.presenter}` : '';
+        setlistLines.push(`${idx + 1}. *${p.song_title || p.title}*${keyStr}${duration}${presenter}`);
+      });
+    }
+
+    const publicLink = serviceInfo?.token
+      ? `https://serve.creativeclicks.art/avail/${serviceInfo.token}`
+      : 'https://serve.creativeclicks.art';
+
     return [
-      `⛪ *Jesus My Rock Church — ${serviceInfo?.service_type || 'Sunday Service'}*`,
+      `🕊️ *Jesus My Rock Church — Lineup & Setlist Finalised!*`,
+      `🗓️ *${serviceInfo?.service_type || 'Sunday Service'}*`,
       `📅 *Date:* ${serviceInfo?.service_date}`,
       `⏰ *Time:* ${serviceInfo?.service_time || '10:00 AM'}`,
       serviceInfo?.campus_name ? `📍 *Campus:* ${serviceInfo.campus_name}` : '',
+      serviceInfo?.theme ? `🎯 *Theme:* "${serviceInfo.theme}"` : '',
+      '',
+      `✅ *FINAL SERVING LINEUP:*`,
+      ...(lineupLines.length > 0 ? lineupLines : ['• No assignments recorded']),
+      ...(setlistLines.length > 0 ? ['', '🎵 *WORSHIP SETLIST & RUN SHEET:*', ...setlistLines] : []),
+      '',
+      `👉 *View dynamic live run-sheet:*`,
+      publicLink,
+      '',
+      `See everyone on Sunday! Let's worship with gladness! 🙌`,
+    ].filter(Boolean).join('\n');
+  };
+
+  const getUnconfirmedInviteText = () => {
+    const publicLink = serviceInfo?.token
+      ? `https://serve.creativeclicks.art/avail/${serviceInfo.token}`
+      : 'https://serve.creativeclicks.art';
+    return [
+      `⛪ *Jesus My Rock Church — ${serviceInfo?.service_type || 'Sunday Service'}*`,
+      `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
+      serviceInfo?.campus_name ? `📍 *Campus:* ${serviceInfo.campus_name}` : '',
       serviceInfo?.theme ? `📖 *Theme:* "${serviceInfo.theme}"` : '',
       '',
-      `👥 *Final Lineup:*`,
-      ...(lineupLines.length > 0 ? lineupLines : ['• No assignments yet']),
+      `👉 *Please confirm your availability:*`,
+      publicLink,
     ].filter(Boolean).join('\n');
+  };
+
+  const handleNativeShare = async () => {
+    const isLineupConfirmed = serviceInfo?.status === 'confirmed';
+    const messageText = isLineupConfirmed ? getFormattedFinalLineupText() : getUnconfirmedInviteText();
+    try {
+      await Share.share({
+        title: `${serviceInfo?.service_type || 'Service'} - ${isLineupConfirmed ? 'Final Lineup & Setlist' : 'RSVP'}`,
+        message: messageText,
+      });
+    } catch (err) {
+      if (err.message && !err.message.includes('dismissed')) {
+        Alert.alert('Share Error', err.message);
+      }
+    }
+  };
+
+  const handleShareRunSheet = async () => {
+    const allItems = allPlanItems.length > 0 ? allPlanItems : planItems;
+    const runSheetLines = allItems.map((p, idx) => {
+      const duration = p.duration_minutes ? ` (${p.duration_minutes}m)` : '';
+      const keyStr = p.song_key || p.key ? ` [Key ${p.song_key || p.key}]` : '';
+      const presenter = p.leader || p.presenter ? ` — ${p.leader || p.presenter}` : '';
+      return `${idx + 1}. *${p.song_title || p.title}*${keyStr}${duration}${presenter}`;
+    });
+
+    const text = [
+      `📋 *Order of Service Run Sheet*`,
+      `⛪ *Jesus My Rock Church — ${serviceInfo?.service_type || 'Sunday Service'}*`,
+      `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
+      serviceInfo?.theme ? `🎯 *Theme:* "${serviceInfo.theme}"` : '',
+      '',
+      `*Flow & Timings (${allItems.length} items):*`,
+      ...(runSheetLines.length > 0 ? runSheetLines : ['• No run sheet items yet']),
+      '',
+      serviceInfo?.token ? `👉 https://serve.creativeclicks.art/avail/${serviceInfo.token}` : '',
+    ].filter(Boolean).join('\n');
+
+    try {
+      await Share.share({
+        title: `Run Sheet - ${serviceInfo?.service_date}`,
+        message: text,
+      });
+    } catch (err) {
+      if (err.message && !err.message.includes('dismissed')) {
+        Alert.alert('Share Error', err.message);
+      }
+    }
   };
 
   const handleShareWhatsApp = () => {
@@ -407,30 +497,12 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
 
   const handleManualShareWhatsApp = () => {
     const isLineupConfirmed = serviceInfo?.status === 'confirmed';
-    let messageText = '';
-
-    if (isLineupConfirmed) {
-      messageText = getFormattedFinalLineupText();
-    } else {
-      const publicLink = serviceInfo?.token
-        ? `https://serve.creativeclicks.art/avail/${serviceInfo.token}`
-        : 'https://serve.creativeclicks.art';
-      messageText = [
-        `⛪ *Jesus My Rock Church — ${serviceInfo?.service_type || 'Sunday Service'}*`,
-        `📅 *Date:* ${serviceInfo?.service_date} at ${serviceInfo?.service_time || '10:00 AM'}`,
-        serviceInfo?.campus_name ? `📍 *Campus:* ${serviceInfo.campus_name}` : '',
-        serviceInfo?.theme ? `📖 *Theme:* "${serviceInfo.theme}"` : '',
-        '',
-        `👉 *Confirm Your Availability:*`,
-        publicLink,
-      ]
-        .filter(Boolean)
-        .join('\n');
-    }
-
+    const messageText = isLineupConfirmed ? getFormattedFinalLineupText() : getUnconfirmedInviteText();
     const encoded = encodeURIComponent(messageText);
     Linking.openURL(`whatsapp://send?text=${encoded}`).catch(() => {
-      Linking.openURL(`https://api.whatsapp.com/send?text=${encoded}`);
+      Linking.openURL(`https://api.whatsapp.com/send?text=${encoded}`).catch(() => {
+        Share.share({ message: messageText });
+      });
     });
   };
 
@@ -443,7 +515,9 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       const res = await api.sendWhatsAppNotifyAll(service.id);
       setWaInviteResult({
         success: true,
-        message: `Dispatched invitations to ${res.dispatched} of ${res.total} scheduled volunteers!`,
+        message: res.finalised || serviceInfo?.status === 'confirmed'
+          ? `Dispatched final lineup & setlist to ${res.dispatched} of ${res.total} scheduled volunteers!`
+          : `Dispatched invitations to ${res.dispatched} of ${res.total} scheduled volunteers!`,
       });
       fetchServiceData();
     } catch (err) {
@@ -658,16 +732,25 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                       <Ionicons name="sparkles" size={14} color="#fff" />
                       <Text style={styles.autoFillBtnText}>Auto-Roster</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.autoFillBtn, { backgroundColor: '#059669' }]}
-                      onPress={handleConfirmLineup}
-                      disabled={confirmingLineup}
-                    >
-                      <Ionicons name="checkmark-done" size={14} color="#fff" />
-                      <Text style={styles.autoFillBtnText}>
-                        {serviceInfo?.status === 'confirmed' ? 'Re-Confirm' : 'Confirm'}
-                      </Text>
-                    </TouchableOpacity>
+                    {serviceInfo?.status === 'confirmed' ? (
+                      <View style={[styles.autoFillBtn, { backgroundColor: '#065f46', opacity: 0.9 }]}>
+                        <Ionicons name="checkmark-circle" size={14} color="#6ee7b7" />
+                        <Text style={[styles.autoFillBtnText, { color: '#6ee7b7' }]}>
+                          Finalised
+                        </Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.autoFillBtn, { backgroundColor: '#059669' }]}
+                        onPress={handleConfirmLineup}
+                        disabled={confirmingLineup}
+                      >
+                        <Ionicons name="checkmark-done" size={14} color="#fff" />
+                        <Text style={styles.autoFillBtnText}>
+                          {confirmingLineup ? 'Confirming...' : 'Confirm Lineup'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -764,28 +847,46 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                   }}
                 >
                   <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857', marginBottom: 6 }}>
-                    ✅ FINAL LINEUP CONFIRMED — READY FOR WHATSAPP
+                    ✅ FINAL LINEUP & SETLIST CONFIRMED — READY FOR WHATSAPP
                   </Text>
                   <Text style={{ fontSize: 12, color: '#064e3b', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', marginBottom: 10 }}>
                     {getFormattedFinalLineupText()}
                   </Text>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: '#059669',
-                      paddingVertical: 10,
-                      borderRadius: 10,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                    }}
-                    onPress={handleShareWhatsApp}
-                  >
-                    <Ionicons name="logo-whatsapp" size={16} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
-                      Send Final Lineup to WhatsApp
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#059669',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                      }}
+                      onPress={handleNativeShare}
+                    >
+                      <Ionicons name="share-social-outline" size={16} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+                        Share Lineup & Setlist
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: '#047857',
+                        paddingVertical: 10,
+                        paddingHorizontal: 12,
+                        borderRadius: 10,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                      }}
+                      onPress={handleShareWhatsApp}
+                    >
+                      <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             </View>
@@ -906,13 +1007,22 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
               <Text style={[styles.sectionHeading, { color: colors.text }]}>
                 Order of Service Flow
               </Text>
-              <TouchableOpacity
-                style={[styles.miniActionBtn, { backgroundColor: colors.primary }]}
-                onPress={() => setIsPlanModalOpen(true)}
-              >
-                <Ionicons name="add" size={16} color="#fff" />
-                <Text style={styles.miniActionBtnText}>Add Item</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                <TouchableOpacity
+                  style={[styles.miniActionBtn, { backgroundColor: '#16a34a' }]}
+                  onPress={handleShareRunSheet}
+                >
+                  <Ionicons name="share-social-outline" size={15} color="#fff" />
+                  <Text style={styles.miniActionBtnText}>Share Run Sheet</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.miniActionBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setIsPlanModalOpen(true)}
+                >
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.miniActionBtnText}>Add Item</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {planItems.length === 0 ? (
@@ -1565,11 +1675,15 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <Ionicons name="flash" size={15} color="#16a34a" />
                   <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
-                    1-Tap Auto-Send RSVP Invites
+                    {serviceInfo?.status === 'confirmed'
+                      ? 'Send Final Lineup & Setlist to All Volunteers'
+                      : '1-Tap Auto-Send RSVP Invites'}
                   </Text>
                 </View>
                 <Text style={{ fontSize: 11, color: colors.subText, marginBottom: 10, lineHeight: 16 }}>
-                  Sends personalized WhatsApp messages to all scheduled volunteers with their 1-tap PIN login RSVP links.
+                  {serviceInfo?.status === 'confirmed'
+                    ? 'Sends finalised lineup roles & worship songs to all scheduled volunteers via WhatsApp. No RSVP or confirmation prompt.'
+                    : 'Sends personalized WhatsApp messages to all scheduled volunteers with their 1-tap PIN login RSVP links.'}
                 </Text>
 
                 <TouchableOpacity
@@ -1593,7 +1707,9 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                     <>
                       <Ionicons name="paper-plane" size={16} color="#fff" />
                       <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-                        Send Invites to All Volunteers
+                        {serviceInfo?.status === 'confirmed'
+                          ? 'Send Final Lineup & Setlist to All'
+                          : 'Send Invites to All Volunteers'}
                       </Text>
                     </>
                   )}
@@ -1719,7 +1835,32 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
                 )}
               </View>
 
-              {/* Action 3: Manual WhatsApp Open */}
+              {/* Action 3: Native Share to WhatsApp or Any App */}
+              <TouchableOpacity
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: '#16a34a',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+                onPress={() => {
+                  setIsWhatsAppModalOpen(false);
+                  handleNativeShare();
+                }}
+              >
+                <Ionicons name="share-social" size={17} color="#fff" />
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#fff' }}>
+                  {serviceInfo?.status === 'confirmed'
+                    ? 'Share Lineup & Setlist (WhatsApp / System)'
+                    : 'Share Availability Link (WhatsApp / System)'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Action 4: Direct WhatsApp App Launch */}
               <TouchableOpacity
                 style={{
                   padding: 12,
@@ -1737,7 +1878,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
               >
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color="#16a34a" />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
-                  Open WhatsApp App (Manual Share)
+                  Open WhatsApp App Directly
                 </Text>
               </TouchableOpacity>
             </ScrollView>
