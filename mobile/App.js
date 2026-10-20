@@ -33,6 +33,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('services');
   const [selectedService, setSelectedService] = useState(null);
   const [publicToken, setPublicToken] = useState(null);
+  const [pendingSbpUri, setPendingSbpUri] = useState(null);
 
   useEffect(() => {
     api.setOnUnauthorized(() => {
@@ -65,7 +66,22 @@ export default function App() {
     initApp();
 
     const handleDeepLink = (event) => {
-      const data = Linking.parse(event.url);
+      if (!event?.url) return;
+      const rawUrl = event.url;
+
+      // Check if incoming SBP / chord file from WhatsApp or file manager
+      if (
+        rawUrl.toLowerCase().endsWith('.sbp') ||
+        rawUrl.toLowerCase().endsWith('.sbpbackup') ||
+        rawUrl.startsWith('content://') ||
+        (rawUrl.startsWith('file://') && (rawUrl.includes('.sbp') || rawUrl.includes('WhatsApp') || rawUrl.includes('SongBook')))
+      ) {
+        setPendingSbpUri(rawUrl);
+        setActiveTab('songbook');
+        return;
+      }
+
+      const data = Linking.parse(rawUrl);
       if (data.path && data.path.includes('avail')) {
         const parts = data.path.split('/');
         const token = parts[parts.length - 1];
@@ -190,7 +206,14 @@ export default function App() {
                 onLogout={handleLogout}
               />
             )}
-            {activeTab === 'songbook' && <SongBookScreen user={user} isDark={isDark} />}
+            {activeTab === 'songbook' && (
+              <SongBookScreen
+                user={user}
+                isDark={isDark}
+                pendingSbpUri={pendingSbpUri}
+                onClearPendingSbp={() => setPendingSbpUri(null)}
+              />
+            )}
             {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
             {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
             {(activeTab === 'ministries' || activeTab === 'groups') && (

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const songbookService = require('../services/songbookService');
 const { authMiddleware } = require('../middleware/auth');
+const { createSbpZipArchive, parseSbpBuffer } = require('../utils/sbpZip');
+const { buildPrintableBookletHtml } = require('../utils/chordProHtml');
 
 // GET /api/songbook/status — Gateway Health Check (Public or Auth)
 router.get('/status', async (req, res, next) => {
@@ -139,6 +141,21 @@ router.delete('/setlists/:id', async (req, res, next) => {
 // POST /api/songbook/backup/parse — Universal parser for .sbp, .sbpbackup, ChordPro, text
 router.post('/backup/parse', async (req, res, next) => {
   try {
+    const { fileBase64, data, fileName = 'Imported_Setlist.sbp' } = req.body || {};
+    const inputBase64 = fileBase64 || (typeof data === 'string' && data.length > 50 ? data : null);
+
+    if (inputBase64) {
+      try {
+        const buf = Buffer.from(inputBase64, 'base64');
+        const parsed = parseSbpBuffer(buf, fileName);
+        if (parsed && (parsed.songs?.length > 0 || parsed.setlists?.length > 0)) {
+          return res.json(parsed);
+        }
+      } catch (e) {
+        console.warn('[Songbook] Local buffer parse fallback:', e.message);
+      }
+    }
+
     const parsed = await songbookService.parseBackup(req.user, req.body);
     res.json(parsed);
   } catch (err) {
@@ -161,6 +178,114 @@ router.post('/backup/import', async (req, res, next) => {
   try {
     const result = await songbookService.importBackup(req.user, req.body);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/songbook/setlists/:id/export/sbp — Export a setlist as genuine .sbp ZIP Archive
+router.get('/setlists/:id/export/sbp', async (req, res, next) => {
+  try {
+    const setlist = await songbookService.getSetlistById(req.user, req.params.id);
+    if (!setlist) {
+      return res.status(404).json({ error: 'Setlist not found' });
+    }
+
+    const songs = Array.isArray(setlist.songs) ? setlist.songs : [];
+    const zipBuffer = createSbpZipArchive({
+      songs,
+      setlists: [setlist],
+      name: setlist.name || 'Worship_Set',
+    });
+
+    const cleanFilename = `${(setlist.name || 'Worship_Set').replace(/[^a-zA-Z0-9_-]/g, '_')}.sbp`;
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', zipBuffer.length);
+    res.end(zipBuffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/songbook/songs/:id/export/sbp — Export a single song as genuine .sbp ZIP Archive
+router.get('/songs/:id/export/sbp', async (req, res, next) => {
+  try {
+    const song = await songbookService.getSongById(req.user, req.params.id);
+    if (!song) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+
+    const zipBuffer = createSbpZipArchive({
+      songs: [song],
+      setlists: [],
+      name: song.title || 'Song',
+    });
+
+    const cleanFilename = `${(song.title || 'Song').replace(/[^a-zA-Z0-9_-]/g, '_')}.sbp`;
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', zipBuffer.length);
+    res.end(zipBuffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/songbook/setlists/:id/export/pdf — Export setlist as printable HTML / PDF
+router.get('/setlists/:id/export/pdf', async (req, res, next) => {
+  try {
+    const setlist = await songbookService.getSetlistById(req.user, req.params.id);
+    if (!setlist) {
+      return res.status(404).json({ error: 'Setlist not found' });
+    }
+
+    const songs = Array.isArray(setlist.songs) ? setlist.songs : [];
+    const html = buildPrintableBookletHtml({
+      title: setlist.name || 'Worship Setlist',
+      date: new Date().toLocaleDateString('en-MY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      songs,
+    });
+
+    if (req.query.format === 'html') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    }
+
+    res.json({
+      title: setlist.name || 'Worship Setlist',
+      songCount: songs.length,
+      html,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/songbook/songs/:id/export/pdf — Export single song as printable HTML / PDF
+router.get('/songs/:id/export/pdf', async (req, res, next) => {
+  try {
+    const song = await songbookService.getSongById(req.user, req.params.id);
+    if (!song) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+
+    const html = buildPrintableBookletHtml({
+      title: song.title || 'Chord Chart',
+      date: '',
+      songs: [song],
+    });
+
+    if (req.query.format === 'html') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    }
+
+    res.json({
+      title: song.title || 'Chord Chart',
+      songCount: 1,
+      html,
+    });
   } catch (err) {
     next(err);
   }

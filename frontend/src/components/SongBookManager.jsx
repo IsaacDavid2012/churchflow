@@ -119,6 +119,8 @@ export default function SongBookManager({ currentUser }) {
   const [importStrategy, setImportStrategy] = useState('skip'); // 'skip' | 'overwrite' | 'duplicate'
   const [importTargetScope, setImportTargetScope] = useState('user');
   const [importing, setImporting] = useState(false);
+  const [importAsSetlist, setImportAsSetlist] = useState(true);
+  const [importSetlistName, setImportSetlistName] = useState('');
 
   // Song Editor State
   const [songForm, setSongForm] = useState({
@@ -344,6 +346,9 @@ export default function SongBookManager({ currentUser }) {
 
           const parsed = await api.parseSongbookBackup(parsePayload);
           setImportParsed(parsed);
+          const suggestedName = parsed.name || (parsed.setlists?.[0]?.name) || file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+          setImportSetlistName(suggestedName);
+          setImportAsSetlist(Boolean((parsed.setlists && parsed.setlists.length > 0) || (parsed.songs && parsed.songs.length > 1)));
 
           const preview = await api.previewSongbookBackup({
             backupData: parsed,
@@ -377,8 +382,12 @@ export default function SongBookManager({ currentUser }) {
         backupData: importParsed,
         targetOwnerType: importTargetScope,
         strategy: importStrategy,
+        createSetlist: importAsSetlist,
+        setlistName: importSetlistName.trim(),
       });
-      showToast(`Import complete: ${res.songsImported || 0} songs added/updated!`);
+      const count = res.songsImported || res.addedCount || 0;
+      const setName = res.createdSetlistName || (importAsSetlist ? importSetlistName : null);
+      showToast(`Import complete: ${count} songs added${setName ? ` and setlist "${setName}" created` : ''}!`);
       setIsImportModalOpen(false);
       setImportFile(null);
       setImportParsed(null);
@@ -388,6 +397,63 @@ export default function SongBookManager({ currentUser }) {
       showToast(err.message || 'Failed to commit import', 'error');
     } finally {
       setImporting(false);
+    }
+  }
+
+  // --- Export Handlers ---
+  async function handleExportSetlistSbp(setlist) {
+    try {
+      await api.exportSongbookSetlistSbp(setlist.id, setlist.name);
+      showToast('Downloaded .sbp backup archive!');
+    } catch (err) {
+      showToast(err.message || 'Failed to export .sbp', 'error');
+    }
+  }
+
+  async function handleExportSongSbp(song) {
+    try {
+      await api.exportSongbookSongSbp(song.id, song.title);
+      showToast('Downloaded .sbp song file!');
+    } catch (err) {
+      showToast(err.message || 'Failed to export .sbp', 'error');
+    }
+  }
+
+  async function handleExportSetlistPdf(setlistId) {
+    try {
+      const res = await api.getSongbookSetlistPdf(setlistId);
+      if (res?.html) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(res.html);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => {
+            printWindow.print();
+          }, 400);
+        }
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  async function handleExportSongPdf(songId) {
+    try {
+      const res = await api.getSongbookSongPdf(songId);
+      if (res?.html) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(res.html);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => {
+            printWindow.print();
+          }, 400);
+        }
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to generate PDF', 'error');
     }
   }
 
@@ -907,6 +973,26 @@ export default function SongBookManager({ currentUser }) {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              handleExportSetlistSbp(sl);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all cursor-pointer"
+                            title="Export Setlist as SongBook Pro (.sbp)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExportSetlistPdf(sl.id);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-all cursor-pointer"
+                            title="Export Setlist Lead Sheet PDF"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               handleShareSetlist(sl);
                             }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 transition-all cursor-pointer"
@@ -993,6 +1079,22 @@ export default function SongBookManager({ currentUser }) {
                       >
                         <Share2 className="w-3 h-3" />
                         <span>Share Setlist</span>
+                      </button>
+                      <button
+                        onClick={() => handleExportSetlistSbp(selectedSetlist)}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Export Setlist as .sbp file"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>.sbp</span>
+                      </button>
+                      <button
+                        onClick={() => handleExportSetlistPdf(selectedSetlist.id)}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Export Setlist Lead Sheet PDF"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>PDF</span>
                       </button>
                     </div>
                   )}
@@ -1104,6 +1206,24 @@ export default function SongBookManager({ currentUser }) {
                     title="Edit Song"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Export Song SBP */}
+                  <button
+                    onClick={() => handleExportSongSbp(selectedSong)}
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                    title="Export Song as .sbp file"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Export Song PDF */}
+                  <button
+                    onClick={() => handleExportSongPdf(selectedSong.id)}
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                    title="Print / Export Lead Sheet PDF"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Copy to Scope Button */}
@@ -1388,6 +1508,28 @@ export default function SongBookManager({ currentUser }) {
                     <option value="overwrite">Overwrite existing songs</option>
                     <option value="duplicate">Duplicate (Keep both)</option>
                   </select>
+                </div>
+
+                {/* Create Setlist from Import */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                  <label className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={importAsSetlist}
+                      onChange={(e) => setImportAsSetlist(e.target.checked)}
+                      className="rounded text-amber-500 focus:ring-amber-500"
+                    />
+                    <span>Create a Setlist from these imported songs</span>
+                  </label>
+                  {importAsSetlist && (
+                    <input
+                      type="text"
+                      value={importSetlistName}
+                      onChange={(e) => setImportSetlistName(e.target.value)}
+                      placeholder="Setlist name..."
+                      className="w-full mt-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs dark:text-white"
+                    />
+                  )}
                 </div>
               </div>
             )}

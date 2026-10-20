@@ -15,6 +15,9 @@ import {
   Share,
   Linking,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
@@ -77,7 +80,12 @@ const formatSetlistText = (setlist) => {
   return lines.filter(Boolean).join('\n');
 };
 
-export default function SongBookScreen({ user, isDark = false }) {
+export default function SongBookScreen({
+  user,
+  isDark = false,
+  pendingSbpUri = null,
+  onClearPendingSbp = null,
+}) {
   const [activeTab, setActiveTab] = useState('user'); // 'user' (My Songs) | 'team' (Jesus My Rock) | 'setlists' | 'online'
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
@@ -117,6 +125,27 @@ export default function SongBookScreen({ user, isDark = false }) {
   const [newKey, setNewKey] = useState('C');
   const [newContent, setNewContent] = useState('');
   const [savingSong, setSavingSong] = useState(false);
+
+  // WhatsApp / SBP File Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [parsedImportData, setParsedImportData] = useState(null);
+  const [importScope, setImportScope] = useState('user'); // 'user' | 'team'
+  const [importAsSetlist, setImportAsSetlist] = useState(true);
+  const [importSetlistName, setImportSetlistName] = useState('');
+  const [importStrategy, setImportStrategy] = useState('skip'); // 'skip' | 'overwrite'
+  const [committingImport, setCommittingImport] = useState(false);
+
+  // Setlist Builder Modal State (Create & Edit)
+  const [isSetlistBuilderOpen, setIsSetlistBuilderOpen] = useState(false);
+  const [editingSetlistId, setEditingSetlistId] = useState(null);
+  const [setlistBuilderName, setSetlistBuilderName] = useState('');
+  const [setlistBuilderScope, setSetlistBuilderScope] = useState('user');
+  const [setlistBuilderSongs, setSetlistBuilderSongs] = useState([]);
+  const [setlistBuilderKeyOverrides, setSetlistBuilderKeyOverrides] = useState({});
+  const [savingSetlist, setSavingSetlist] = useState(false);
+  const [isSongPickerOpen, setIsSongPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   const colors = {
     bg: isDark ? '#020617' : '#ffffff',
@@ -219,6 +248,265 @@ export default function SongBookScreen({ user, isDark = false }) {
         Alert.alert('Share Error', err.message || 'Could not share setlist');
       }
     }
+  };
+
+  // --- SBP WhatsApp & System File Auto-Import ---
+  useEffect(() => {
+    if (pendingSbpUri) {
+      processIncomingSbp(pendingSbpUri);
+    }
+  }, [pendingSbpUri]);
+
+  const processIncomingSbp = async (uri) => {
+    try {
+      setImportingFile(true);
+      let fileBase64 = null;
+      let fileName = 'WhatsApp_Import.sbp';
+
+      if (uri.startsWith('content://') || uri.startsWith('file://')) {
+        fileBase64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const segments = uri.split('/');
+        fileName = decodeURIComponent(segments[segments.length - 1] || 'Imported.sbp');
+      }
+
+      if (!fileBase64) {
+        throw new Error('Could not read file data');
+      }
+
+      const parsed = await api.parseSongbookBackup({
+        fileBase64,
+        fileName,
+      });
+
+      if (parsed && ((parsed.songs && parsed.songs.length > 0) || (parsed.setlists && parsed.setlists.length > 0))) {
+        setParsedImportData(parsed);
+        const suggestedName = parsed.name || (parsed.setlists?.[0]?.name) || fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+        setImportSetlistName(suggestedName);
+        setImportAsSetlist(Boolean(parsed.setlists?.length > 0 || parsed.songs?.length > 1));
+        setIsImportModalOpen(true);
+      } else {
+        Alert.alert('Import Failed', 'No valid songs or setlists were found in this file.');
+      }
+    } catch (err) {
+      console.error('Failed to process SBP file:', err);
+      Alert.alert('File Import Error', err.message || 'Could not parse the incoming file.');
+    } finally {
+      setImportingFile(false);
+      if (onClearPendingSbp) onClearPendingSbp();
+    }
+  };
+
+  const commitImport = async () => {
+    if (!parsedImportData) return;
+    setCommittingImport(true);
+    try {
+      const result = await api.importSongbookBackup({
+        backupData: parsedImportData,
+        targetOwnerType: importScope,
+        strategy: importStrategy,
+        createSetlist: importAsSetlist,
+        setlistName: importSetlistName.trim(),
+      });
+
+      setIsImportModalOpen(false);
+      setParsedImportData(null);
+      await fetchLibrary(importScope);
+
+      const count = result.addedCount || parsedImportData.songs?.length || 0;
+      const setName = result.createdSetlistName || (importAsSetlist ? importSetlistName : null);
+      Alert.alert(
+        'Import Completed 🎉',
+        `Successfully imported ${count} song(s)${setName ? ` and created setlist "${setName}"` : ''} into your ${importScope === 'team' ? 'Team Library' : 'Personal Library'}!`,
+        [
+          {
+            text: 'View Setlists',
+            onPress: () => setActiveTab('setlists'),
+          },
+          {
+            text: 'OK',
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Import Error', err.message || 'Failed to complete import');
+    } finally {
+      setCommittingImport(false);
+    }
+  };
+
+  // --- Export Setlist / Song as genuine .sbp ZIP Archive ---
+  const handleExportSbp = async (item, type = 'setlist') => {
+    try {
+      const isSetlist = type === 'setlist';
+      const name = (isSetlist ? item.name : item.title) || 'Worship_Set';
+      const cleanName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const downloadUrl = isSetlist ? api.getSongbookSetlistSbpUrl(item.id) : api.getSongbookSongSbpUrl(item.id);
+      const token = api.accessToken;
+
+      const fileUri = `${FileSystem.cacheDirectory}${cleanName}.sbp`;
+      const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadRes.uri, {
+          mimeType: 'application/octet-stream',
+          dialogTitle: `Share ${cleanName}.sbp via WhatsApp`,
+          UTI: 'com.pkware.zip-archive',
+        });
+      } else {
+        Alert.alert('Export Ready', `File saved to ${downloadRes.uri}`);
+      }
+    } catch (err) {
+      Alert.alert('Export Error', err.message || 'Failed to export .sbp file');
+    }
+  };
+
+  // --- Export Setlist / Song as Printable PDF ---
+  const handleExportPdf = async (item, type = 'setlist') => {
+    try {
+      const isSetlist = type === 'setlist';
+      const res = isSetlist ? await api.getSongbookSetlistPdf(item.id) : await api.getSongbookSongPdf(item.id);
+      if (!res || !res.html) {
+        throw new Error('Could not generate PDF document');
+      }
+
+      const { uri } = await Print.printToFileAsync({ html: res.html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Share ${res.title || 'Chord_Chart'}.pdf`,
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('PDF Ready', `PDF saved to ${uri}`);
+      }
+    } catch (err) {
+      Alert.alert('PDF Export Error', err.message || 'Failed to generate PDF');
+    }
+  };
+
+  // --- Setlist Builder & CRUD ---
+  const openNewSetlistModal = () => {
+    setEditingSetlistId(null);
+    setSetlistBuilderName('');
+    setSetlistBuilderScope(activeTab === 'team' ? 'team' : 'user');
+    setSetlistBuilderSongs([]);
+    setSetlistBuilderKeyOverrides({});
+    setIsSetlistBuilderOpen(true);
+  };
+
+  const openEditSetlistModal = async (setlist) => {
+    try {
+      setLoading(true);
+      const fullSet = await api.getSongbookSetlist(setlist.id);
+      setEditingSetlistId(setlist.id);
+      setSetlistBuilderName(fullSet.name || setlist.name || '');
+      setSetlistBuilderScope(fullSet.ownerType || 'user');
+      setSetlistBuilderSongs(Array.isArray(fullSet.songs) ? fullSet.songs : []);
+      setSetlistBuilderKeyOverrides(fullSet.songKeyOverrides || {});
+      setIsSetlistBuilderOpen(true);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to load setlist for editing');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSetlist = async () => {
+    if (!setlistBuilderName.trim()) {
+      Alert.alert('Missing Name', 'Please enter a name for the setlist.');
+      return;
+    }
+
+    setSavingSetlist(true);
+    try {
+      const songIds = setlistBuilderSongs.map((s) => s.id);
+      await api.createSongbookSetlist({
+        id: editingSetlistId || undefined,
+        name: setlistBuilderName.trim(),
+        ownerType: setlistBuilderScope,
+        songIds,
+        songKeyOverrides: setlistBuilderKeyOverrides,
+      });
+
+      setIsSetlistBuilderOpen(false);
+      await fetchLibrary('setlists');
+      setActiveTab('setlists');
+      Alert.alert(
+        editingSetlistId ? 'Setlist Updated' : 'Setlist Created',
+        `"${setlistBuilderName.trim()}" with ${songIds.length} song(s) is saved!`
+      );
+    } catch (err) {
+      Alert.alert('Save Failed', err.message || 'Could not save setlist');
+    } finally {
+      setSavingSetlist(false);
+    }
+  };
+
+  const handleDeleteSetlist = (setlistId, setlistName) => {
+    Alert.alert(
+      'Delete Setlist',
+      `Are you sure you want to delete setlist "${setlistName}"? The songs will remain in your library.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.deleteSongbookSetlist(setlistId);
+              if (selectedSetlist?.id === setlistId) {
+                setIsReaderOpen(false);
+              }
+              await fetchLibrary('setlists');
+              Alert.alert('Setlist Deleted', `Setlist "${setlistName}" was deleted.`);
+            } catch (err) {
+              Alert.alert('Delete Failed', err.message || 'Could not delete setlist');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddSongToBuilder = (song) => {
+    if (setlistBuilderSongs.some((s) => s.id === song.id)) {
+      Alert.alert('Already Added', `"${song.title}" is already in this setlist.`);
+      return;
+    }
+    setSetlistBuilderSongs((prev) => [...prev, song]);
+    setIsSongPickerOpen(false);
+  };
+
+  const handleRemoveSongFromBuilder = (songId) => {
+    setSetlistBuilderSongs((prev) => prev.filter((s) => s.id !== songId));
+    setSetlistBuilderKeyOverrides((prev) => {
+      const next = { ...prev };
+      delete next[songId];
+      return next;
+    });
+  };
+
+  const handleMoveSong = (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= setlistBuilderSongs.length) return;
+    setSetlistBuilderSongs((prev) => {
+      const list = [...prev];
+      const temp = list[index];
+      list[index] = list[targetIndex];
+      list[targetIndex] = temp;
+      return list;
+    });
+  };
+
+  const handleSetKeyOverride = (songId, newKey) => {
+    setSetlistBuilderKeyOverrides((prev) => ({
+      ...prev,
+      [songId]: newKey,
+    }));
   };
 
   // Auto-scroll effect
@@ -431,13 +719,19 @@ export default function SongBookScreen({ user, isDark = false }) {
             </Text>
           </View>
 
-          {/* Add Song Button */}
+          {/* Add Song / New Setlist Button */}
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setIsAddSongModalOpen(true)}
+            onPress={() => {
+              if (activeTab === 'setlists') {
+                openNewSetlistModal();
+              } else {
+                setIsAddSongModalOpen(true);
+              }
+            }}
           >
             <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>New Song</Text>
+            <Text style={styles.addBtnText}>{activeTab === 'setlists' ? 'New Setlist' : 'New Song'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -604,6 +898,17 @@ export default function SongBookScreen({ user, isDark = false }) {
           data={setlists}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <TouchableOpacity
+              style={[styles.createSetlistBanner, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+              onPress={openNewSetlistModal}
+            >
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <Text style={[styles.createSetlistBannerText, { color: colors.primary }]}>
+                Create New Worship Setlist
+              </Text>
+            </TouchableOpacity>
+          }
           renderItem={({ item }) => {
             const count = Array.isArray(item.songIds)
               ? item.songIds.length
@@ -612,29 +917,87 @@ export default function SongBookScreen({ user, isDark = false }) {
               : 0;
 
             return (
-              <TouchableOpacity
-                style={[styles.setlistCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => openSetlist(item)}
-                activeOpacity={0.7}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <Ionicons name="folder-open" size={24} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.setlistName, { color: colors.text }]}>{item.name}</Text>
-                    <Text style={[styles.setlistSub, { color: colors.subText }]}>{count} songs in set</Text>
-                  </View>
-                </View>
-
+              <View style={[styles.setlistCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <TouchableOpacity
-                  style={{ padding: 8, marginRight: 4 }}
-                  onPress={() => handleShareSetlist(item)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.setlistCardHeader}
+                  onPress={() => openSetlist(item)}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons name="share-social-outline" size={20} color="#16a34a" />
+                  <Ionicons name="folder-open" size={24} color={colors.primary} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={[styles.setlistName, { color: colors.text }]}>{item.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={[styles.setlistSub, { color: colors.subText }]}>{count} songs</Text>
+                      <View
+                        style={[
+                          styles.scopeBadge,
+                          {
+                            backgroundColor:
+                              item.ownerType === 'team'
+                                ? 'rgba(59, 130, 246, 0.15)'
+                                : 'rgba(168, 85, 247, 0.15)',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.scopeBadgeText,
+                            {
+                              color: item.ownerType === 'team' ? '#3b82f6' : '#a855f7',
+                            },
+                          ]}
+                        >
+                          {item.ownerType === 'team' ? 'Team' : 'Personal'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Ionicons name="play-circle-outline" size={22} color={colors.primary} />
                 </TouchableOpacity>
 
-                <Ionicons name="chevron-forward" size={18} color={colors.subText} />
-              </TouchableOpacity>
+                {/* Setlist Actions Row */}
+                <View style={[styles.setlistActionsRow, { borderTopColor: colors.border }]}>
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
+                    onPress={() => handleExportSbp(item, 'setlist')}
+                  >
+                    <Ionicons name="share-outline" size={13} color={colors.primary} />
+                    <Text style={[styles.setlistActionText, { color: colors.primary }]}>.sbp</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
+                    onPress={() => handleExportPdf(item, 'setlist')}
+                  >
+                    <Ionicons name="document-text-outline" size={13} color="#0284c7" />
+                    <Text style={[styles.setlistActionText, { color: '#0284c7' }]}>PDF</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
+                    onPress={() => handleShareSetlist(item)}
+                  >
+                    <Ionicons name="logo-whatsapp" size={13} color="#16a34a" />
+                    <Text style={[styles.setlistActionText, { color: '#16a34a' }]}>Text</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
+                    onPress={() => openEditSetlistModal(item)}
+                  >
+                    <Ionicons name="create-outline" size={13} color={colors.subText} />
+                    <Text style={[styles.setlistActionText, { color: colors.subText }]}>Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
+                    onPress={() => handleDeleteSetlist(item.id, item.name)}
+                  >
+                    <Ionicons name="trash-outline" size={13} color="#ef4444" />
+                    <Text style={[styles.setlistActionText, { color: '#ef4444' }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             );
           }}
           ListEmptyComponent={
@@ -780,35 +1143,63 @@ export default function SongBookScreen({ user, isDark = false }) {
             </View>
           </View>
 
-          {/* Action Row: Copy & Delete */}
+          {/* Action Row: Export SBP, Export PDF, Copy & Delete */}
           {selectedSong && (
-            <View style={[styles.actionRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.actionRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
+            >
+              {/* Export SBP */}
+              <TouchableOpacity
+                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
+                onPress={() => handleExportSbp(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+              >
+                <Ionicons name="share-outline" size={14} color={colors.primary} />
+                <Text style={[styles.actionChipText, { color: colors.primary }]}>
+                  {selectedSetlist ? 'Export Set .sbp' : 'Export .sbp'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Export PDF */}
+              <TouchableOpacity
+                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
+                onPress={() => handleExportPdf(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+              >
+                <Ionicons name="document-text-outline" size={14} color="#0284c7" />
+                <Text style={[styles.actionChipText, { color: '#0284c7' }]}>
+                  {selectedSetlist ? 'Export Set PDF' : 'Export PDF'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Copy between scopes */}
               {selectedSong.ownerType === 'team' ? (
                 <TouchableOpacity
-                  style={styles.actionChip}
+                  style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
                   onPress={() => handleCopySong(selectedSong.id, 'user')}
                 >
-                  <Ionicons name="copy-outline" size={14} color={colors.primary} />
-                  <Text style={[styles.actionChipText, { color: colors.primary }]}>Copy to My Songs</Text>
+                  <Ionicons name="copy-outline" size={14} color={colors.subText} />
+                  <Text style={[styles.actionChipText, { color: colors.subText }]}>Copy to My Songs</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={styles.actionChip}
+                  style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
                   onPress={() => handleCopySong(selectedSong.id, 'team')}
                 >
-                  <Ionicons name="share-social-outline" size={14} color={colors.primary} />
-                  <Text style={[styles.actionChipText, { color: colors.primary }]}>Copy to Team</Text>
+                  <Ionicons name="share-social-outline" size={14} color={colors.subText} />
+                  <Text style={[styles.actionChipText, { color: colors.subText }]}>Copy to Team</Text>
                 </TouchableOpacity>
               )}
 
+              {/* Delete Song */}
               <TouchableOpacity
-                style={styles.actionChip}
+                style={[styles.actionChip, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
                 onPress={() => handleDeleteSong(selectedSong.id)}
               >
                 <Ionicons name="trash-outline" size={14} color="#ef4444" />
                 <Text style={[styles.actionChipText, { color: '#ef4444' }]}>Delete</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           )}
 
           {/* Sheet Body */}
@@ -908,6 +1299,428 @@ export default function SongBookScreen({ user, isDark = false }) {
                 <Text style={styles.saveSongBtnText}>Save Song to {activeTab === 'team' ? 'Team' : 'My Songs'}</Text>
               )}
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* WhatsApp / System .sbp Import Confirmation Modal */}
+      <Modal
+        visible={isImportModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setIsImportModalOpen(false);
+          if (onClearPendingSbp) onClearPendingSbp();
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="download" size={20} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Import SongBook File (.sbp)</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsImportModalOpen(false);
+                  if (onClearPendingSbp) onClearPendingSbp();
+                }}
+              >
+                <Ionicons name="close" size={24} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 360 }}>
+              {/* File details info box */}
+              <View style={[styles.infoBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={[styles.infoTitle, { color: colors.text }]}>
+                  {parsedImportData?.name || 'SongBook Backup'}
+                </Text>
+                <Text style={[styles.infoSubtitle, { color: colors.subText }]}>
+                  Found: {parsedImportData?.songs?.length || 0} song(s)
+                  {parsedImportData?.setlists?.length ? ` • ${parsedImportData.setlists.length} setlist(s)` : ''}
+                </Text>
+              </View>
+
+              {/* Destination Scope */}
+              <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 12 }]}>IMPORT DESTINATION</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.choicePill,
+                    {
+                      backgroundColor: importScope === 'user' ? colors.primary : colors.inputBg,
+                      borderColor: colors.border,
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setImportScope('user')}
+                >
+                  <Text style={[styles.choicePillText, { color: importScope === 'user' ? '#fff' : colors.text }]}>
+                    My Personal Songs
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.choicePill,
+                    {
+                      backgroundColor: importScope === 'team' ? colors.primary : colors.inputBg,
+                      borderColor: colors.border,
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setImportScope('team')}
+                >
+                  <Text style={[styles.choicePillText, { color: importScope === 'team' ? '#fff' : colors.text }]}>
+                    Team Library
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Duplicate Strategy */}
+              <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 12 }]}>IF SONG ALREADY EXISTS</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.choicePill,
+                    {
+                      backgroundColor: importStrategy === 'skip' ? colors.primary : colors.inputBg,
+                      borderColor: colors.border,
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setImportStrategy('skip')}
+                >
+                  <Text style={[styles.choicePillText, { color: importStrategy === 'skip' ? '#fff' : colors.text }]}>
+                    Skip Duplicates
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.choicePill,
+                    {
+                      backgroundColor: importStrategy === 'overwrite' ? colors.primary : colors.inputBg,
+                      borderColor: colors.border,
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setImportStrategy('overwrite')}
+                >
+                  <Text style={[styles.choicePillText, { color: importStrategy === 'overwrite' ? '#fff' : colors.text }]}>
+                    Overwrite
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Create Setlist Toggle */}
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}
+                onPress={() => setImportAsSetlist(!importAsSetlist)}
+              >
+                <Ionicons
+                  name={importAsSetlist ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                  Create a Setlist from these songs
+                </Text>
+              </TouchableOpacity>
+
+              {importAsSetlist && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>SETLIST NAME</Text>
+                  <TextInput
+                    style={[styles.modalTextInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                    value={importSetlistName}
+                    onChangeText={setImportSetlistName}
+                    placeholder="e.g. Sunday Morning Worship"
+                    placeholderTextColor={colors.subText}
+                  />
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+                onPress={() => {
+                  setIsImportModalOpen(false);
+                  if (onClearPendingSbp) onClearPendingSbp();
+                }}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.subText }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, { backgroundColor: colors.primary, flex: 2 }]}
+                onPress={commitImport}
+                disabled={committingImport}
+              >
+                {committingImport ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Import Now</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Setlist Builder Modal (Create & Edit) */}
+      <Modal visible={isSetlistBuilderOpen} animationType="slide" onRequestClose={() => setIsSetlistBuilderOpen(false)}>
+        <SafeAreaView style={[styles.readerContainer, { backgroundColor: colors.bg }]}>
+          {/* Header */}
+          <View style={[styles.readerHeader, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.readerTitle, { color: colors.text }]}>
+                {editingSetlistId ? 'Edit Setlist' : 'Create New Setlist'}
+              </Text>
+              <Text style={[styles.readerArtist, { color: colors.subText }]}>
+                Arrange worship songs, set per-song keys
+              </Text>
+            </View>
+
+            <TouchableOpacity onPress={() => setIsSetlistBuilderOpen(false)} style={styles.closeBtn}>
+              <Ionicons name="close-circle" size={28} color={colors.subText} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ flex: 1, padding: 14 }}>
+            {/* Setlist Name */}
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>SETLIST NAME *</Text>
+            <TextInput
+              style={[styles.modalTextInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+              value={setlistBuilderName}
+              onChangeText={setSetlistBuilderName}
+              placeholder="e.g. Sunday Worship - Oct 25"
+              placeholderTextColor={colors.subText}
+            />
+
+            {/* Scope Selection */}
+            <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 12 }]}>SCOPE</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <TouchableOpacity
+                style={[
+                  styles.choicePill,
+                  {
+                    backgroundColor: setlistBuilderScope === 'user' ? colors.primary : colors.inputBg,
+                    borderColor: colors.border,
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setSetlistBuilderScope('user')}
+              >
+                <Text style={[styles.choicePillText, { color: setlistBuilderScope === 'user' ? '#fff' : colors.text }]}>
+                  My Personal Setlist
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.choicePill,
+                  {
+                    backgroundColor: setlistBuilderScope === 'team' ? colors.primary : colors.inputBg,
+                    borderColor: colors.border,
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setSetlistBuilderScope('team')}
+              >
+                <Text style={[styles.choicePillText, { color: setlistBuilderScope === 'team' ? '#fff' : colors.text }]}>
+                  Team Setlist
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Songs in Setlist header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, marginBottom: 8 }}>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>
+                SONGS IN SETLIST ({setlistBuilderSongs.length})
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setPickerSearch('');
+                  setIsSongPickerOpen(true);
+                }}
+              >
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.addBtnText}>Add Songs</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* List of songs */}
+            {setlistBuilderSongs.length === 0 ? (
+              <View style={[styles.emptyBuilderBox, { borderColor: colors.border }]}>
+                <Ionicons name="musical-notes-outline" size={32} color={colors.subText} />
+                <Text style={[styles.emptyBuilderText, { color: colors.subText }]}>
+                  No songs in this setlist yet. Tap "+ Add Songs" to select songs from your library.
+                </Text>
+              </View>
+            ) : (
+              setlistBuilderSongs.map((song, idx) => {
+                const effectiveKey = setlistBuilderKeyOverrides[song.id] || song.key || 'C';
+                return (
+                  <View
+                    key={`${song.id}-${idx}`}
+                    style={[styles.builderSongCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  >
+                    <View style={styles.builderIndexCircle}>
+                      <Text style={styles.builderIndexText}>{idx + 1}</Text>
+                    </View>
+
+                    <View style={{ flex: 1, paddingHorizontal: 8 }}>
+                      <Text style={[styles.builderSongTitle, { color: colors.text }]} numberOfLines={1}>
+                        {song.title}
+                      </Text>
+                      <Text style={[styles.builderSongArtist, { color: colors.subText }]} numberOfLines={1}>
+                        {song.artist || 'Unknown'} • Key: {effectiveKey}
+                      </Text>
+                    </View>
+
+                    {/* Key override picker */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxWidth: 110 }}>
+                      <View style={{ flexDirection: 'row', gap: 2 }}>
+                        {SHARP_KEYS.slice(0, 7).map((k) => (
+                          <TouchableOpacity
+                            key={k}
+                            style={[
+                              styles.miniKeyPill,
+                              {
+                                backgroundColor: effectiveKey === k ? colors.primary : colors.inputBg,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            onPress={() => handleSetKeyOverride(song.id, k)}
+                          >
+                            <Text style={{ fontSize: 9, fontWeight: '800', color: effectiveKey === k ? '#fff' : colors.text }}>
+                              {k}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </ScrollView>
+
+                    {/* Reorder Buttons */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 4 }}>
+                      <TouchableOpacity
+                        disabled={idx === 0}
+                        onPress={() => handleMoveSong(idx, -1)}
+                        style={[styles.reorderBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
+                      >
+                        <Ionicons name="arrow-up" size={16} color={colors.text} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        disabled={idx === setlistBuilderSongs.length - 1}
+                        onPress={() => handleMoveSong(idx, 1)}
+                        style={[styles.reorderBtn, { opacity: idx === setlistBuilderSongs.length - 1 ? 0.3 : 1 }]}
+                      >
+                        <Ionicons name="arrow-down" size={16} color={colors.text} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => handleRemoveSongFromBuilder(song.id)}
+                        style={styles.reorderBtn}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+
+            <View style={{ height: 30 }} />
+          </ScrollView>
+
+          {/* Footer Save Button */}
+          <View style={[styles.builderFooter, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.builderSaveBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSaveSetlist}
+              disabled={savingSetlist}
+            >
+              {savingSetlist ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.builderSaveBtnText}>
+                  {editingSetlistId ? 'Update Setlist' : 'Save Setlist'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Song Picker Modal */}
+      <Modal visible={isSongPickerOpen} animationType="slide" transparent onRequestClose={() => setIsSongPickerOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, height: '80%' }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Song to Setlist</Text>
+              <TouchableOpacity onPress={() => setIsSongPickerOpen(false)}>
+                <Ionicons name="close" size={24} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.searchBox, { backgroundColor: colors.inputBg, borderColor: colors.border, marginVertical: 8 }]}>
+              <Ionicons name="search" size={16} color={colors.subText} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Search songs..."
+                placeholderTextColor={colors.subText}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
+              />
+            </View>
+
+            <FlatList
+              data={songs.filter((s) => {
+                const q = pickerSearch.trim().toLowerCase();
+                return !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q);
+              })}
+              keyExtractor={(s) => s.id.toString()}
+              renderItem={({ item }) => {
+                const alreadyAdded = setlistBuilderSongs.some((s) => s.id === item.id);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerSongItem,
+                      {
+                        backgroundColor: alreadyAdded ? colors.inputBg : colors.card,
+                        borderColor: colors.border,
+                        opacity: alreadyAdded ? 0.6 : 1,
+                      },
+                    ]}
+                    onPress={() => handleAddSongToBuilder(item)}
+                    disabled={alreadyAdded}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.songTitle, { color: colors.text }]}>{item.title}</Text>
+                      <Text style={[styles.songArtist, { color: colors.subText }]}>
+                        {item.artist || 'Unknown'} • Key: {item.key || 'C'}
+                      </Text>
+                    </View>
+                    {alreadyAdded ? (
+                      <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
+                    ) : (
+                      <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: colors.subText, fontSize: 12 }}>No matching songs found</Text>
+                </View>
+              }
+            />
           </View>
         </View>
       </Modal>
@@ -1038,14 +1851,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
   },
+  createSetlistBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginBottom: 12,
+  },
+  createSetlistBannerText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
   setlistCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  setlistCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
+    padding: 12,
   },
   setlistName: {
     fontSize: 14,
@@ -1053,7 +1884,35 @@ const styles = StyleSheet.create({
   },
   setlistSub: {
     fontSize: 11,
-    marginTop: 2,
+  },
+  scopeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  scopeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  setlistActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  setlistActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  setlistActionText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   onlineSearchRow: {
     flexDirection: 'row',
@@ -1311,5 +2170,161 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '800',
+  },
+  modalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    width: '100%',
+    maxWidth: 480,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  infoBox: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  infoSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  choicePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choicePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalTextInput: {
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalSubmitBtn: {
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyBuilderBox: {
+    padding: 30,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  emptyBuilderText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  builderSongCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+  },
+  builderIndexCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(197, 156, 108, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  builderIndexText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#c59c6c',
+  },
+  builderSongTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  builderSongArtist: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  miniKeyPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  reorderBtn: {
+    padding: 5,
+  },
+  builderFooter: {
+    padding: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  builderSaveBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  builderSaveBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  pickerSongItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 6,
   },
 });

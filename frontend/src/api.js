@@ -305,6 +305,44 @@ export const api = {
         window.URL.revokeObjectURL(downloadUrl);
       });
   },
+  exportSongbookSetlistSbp: (id, name = 'Worship_Set') => {
+    const token = localStorage.getItem('servesync_token');
+    const url = `/api/songbook/setlists/${id}/export/sbp`;
+    return fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.sbp`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      });
+  },
+  exportSongbookSongSbp: (id, title = 'Song') => {
+    const token = localStorage.getItem('servesync_token');
+    const url = `/api/songbook/songs/${id}/export/sbp`;
+    return fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.sbp`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      });
+  },
+  getSongbookSetlistPdf: (id) => request(`/songbook/setlists/${id}/export/pdf`),
+  getSongbookSongPdf: (id) => request(`/songbook/songs/${id}/export/pdf`),
   searchSongbookOnline: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/songbook/online/search${query ? `?${query}` : ''}`);

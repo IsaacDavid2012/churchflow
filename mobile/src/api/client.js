@@ -421,6 +421,22 @@ class ApiClient {
     });
   }
 
+  async getSongbookSetlistPdf(id) {
+    return this.request(`/songbook/setlists/${id}/export/pdf`);
+  }
+
+  async getSongbookSongPdf(id) {
+    return this.request(`/songbook/songs/${id}/export/pdf`);
+  }
+
+  getSongbookSetlistSbpUrl(id) {
+    return `${this.baseUrl}/songbook/setlists/${id}/export/sbp`;
+  }
+
+  getSongbookSongSbpUrl(id) {
+    return `${this.baseUrl}/songbook/songs/${id}/export/sbp`;
+  }
+
   // --- Service Plan (Run Sheet) ---
   async getPlanItems(serviceId) {
     return this.request(`/services/${serviceId}/plan`);
