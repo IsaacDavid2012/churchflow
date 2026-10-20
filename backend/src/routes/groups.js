@@ -260,6 +260,10 @@ router.get('/:id/announcements', async (req, res, next) => {
         a.title,
         a.content,
         a.is_pinned,
+        a.media_url,
+        a.media_type,
+        a.media_name,
+        a.media_size,
         a.created_at,
         a.updated_at
       FROM ministry_announcements a
@@ -287,19 +291,37 @@ router.post('/:id/announcements', requireAuth, async (req, res, next) => {
       });
     }
 
-    const { title, content, is_pinned = false } = req.body;
-    if (!title || !title.trim() || !content || !content.trim()) {
-      return res.status(400).json({ error: 'Title and content are required' });
+    const { title, content, is_pinned = false, media_url, media_type, media_name, media_size } = req.body;
+    const finalContent = (content || '').trim();
+    const finalTitle = (title || '').trim() || (media_name ? `Attachment: ${media_name}` : 'Ministry Announcement');
+
+    if (!finalContent && !media_url) {
+      return res.status(400).json({ error: 'Announcement message text or media attachment is required' });
     }
 
     const authorName = req.user?.name || req.user?.username || 'Ministry Leader';
     const authorRole = userRole;
 
     const result = await db.query(`
-      INSERT INTO ministry_announcements (ministry_id, author_id, author_name, author_role, title, content, is_pinned)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO ministry_announcements (
+        ministry_id, author_id, author_name, author_role, title, content, is_pinned,
+        media_url, media_type, media_name, media_size
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
-    `, [req.params.id, req.user?.id || null, authorName, authorRole, title.trim(), content.trim(), !!is_pinned]);
+    `, [
+      req.params.id,
+      req.user?.id || null,
+      authorName,
+      authorRole,
+      finalTitle,
+      finalContent,
+      !!is_pinned,
+      media_url || null,
+      media_type || null,
+      media_name || null,
+      media_size || null
+    ]);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -492,7 +514,19 @@ router.put('/:id/members/:musicianId/role', requireAuth, async (req, res, next) 
 router.get('/:id/chat', requireAuth, async (req, res, next) => {
   try {
     const result = await db.query(`
-      SELECT id, ministry_id, user_id, sender, sender_role, sender_name, message, created_at
+      SELECT 
+        id, 
+        ministry_id, 
+        user_id, 
+        sender, 
+        sender_role, 
+        sender_name, 
+        message, 
+        media_url, 
+        media_type, 
+        media_name, 
+        media_size, 
+        created_at
       FROM ministry_chat_messages
       WHERE ministry_id = $1
       ORDER BY created_at ASC
@@ -507,9 +541,11 @@ router.get('/:id/chat', requireAuth, async (req, res, next) => {
 // POST /api/ministries/:id/chat - Send message to ministry team chat
 router.post('/:id/chat', requireAuth, async (req, res, next) => {
   try {
-    const { message } = req.body;
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: 'Message cannot be empty' });
+    const { message, media_url, media_type, media_name, media_size } = req.body;
+    const finalMessage = (message || '').trim();
+
+    if (!finalMessage && !media_url) {
+      return res.status(400).json({ error: 'Message cannot be empty without an attachment' });
     }
 
     // Verify ministry exists
@@ -521,10 +557,23 @@ router.post('/:id/chat', requireAuth, async (req, res, next) => {
 
     // Store team message
     const result = await db.query(`
-      INSERT INTO ministry_chat_messages (ministry_id, user_id, sender, sender_role, sender_name, message)
-      VALUES ($1, $2, 'member', $3, $4, $5)
+      INSERT INTO ministry_chat_messages (
+        ministry_id, user_id, sender, sender_role, sender_name, message,
+        media_url, media_type, media_name, media_size
+      )
+      VALUES ($1, $2, 'member', $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
-    `, [req.params.id, req.user?.id || null, userRole, senderName, message.trim()]);
+    `, [
+      req.params.id,
+      req.user?.id || null,
+      userRole,
+      senderName,
+      finalMessage,
+      media_url || null,
+      media_type || null,
+      media_name || null,
+      media_size || null
+    ]);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {

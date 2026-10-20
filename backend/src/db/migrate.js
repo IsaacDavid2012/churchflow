@@ -158,6 +158,28 @@ async function runMigrations() {
       WHERE p.ministry_id IS NULL 
         AND g.active = true 
         AND (LOWER(g.name) = LOWER(p.ministry) OR LOWER(g.category) = LOWER(p.ministry));
+      -- Run column migrations for media attachments in announcements & chats
+      ALTER TABLE ministry_announcements ADD COLUMN IF NOT EXISTS media_url TEXT;
+      ALTER TABLE ministry_announcements ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);
+      ALTER TABLE ministry_announcements ADD COLUMN IF NOT EXISTS media_name VARCHAR(255);
+      ALTER TABLE ministry_announcements ADD COLUMN IF NOT EXISTS media_size INTEGER;
+
+      ALTER TABLE ministry_chat_messages ADD COLUMN IF NOT EXISTS media_url TEXT;
+      ALTER TABLE ministry_chat_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);
+      ALTER TABLE ministry_chat_messages ADD COLUMN IF NOT EXISTS media_name VARCHAR(255);
+      ALTER TABLE ministry_chat_messages ADD COLUMN IF NOT EXISTS media_size INTEGER;
+      ALTER TABLE ministry_chat_messages ALTER COLUMN message DROP NOT NULL;
+
+      ALTER TABLE general_announcements ADD COLUMN IF NOT EXISTS media_url TEXT;
+      ALTER TABLE general_announcements ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);
+      ALTER TABLE general_announcements ADD COLUMN IF NOT EXISTS media_name VARCHAR(255);
+      ALTER TABLE general_announcements ADD COLUMN IF NOT EXISTS media_size INTEGER;
+
+      ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_url TEXT;
+      ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);
+      ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_name VARCHAR(255);
+      ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_size INTEGER;
+      ALTER TABLE general_chat_messages ALTER COLUMN message DROP NOT NULL;
     `);
 
     // Run core schema

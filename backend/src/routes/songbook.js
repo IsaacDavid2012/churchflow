@@ -1,9 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const db = require('../config/db');
 const songbookService = require('../services/songbookService');
 const { authMiddleware } = require('../middleware/auth');
 const { createSbpZipArchive, parseSbpBuffer } = require('../utils/sbpZip');
 const { buildPrintableBookletHtml } = require('../utils/chordProHtml');
+const { ROLES, normalizeRole, hasRole } = require('../../../shared/roles');
+
+const uploadsDir = path.join(__dirname, '../../public/uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // GET /api/songbook/status — Gateway Health Check (Public or Auth)
 router.get('/status', async (req, res, next) => {
@@ -338,6 +348,147 @@ router.post('/online/import', async (req, res, next) => {
   try {
     const imported = await songbookService.importOnlineSong(req.user, req.body);
     res.status(201).json(imported);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/songbook/share-to-ministry — Export .sbp or PDF directly into Ministry Hub or Chat
+router.post('/share-to-ministry', async (req, res, next) => {
+  try {
+    const {
+      targetType, // 'ministry_chat' | 'ministry_announcement' | 'general_chat' | 'general_announcement'
+      ministryId,
+      format = 'sbp', // 'sbp' | 'pdf'
+      setlistId,
+      songId,
+      message = '',
+      title = '',
+    } = req.body;
+
+    if (!targetType) {
+      return res.status(400).json({ error: 'Target type is required (ministry_chat, ministry_announcement, general_chat, general_announcement)' });
+    }
+
+    if (['ministry_chat', 'ministry_announcement'].includes(targetType) && !ministryId) {
+      return res.status(400).json({ error: 'ministryId is required for ministry target' });
+    }
+
+    let songs = [];
+    let setlist = null;
+    let song = null;
+    let baseTitle = 'Worship_Item';
+
+    if (setlistId) {
+      setlist = await songbookService.getSetlistById(req.user, setlistId);
+      if (!setlist) return res.status(404).json({ error: 'Setlist not found' });
+      songs = Array.isArray(setlist.songs) ? setlist.songs : [];
+      baseTitle = setlist.name || 'Worship_Setlist';
+    } else if (songId) {
+      song = await songbookService.getSongById(req.user, songId);
+      if (!song) return res.status(404).json({ error: 'Song not found' });
+      songs = [song];
+      baseTitle = song.title || 'Song';
+    } else {
+      return res.status(400).json({ error: 'Either setlistId or songId is required' });
+    }
+
+    const cleanBaseName = baseTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
+    let mediaUrl = '';
+    let mediaType = '';
+    let mediaName = '';
+    let mediaSize = 0;
+
+    if (format === 'pdf') {
+      const bookletHtml = buildPrintableBookletHtml({
+        title: baseTitle,
+        date: new Date().toLocaleDateString('en-MY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+        songs,
+      });
+      const diskFileName = `${uuidv4()}-${cleanBaseName}.html`;
+      const targetPath = path.join(uploadsDir, diskFileName);
+      await fs.promises.writeFile(targetPath, Buffer.from(bookletHtml, 'utf8'));
+
+      mediaUrl = `/uploads/${diskFileName}`;
+      mediaType = 'pdf';
+      mediaName = `${baseTitle} - Lead Sheet.pdf`;
+      mediaSize = Buffer.byteLength(bookletHtml, 'utf8');
+    } else {
+      // Default to authentic .sbp ZIP Archive
+      const zipBuffer = createSbpZipArchive({
+        songs,
+        setlists: setlist ? [setlist] : [],
+        name: baseTitle,
+      });
+      const diskFileName = `${uuidv4()}-${cleanBaseName}.sbp`;
+      const targetPath = path.join(uploadsDir, diskFileName);
+      await fs.promises.writeFile(targetPath, zipBuffer);
+
+      mediaUrl = `/uploads/${diskFileName}`;
+      mediaType = 'sbp';
+      mediaName = `${baseTitle}.sbp`;
+      mediaSize = zipBuffer.length;
+    }
+
+    const senderName = req.user?.name || req.user?.username || 'Worship Leader';
+    const userRole = normalizeRole(req.user?.role) || 'member';
+    const postMessage = message.trim() || (setlist ? `🎵 Worship Setlist: ${baseTitle} (${songs.length} songs)` : `🎵 Song: ${baseTitle}`);
+    const postTitle = title.trim() || (setlist ? `Worship Setlist: ${baseTitle}` : `Song: ${baseTitle}`);
+
+    let createdRecord = null;
+
+    if (targetType === 'ministry_chat') {
+      const result = await db.query(`
+        INSERT INTO ministry_chat_messages (
+          ministry_id, user_id, sender, sender_role, sender_name, message,
+          media_url, media_type, media_name, media_size
+        ) VALUES ($1, $2, 'member', $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `, [ministryId, req.user?.id || null, userRole, senderName, postMessage, mediaUrl, mediaType, mediaName, mediaSize]);
+      createdRecord = result.rows[0];
+    } else if (targetType === 'ministry_announcement') {
+      const result = await db.query(`
+        INSERT INTO ministry_announcements (
+          ministry_id, author_id, author_name, author_role, title, content, is_pinned,
+          media_url, media_type, media_name, media_size
+        ) VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, $10)
+        RETURNING *
+      `, [ministryId, req.user?.id || null, senderName, userRole, postTitle, postMessage, mediaUrl, mediaType, mediaName, mediaSize]);
+      createdRecord = result.rows[0];
+    } else if (targetType === 'general_chat') {
+      const result = await db.query(`
+        INSERT INTO general_chat_messages (
+          user_id, sender_name, sender_role, message,
+          media_url, media_type, media_name, media_size
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+      `, [req.user?.id || null, senderName, userRole, postMessage, mediaUrl, mediaType, mediaName, mediaSize]);
+      createdRecord = result.rows[0];
+    } else if (targetType === 'general_announcement') {
+      if (!hasRole(userRole, [ROLES.ADMIN, ROLES.PASTOR])) {
+        return res.status(403).json({ error: 'Only Pastors and Admins can post to general announcements' });
+      }
+      const result = await db.query(`
+        INSERT INTO general_announcements (
+          author_id, author_name, author_role, title, content, is_pinned,
+          media_url, media_type, media_name, media_size
+        ) VALUES ($1, $2, $3, $4, $5, false, $6, $7, $8, $9)
+        RETURNING *
+      `, [req.user?.id || null, senderName, userRole, postTitle, postMessage, mediaUrl, mediaType, mediaName, mediaSize]);
+      createdRecord = result.rows[0];
+    } else {
+      return res.status(400).json({ error: 'Unknown target type: ' + targetType });
+    }
+
+    res.status(201).json({
+      success: true,
+      targetType,
+      media_url: mediaUrl,
+      media_name: mediaName,
+      media_type: mediaType,
+      media_size: mediaSize,
+      post: createdRecord,
+    });
   } catch (err) {
     next(err);
   }

@@ -18,10 +18,13 @@ import {
   Phone,
   Mail,
   X,
-  AlertCircle
+  AlertCircle,
+  Paperclip,
+  Image as ImageIcon
 } from 'lucide-react';
 import { api } from '../api';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
+import MediaAttachmentCard from './MediaAttachmentCard';
 
 export default function MinistryHub({ ministry, currentUser, onBack }) {
   const [activeTab, setActiveTab] = useState('stream'); // 'stream' | 'people' | 'chat'
@@ -38,6 +41,7 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
+  const [annMedia, setAnnMedia] = useState(null);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
 
   // Members State
@@ -52,8 +56,29 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
   // Chatbot State
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
+  const [chatMedia, setChatMedia] = useState(null);
   const [sendingChat, setSendingChat] = useState(false);
   const chatBottomRef = useRef(null);
+
+  const handleSelectMedia = (file, target) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert(`File size exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please select a file below 10MB.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const mediaObj = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        base64: reader.result,
+      };
+      if (target === 'ann') setAnnMedia(mediaObj);
+      else setChatMedia(mediaObj);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Check if current user is designated manager in this ministry
   const isMinistryLeader = members.some(
@@ -186,15 +211,37 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
 
   async function handlePostAnnouncement(e) {
     e.preventDefault();
-    if (!announcementContent.trim()) return;
+    if (!announcementContent.trim() && !annMedia) return;
     setPostingAnnouncement(true);
     try {
+      let mediaUrl = null;
+      let mediaType = null;
+      let mediaName = null;
+      let mediaSize = null;
+
+      if (annMedia) {
+        const uploadRes = await api.uploadMedia({
+          fileBase64: annMedia.base64,
+          fileName: annMedia.name,
+          fileType: annMedia.type,
+        });
+        mediaUrl = uploadRes.url;
+        mediaType = uploadRes.type;
+        mediaName = uploadRes.name;
+        mediaSize = uploadRes.size;
+      }
+
       await api.createMinistryAnnouncement(ministry.id, {
         title: announcementTitle.trim() || undefined,
         content: announcementContent.trim(),
+        media_url: mediaUrl,
+        media_type: mediaType,
+        media_name: mediaName,
+        media_size: mediaSize,
       });
       setAnnouncementTitle('');
       setAnnouncementContent('');
+      setAnnMedia(null);
       loadAnnouncements();
     } catch (err) {
       alert(err.message || 'Failed to post announcement');
@@ -215,14 +262,39 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
 
   async function handleSendChat(e) {
     if (e && e.preventDefault) e.preventDefault();
-    if (!chatInput.trim() || sendingChat) return;
+    if ((!chatInput.trim() && !chatMedia) || sendingChat) return;
 
     const textToSend = chatInput.trim();
+    const mediaToUpload = chatMedia;
     setChatInput('');
+    setChatMedia(null);
     setSendingChat(true);
 
     try {
-      await api.sendMinistryChat(ministry.id, textToSend);
+      let mediaUrl = null;
+      let mediaType = null;
+      let mediaName = null;
+      let mediaSize = null;
+
+      if (mediaToUpload) {
+        const uploadRes = await api.uploadMedia({
+          fileBase64: mediaToUpload.base64,
+          fileName: mediaToUpload.name,
+          fileType: mediaToUpload.type,
+        });
+        mediaUrl = uploadRes.url;
+        mediaType = uploadRes.type;
+        mediaName = uploadRes.name;
+        mediaSize = uploadRes.size;
+      }
+
+      await api.sendMinistryChat(ministry.id, {
+        message: textToSend,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        media_name: mediaName,
+        media_size: mediaSize,
+      });
       await loadChat();
     } catch (err) {
       alert(err.message || 'Failed to send message');
@@ -390,16 +462,44 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                   placeholder="Share details, worship songs, audio setup instructions, or prayer points..."
                   value={announcementContent}
                   onChange={(e) => setAnnouncementContent(e.target.value)}
-                  required
                   className="w-full bg-[#fbf8f3] dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#c59c6c]"
                 />
+
+                {/* Media Attachment Chip */}
+                {annMedia && (
+                  <div className="flex items-center justify-between gap-2 bg-[#f5ede1] dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+                    <span className="flex items-center gap-2 truncate text-slate-800 dark:text-slate-200">
+                      <Paperclip className="w-3.5 h-3.5 text-[#c59c6c]" />
+                      <span className="font-bold truncate">{annMedia.name}</span>
+                      <span className="text-[10px] text-slate-400">({(annMedia.size / 1024).toFixed(0)} KB)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAnnMedia(null)}
+                      className="p-1 hover:text-rose-500 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center pt-1">
-                  <span className="text-[11px] text-slate-400">
-                    Visible to all assigned volunteers in {ministry.name}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-[#c59c6c] hover:bg-[#f5ede1] dark:hover:bg-slate-800 text-[#8c6738] dark:text-[#c59c6c] text-xs font-bold cursor-pointer transition-colors">
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span>{annMedia ? 'Change Attachment' : 'Attach Photo/Video (<10MB)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*,video/*,.sbp,.pdf"
+                        className="hidden"
+                        onChange={(e) => handleSelectMedia(e.target.files?.[0], 'ann')}
+                      />
+                    </label>
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={postingAnnouncement || !announcementContent.trim()}
+                    disabled={postingAnnouncement || (!announcementContent.trim() && !annMedia)}
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#c59c6c] hover:bg-[#b08756] text-white font-bold text-xs shadow-md shadow-[#c59c6c]/20 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
@@ -487,9 +587,20 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                       </h3>
                     )}
 
-                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-2 whitespace-pre-wrap leading-relaxed">
-                      {ann.content}
-                    </p>
+                    {ann.content && (
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-2 whitespace-pre-wrap leading-relaxed">
+                        {ann.content}
+                      </p>
+                    )}
+
+                    {ann.media_url && (
+                      <MediaAttachmentCard
+                        mediaUrl={ann.media_url}
+                        mediaType={ann.media_type}
+                        mediaName={ann.media_name}
+                        mediaSize={ann.media_size}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -772,7 +883,16 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                           )}
                         </div>
                       </div>
-                      <div className="whitespace-pre-wrap">{msg.message}</div>
+                      {msg.message && <div className="whitespace-pre-wrap">{msg.message}</div>}
+                      {msg.media_url && (
+                        <MediaAttachmentCard
+                          mediaUrl={msg.media_url}
+                          mediaType={msg.media_type}
+                          mediaName={msg.media_name}
+                          mediaSize={msg.media_size}
+                          isMe={isMe}
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -781,9 +901,44 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
             <div ref={chatBottomRef} />
           </div>
 
+          {/* Chat Media Attachment Preview Chip */}
+          {chatMedia && (
+            <div className="mx-3 mt-2 flex items-center justify-between gap-2 bg-[#f5ede1] dark:bg-slate-800 border border-[#eadbc4] dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+              <span className="flex items-center gap-2 truncate text-slate-800 dark:text-slate-200">
+                <Paperclip className="w-3.5 h-3.5 text-[#c59c6c]" />
+                <span className="font-bold truncate">{chatMedia.name}</span>
+                <span className="text-[10px] text-slate-400">({(chatMedia.size / 1024).toFixed(0)} KB)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setChatMedia(null)}
+                className="p-1 hover:text-rose-500 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Chat Input */}
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
             <form onSubmit={handleSendChat} className="flex items-center gap-2">
+              <label
+                className={`p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center ${
+                  chatMedia
+                    ? 'border-[#c59c6c] bg-[#f5ede1] dark:bg-slate-800 text-[#c59c6c]'
+                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'
+                }`}
+                title="Attach Photo or Video (< 10MB)"
+              >
+                <Paperclip className="w-4 h-4" />
+                <input
+                  type="file"
+                  accept="image/*,video/*,.sbp,.pdf"
+                  className="hidden"
+                  onChange={(e) => handleSelectMedia(e.target.files?.[0], 'chat')}
+                />
+              </label>
+
               <input
                 type="text"
                 placeholder={`Message ${ministry.name} team (e.g. rehearsal details, meeting location)...`}
@@ -793,7 +948,7 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
               />
               <button
                 type="submit"
-                disabled={sendingChat || !chatInput.trim()}
+                disabled={sendingChat || (!chatInput.trim() && !chatMedia)}
                 className="flex items-center justify-center p-2.5 rounded-xl bg-[#c59c6c] hover:bg-[#b08756] text-white disabled:opacity-50 transition-all cursor-pointer shadow-md shadow-[#c59c6c]/20"
               >
                 <Send className="w-4 h-4" />

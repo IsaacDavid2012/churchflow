@@ -140,6 +140,17 @@ export default function SongBookManager({ currentUser }) {
     songIds: [],
   });
 
+  // Send to Ministry Hub State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareItem, setShareItem] = useState(null);
+  const [shareItemType, setShareItemType] = useState('setlist');
+  const [shareFormat, setShareFormat] = useState('sbp');
+  const [shareTargetType, setShareTargetType] = useState('ministry_chat');
+  const [shareMinistries, setShareMinistries] = useState([]);
+  const [shareSelectedMinistryId, setShareSelectedMinistryId] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
+  const [sharingToMinistry, setSharingToMinistry] = useState(false);
+
   // Show Toast Helper
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -454,6 +465,58 @@ export default function SongBookManager({ currentUser }) {
       }
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  // --- Share SBP / PDF to Ministry Hub Handlers ---
+  async function openShareModal(item, type = 'setlist', defaultFormat = 'sbp') {
+    setShareItem(item);
+    setShareItemType(type);
+    setShareFormat(defaultFormat);
+    setShareMessage('');
+    setIsShareModalOpen(true);
+
+    try {
+      const data = await api.getMinistries();
+      const list = Array.isArray(data) ? data : [];
+      setShareMinistries(list);
+      if (list.length > 0 && !shareSelectedMinistryId) {
+        setShareSelectedMinistryId(list[0].id);
+      }
+    } catch (e) {
+      console.warn('Could not load ministries for sharing:', e);
+    }
+  }
+
+  async function handleConfirmShareToMinistry() {
+    if (!shareItem) return;
+    if (['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && !shareSelectedMinistryId) {
+      showToast('Please select a ministry target', 'error');
+      return;
+    }
+
+    setSharingToMinistry(true);
+    try {
+      const isSetlist = shareItemType === 'setlist';
+      await api.shareSongbookToMinistry({
+        targetType: shareTargetType,
+        ministryId: shareSelectedMinistryId,
+        format: shareFormat,
+        setlistId: isSetlist ? shareItem.id : undefined,
+        songId: !isSetlist ? shareItem.id : undefined,
+        message: shareMessage.trim(),
+      });
+
+      setIsShareModalOpen(false);
+      showToast(
+        `Shared ${shareFormat.toUpperCase()} to ${
+          shareTargetType.includes('general') ? 'General Church' : 'Ministry Hub'
+        }! 🎉`
+      );
+    } catch (err) {
+      showToast(err.message || 'Failed to share to ministry', 'error');
+    } finally {
+      setSharingToMinistry(false);
     }
   }
 
@@ -993,6 +1056,16 @@ export default function SongBookManager({ currentUser }) {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              openShareModal(sl, 'setlist', 'sbp');
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all cursor-pointer"
+                            title="Send Setlist to Ministry Hub / Chat"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               handleShareSetlist(sl);
                             }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 transition-all cursor-pointer"
@@ -1095,6 +1168,14 @@ export default function SongBookManager({ currentUser }) {
                       >
                         <FileText className="w-3 h-3" />
                         <span>PDF</span>
+                      </button>
+                      <button
+                        onClick={() => openShareModal(selectedSetlist, 'setlist', 'sbp')}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Send Setlist to Ministry Hub / Chat"
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                        <span>Hub / Chat</span>
                       </button>
                     </div>
                   )}
@@ -1224,6 +1305,15 @@ export default function SongBookManager({ currentUser }) {
                     title="Print / Export Lead Sheet PDF"
                   >
                     <FileText className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Send Song to Hub / Chat */}
+                  <button
+                    onClick={() => openShareModal(selectedSong, 'song', 'sbp')}
+                    className="p-2 rounded-xl border border-purple-200 dark:border-purple-800 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 cursor-pointer"
+                    title="Send Song to Ministry Hub / Chat"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Copy to Scope Button */}
@@ -1754,6 +1844,180 @@ export default function SongBookManager({ currentUser }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 5: Send to Ministry Hub / Chat Modal --- */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 flex items-center justify-center">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Send to Ministry Hub / Chat
+                  </h3>
+                  <div className="text-[11px] text-slate-400">
+                    Post backup or chord chart directly to church volunteers
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Selected item badge */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5">
+                {shareItemType === 'setlist' ? 'Selected Setlist' : 'Selected Song'}
+              </span>
+              <span className="font-bold text-sm text-slate-900 dark:text-white">
+                {shareItem ? (shareItemType === 'setlist' ? shareItem.name : shareItem.title) : ''}
+              </span>
+            </div>
+
+            {/* Format Selection */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                Export Format
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShareFormat('sbp')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    shareFormat === 'sbp'
+                      ? 'border-[#c59c6c] bg-[#f5ede1] dark:bg-slate-800 text-[#8c6738] dark:text-[#c59c6c]'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Music className="w-4 h-4" />
+                    <span>.sbp Archive</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    SongBook Pro format with 1-tap import in chat
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShareFormat('pdf')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    shareFormat === 'pdf'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <FileText className="w-4 h-4" />
+                    <span>Lead Sheet PDF</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Printable booklet with chords and lyrics
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Target Channel */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                Destination Target
+              </label>
+              <div className="space-y-1.5">
+                {[
+                  { key: 'ministry_chat', label: 'Ministry Team Chat', desc: 'Real group chat for team volunteers' },
+                  { key: 'ministry_announcement', label: 'Ministry Classroom Stream', desc: 'Classroom broadcast for ministry members' },
+                  { key: 'general_chat', label: 'General Church Chat', desc: 'Whole-church chat stream' },
+                  { key: 'general_announcement', label: 'General Church Announcement', desc: 'Pastoral broadcast (Pastors & Admins only)' },
+                ].map((target) => (
+                  <label
+                    key={target.key}
+                    onClick={() => setShareTargetType(target.key)}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      shareTargetType === target.key
+                        ? 'border-[#c59c6c] bg-[#fbf8f3] dark:bg-slate-800 text-slate-900 dark:text-white'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="shareTargetType"
+                      checked={shareTargetType === target.key}
+                      onChange={() => setShareTargetType(target.key)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-xs">{target.label}</div>
+                      <div className="text-[10px] text-slate-400">{target.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Ministry Selector */}
+            {['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                  Select Ministry
+                </label>
+                <select
+                  value={shareSelectedMinistryId}
+                  onChange={(e) => setShareSelectedMinistryId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold dark:text-white border-none focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  {shareMinistries.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Caption */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Optional Message / Caption
+              </label>
+              <input
+                type="text"
+                value={shareMessage}
+                onChange={(e) => setShareMessage(e.target.value)}
+                placeholder="e.g. Here is this Sunday's worship setlist for rehearsal!"
+                className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs dark:text-white border-none focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sharingToMinistry}
+                onClick={handleConfirmShareToMinistry}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-[#c59c6c] hover:bg-[#b08756] text-white disabled:opacity-50 cursor-pointer shadow-md shadow-[#c59c6c]/20"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{sharingToMinistry ? 'Sending...' : 'Send to Hub / Chat'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

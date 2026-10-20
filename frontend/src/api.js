@@ -343,6 +343,11 @@ export const api = {
   },
   getSongbookSetlistPdf: (id) => request(`/songbook/setlists/${id}/export/pdf`),
   getSongbookSongPdf: (id) => request(`/songbook/songs/${id}/export/pdf`),
+  shareSongbookToMinistry: (data) =>
+    request('/songbook/share-to-ministry', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   searchSongbookOnline: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/songbook/online/search${query ? `?${query}` : ''}`);
@@ -409,17 +414,24 @@ export const api = {
 
   // Ministry Team Chat Space
   getMinistryChat: (ministryId) => request(`/ministries/${ministryId}/chat`),
-  sendMinistryChat: (ministryId, message) =>
-    request(`/ministries/${ministryId}/chat`, {
+  sendMinistryChat: (ministryId, payload) => {
+    const body = typeof payload === 'string' ? { message: payload } : payload;
+    return request(`/ministries/${ministryId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ message }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
   deleteMinistryChat: (ministryId, messageId) =>
     request(`/ministries/${ministryId}/chat/${messageId}`, {
       method: 'DELETE',
     }),
 
   // Church Community (WhatsApp Community: General Announcements & Church Family Chat)
+  uploadMedia: (data) =>
+    request('/community/upload', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getCommunityAnnouncements: () => request('/community/announcements'),
   createCommunityAnnouncement: (data) =>
     request('/community/announcements', {
@@ -431,11 +443,13 @@ export const api = {
       method: 'DELETE',
     }),
   getCommunityChat: () => request('/community/chat'),
-  sendCommunityChat: (message) =>
-    request('/community/chat', {
+  sendCommunityChat: (payload) => {
+    const body = typeof payload === 'string' ? { message: payload } : payload;
+    return request('/community/chat', {
       method: 'POST',
-      body: JSON.stringify({ message }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
   deleteCommunityChat: (id) =>
     request(`/community/chat/${id}`, {
       method: 'DELETE',

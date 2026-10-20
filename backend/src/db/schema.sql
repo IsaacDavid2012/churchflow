@@ -301,6 +301,10 @@ CREATE TABLE IF NOT EXISTS ministry_announcements (
     author_role VARCHAR(50) NOT NULL DEFAULT 'manager',
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
+    media_url TEXT,
+    media_type VARCHAR(50),
+    media_name VARCHAR(255),
+    media_size INTEGER,
     is_pinned BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -317,7 +321,11 @@ CREATE TABLE IF NOT EXISTS ministry_chat_messages (
     sender VARCHAR(50) NOT NULL DEFAULT 'member',
     sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
     sender_name VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
+    message TEXT DEFAULT '',
+    media_url TEXT,
+    media_type VARCHAR(50),
+    media_name VARCHAR(255),
+    media_size INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -332,6 +340,10 @@ CREATE TABLE IF NOT EXISTS general_announcements (
     author_role VARCHAR(50) NOT NULL DEFAULT 'pastor',
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
+    media_url TEXT,
+    media_type VARCHAR(50),
+    media_name VARCHAR(255),
+    media_size INTEGER,
     is_pinned BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -345,7 +357,11 @@ CREATE TABLE IF NOT EXISTS general_chat_messages (
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     sender_name VARCHAR(255) NOT NULL,
     sender_role VARCHAR(50) NOT NULL DEFAULT 'member',
-    message TEXT NOT NULL,
+    message TEXT DEFAULT '',
+    media_url TEXT,
+    media_type VARCHAR(50),
+    media_name VARCHAR(255),
+    media_size INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

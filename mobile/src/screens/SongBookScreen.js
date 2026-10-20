@@ -337,8 +337,92 @@ export default function SongBookScreen({
     }
   };
 
+  // --- Share SBP or PDF directly to Ministry Hub / Chat ---
+  const [isShareToMinistryOpen, setIsShareToMinistryOpen] = useState(false);
+  const [shareItem, setShareItem] = useState(null);
+  const [shareItemType, setShareItemType] = useState('setlist');
+  const [shareFormat, setShareFormat] = useState('sbp'); // 'sbp' | 'pdf'
+  const [shareTargetType, setShareTargetType] = useState('ministry_chat');
+  const [shareMinistries, setShareMinistries] = useState([]);
+  const [shareSelectedMinistryId, setShareSelectedMinistryId] = useState(null);
+  const [shareMessage, setShareMessage] = useState('');
+  const [sharingToMinistry, setSharingToMinistry] = useState(false);
+
+  const openShareToMinistryModal = async (item, type = 'setlist', defaultFormat = 'sbp') => {
+    setShareItem(item);
+    setShareItemType(type);
+    setShareFormat(defaultFormat);
+    setShareMessage('');
+    setIsShareToMinistryOpen(true);
+
+    try {
+      const data = await api.getMinistries();
+      const list = Array.isArray(data) ? data : [];
+      setShareMinistries(list);
+      if (list.length > 0 && !shareSelectedMinistryId) {
+        setShareSelectedMinistryId(list[0].id);
+      }
+    } catch (e) {
+      console.warn('Could not load ministries for sharing:', e);
+    }
+  };
+
+  const handleConfirmShareToMinistry = async () => {
+    if (!shareItem) return;
+    if (['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && !shareSelectedMinistryId) {
+      Alert.alert('Selection Required', 'Please select a ministry target.');
+      return;
+    }
+
+    setSharingToMinistry(true);
+    try {
+      const isSetlist = shareItemType === 'setlist';
+      await api.shareSongbookToMinistry({
+        targetType: shareTargetType,
+        ministryId: shareSelectedMinistryId,
+        format: shareFormat,
+        setlistId: isSetlist ? shareItem.id : undefined,
+        songId: !isSetlist ? shareItem.id : undefined,
+        message: shareMessage.trim(),
+      });
+
+      setIsShareToMinistryOpen(false);
+      Alert.alert(
+        'Shared Successfully! 🎉',
+        `The ${shareFormat.toUpperCase()} has been sent into ${
+          shareTargetType.includes('general') ? 'General Church' : 'Ministry Hub'
+        }. Members can tap directly to view or import into their personal library.`
+      );
+    } catch (err) {
+      Alert.alert('Share Failed', err.response?.data?.error || err.message || 'Could not share to ministry');
+    } finally {
+      setSharingToMinistry(false);
+    }
+  };
+
   // --- Export Setlist / Song as genuine .sbp ZIP Archive ---
-  const handleExportSbp = async (item, type = 'setlist') => {
+  const handleExportSbp = (item, type = 'setlist') => {
+    const isSetlist = type === 'setlist';
+    const name = (isSetlist ? item.name : item.title) || 'Worship_Set';
+
+    Alert.alert(
+      `Export ${name} (.sbp)`,
+      'How would you like to export this SongBook backup?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send to Ministry Hub / Chat',
+          onPress: () => openShareToMinistryModal(item, type, 'sbp'),
+        },
+        {
+          text: 'Share via WhatsApp / Files',
+          onPress: () => performDirectExportSbp(item, type),
+        },
+      ]
+    );
+  };
+
+  const performDirectExportSbp = async (item, type = 'setlist') => {
     try {
       const isSetlist = type === 'setlist';
       const name = (isSetlist ? item.name : item.title) || 'Worship_Set';
@@ -366,7 +450,28 @@ export default function SongBookScreen({
   };
 
   // --- Export Setlist / Song as Printable PDF ---
-  const handleExportPdf = async (item, type = 'setlist') => {
+  const handleExportPdf = (item, type = 'setlist') => {
+    const isSetlist = type === 'setlist';
+    const name = (isSetlist ? item.name : item.title) || 'Worship_Set';
+
+    Alert.alert(
+      `Export ${name} (PDF Lead Sheet)`,
+      'How would you like to export this printable lead sheet?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send to Ministry Hub / Chat',
+          onPress: () => openShareToMinistryModal(item, type, 'pdf'),
+        },
+        {
+          text: 'Share via WhatsApp / Print',
+          onPress: () => performDirectExportPdf(item, type),
+        },
+      ]
+    );
+  };
+
+  const performDirectExportPdf = async (item, type = 'setlist') => {
     try {
       const isSetlist = type === 'setlist';
       const res = isSetlist ? await api.getSongbookSetlistPdf(item.id) : await api.getSongbookSongPdf(item.id);
@@ -1019,6 +1124,14 @@ export default function SongBookScreen({
 
                   <TouchableOpacity
                     style={styles.setlistActionBtn}
+                    onPress={() => openShareToMinistryModal(item, 'setlist', 'sbp')}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={13} color="#9333ea" />
+                    <Text style={[styles.setlistActionText, { color: '#9333ea' }]}>Hub / Chat</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.setlistActionBtn}
                     onPress={() => handleShareSetlist(item)}
                   >
                     <Ionicons name="logo-whatsapp" size={13} color="#16a34a" />
@@ -1213,6 +1326,17 @@ export default function SongBookScreen({
                 <Ionicons name="document-text-outline" size={14} color="#0284c7" />
                 <Text style={[styles.actionChipText, { color: '#0284c7' }]}>
                   {selectedSetlist ? 'Export Set PDF' : 'Export PDF'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Send to Hub / Chat */}
+              <TouchableOpacity
+                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
+                onPress={() => openShareToMinistryModal(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+              >
+                <Ionicons name="chatbubbles-outline" size={14} color="#9333ea" />
+                <Text style={[styles.actionChipText, { color: '#9333ea' }]}>
+                  Send to Hub / Chat
                 </Text>
               </TouchableOpacity>
 
@@ -1767,6 +1891,180 @@ export default function SongBookScreen({
             />
           </View>
         </View>
+      </Modal>
+
+      {/* Send to Ministry Hub / Chat Modal */}
+      <Modal
+        visible={isShareToMinistryOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsShareToMinistryOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="paper-plane" size={18} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Send to Ministry Hub / Chat</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsShareToMinistryOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {/* Item Info */}
+              <View style={{ padding: 10, borderRadius: 10, backgroundColor: colors.inputBg, marginBottom: 12 }}>
+                <Text style={{ fontSize: 11, color: colors.subText, textTransform: 'uppercase', fontWeight: '800' }}>
+                  {shareItemType === 'setlist' ? 'Worship Setlist' : 'Song Chord Chart'}
+                </Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text, marginTop: 2 }}>
+                  {shareItem ? (shareItemType === 'setlist' ? shareItem.name : shareItem.title) : ''}
+                </Text>
+              </View>
+
+              {/* Format Selection */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Export Format</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.shareOptionCard,
+                    shareFormat === 'sbp' && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                    { borderColor: colors.border },
+                  ]}
+                  onPress={() => setShareFormat('sbp')}
+                >
+                  <Ionicons name="musical-notes" size={18} color={shareFormat === 'sbp' ? colors.primary : colors.subText} />
+                  <Text style={[styles.shareOptionTitle, { color: shareFormat === 'sbp' ? colors.primary : colors.text }]}>
+                    .sbp Archive
+                  </Text>
+                  <Text style={[styles.shareOptionSub, { color: colors.subText }]}>
+                    SongBook Pro format with 1-tap import for musicians
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.shareOptionCard,
+                    shareFormat === 'pdf' && { borderColor: '#0284c7', backgroundColor: isDark ? '#082f49' : '#e0f2fe' },
+                    { borderColor: colors.border },
+                  ]}
+                  onPress={() => setShareFormat('pdf')}
+                >
+                  <Ionicons name="document-text" size={18} color={shareFormat === 'pdf' ? '#0284c7' : colors.subText} />
+                  <Text style={[styles.shareOptionTitle, { color: shareFormat === 'pdf' ? '#0284c7' : colors.text }]}>
+                    Lead Sheet PDF
+                  </Text>
+                  <Text style={[styles.shareOptionSub, { color: colors.subText }]}>
+                    Printable high-contrast chord charts & lyrics booklet
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Target Type */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Destination Channel</Text>
+              <View style={{ gap: 6, marginBottom: 12 }}>
+                {[
+                  { key: 'ministry_chat', label: 'Ministry Team Chat', icon: 'chatbubbles', desc: 'Post to ministry volunteers chat space' },
+                  { key: 'ministry_announcement', label: 'Ministry Hub Announcement', icon: 'megaphone', desc: 'Post to ministry classroom stream' },
+                  { key: 'general_chat', label: 'General Church Chat', icon: 'people', desc: 'Post to whole-church general chat' },
+                  { key: 'general_announcement', label: 'General Church Announcement', icon: 'radio', desc: 'Official announcement (pastors/admins)' },
+                ].map((target) => (
+                  <TouchableOpacity
+                    key={target.key}
+                    style={[
+                      styles.targetRadioItem,
+                      shareTargetType === target.key && { borderColor: colors.primary, backgroundColor: colors.inputBg },
+                      { borderColor: colors.border },
+                    ]}
+                    onPress={() => setShareTargetType(target.key)}
+                  >
+                    <Ionicons
+                      name={shareTargetType === target.key ? 'radio-button-on' : 'radio-button-off'}
+                      size={18}
+                      color={shareTargetType === target.key ? colors.primary : colors.subText}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.targetRadioTitle, { color: colors.text }]}>{target.label}</Text>
+                      <Text style={[styles.targetRadioDesc, { color: colors.subText }]}>{target.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Ministry Selector (if ministry target selected) */}
+              {['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Select Ministry</Text>
+                  {shareMinistries.length === 0 ? (
+                    <Text style={{ fontSize: 12, color: colors.subText, fontStyle: 'italic' }}>
+                      Loading ministries...
+                    </Text>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', gap: 6 }}>
+                      {shareMinistries.map((m) => {
+                        const isSelected = shareSelectedMinistryId === m.id;
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={[
+                              styles.ministryPill,
+                              isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                              { borderColor: colors.border, backgroundColor: colors.inputBg },
+                            ]}
+                            onPress={() => setShareSelectedMinistryId(m.id)}
+                          >
+                            <Text style={[styles.ministryPillText, { color: isSelected ? '#ffffff' : colors.text }]}>
+                              {m.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                </View>
+              )}
+
+              {/* Optional Message */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Caption / Note (Optional)</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border, minHeight: 60, textAlignVertical: 'top' },
+                ]}
+                value={shareMessage}
+                onChangeText={setShareMessage}
+                placeholder="e.g. Here is this Sunday's worship setlist for rehearsal!"
+                placeholderTextColor={colors.subText}
+                multiline
+              />
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
+                onPress={() => setIsShareToMinistryOpen(false)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.subText }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: colors.primary }, sharingToMinistry && { opacity: 0.5 }]}
+                disabled={sharingToMinistry}
+                onPress={handleConfirmShareToMinistry}
+              >
+                {sharingToMinistry ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Send to Hub / Chat</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -2370,5 +2668,48 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 6,
+  },
+  shareOptionCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  shareOptionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  shareOptionSub: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  targetRadioItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  targetRadioTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  targetRadioDesc: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  ministryPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  ministryPillText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

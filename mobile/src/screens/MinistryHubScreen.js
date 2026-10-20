@@ -18,6 +18,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
+import { pickMediaAttachment } from '../utils/mediaPicker';
+import MediaAttachmentCard from '../components/MediaAttachmentCard';
 
 export default function MinistryHubScreen({ ministry, user, isDark = false, onBack }) {
   const [activeTab, setActiveTab] = useState('stream'); // 'stream' | 'people' | 'chat'
@@ -35,6 +37,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
+  const [annMedia, setAnnMedia] = useState(null);
   const [posting, setPosting] = useState(false);
 
   // Members
@@ -49,6 +52,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
   // Chatbot
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
+  const [chatMedia, setChatMedia] = useState(null);
   const [sendingChat, setSendingChat] = useState(false);
   const chatListRef = useRef(null);
 
@@ -150,19 +154,48 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
     return () => backSub.remove();
   }, [isPostModalOpen, isAssignModalOpen, activeTab, onBack]);
 
+  const handlePickAnnMedia = async () => {
+    const picked = await pickMediaAttachment();
+    if (picked) {
+      setAnnMedia(picked);
+    }
+  };
+
   const handlePostAnnouncement = async () => {
-    if (!postContent.trim()) {
-      Alert.alert('Required Field', 'Please enter announcement message content.');
+    if (!postContent.trim() && !annMedia) {
+      Alert.alert('Required Field', 'Please enter announcement message or attach a photo/video under 10MB.');
       return;
     }
     setPosting(true);
     try {
+      let mediaUrl = null;
+      let mediaType = null;
+      let mediaName = null;
+      let mediaSize = null;
+
+      if (annMedia) {
+        const uploadRes = await api.uploadMedia({
+          fileBase64: annMedia.base64,
+          fileName: annMedia.fileName,
+          fileType: annMedia.fileType,
+        });
+        mediaUrl = uploadRes.url;
+        mediaType = uploadRes.type;
+        mediaName = uploadRes.name;
+        mediaSize = uploadRes.size;
+      }
+
       await api.createMinistryAnnouncement(ministry.id, {
         title: postTitle.trim() || undefined,
         content: postContent.trim(),
+        media_url: mediaUrl,
+        media_type: mediaType,
+        media_name: mediaName,
+        media_size: mediaSize,
       });
       setPostTitle('');
       setPostContent('');
+      setAnnMedia(null);
       setIsPostModalOpen(false);
       loadAnnouncements();
       Alert.alert('Success', 'Announcement posted to ' + ministry.name);
@@ -269,14 +302,46 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
     ]);
   };
 
+  const handlePickChatMedia = async () => {
+    const picked = await pickMediaAttachment();
+    if (picked) {
+      setChatMedia(picked);
+    }
+  };
+
   const handleSendChat = async () => {
-    if (!chatInput.trim() || sendingChat) return;
+    if ((!chatInput.trim() && !chatMedia) || sendingChat) return;
     const text = chatInput.trim();
+    const mediaToUpload = chatMedia;
     setChatInput('');
+    setChatMedia(null);
     setSendingChat(true);
 
     try {
-      await api.sendMinistryChat(ministry.id, text);
+      let mediaUrl = null;
+      let mediaType = null;
+      let mediaName = null;
+      let mediaSize = null;
+
+      if (mediaToUpload) {
+        const uploadRes = await api.uploadMedia({
+          fileBase64: mediaToUpload.base64,
+          fileName: mediaToUpload.fileName,
+          fileType: mediaToUpload.fileType,
+        });
+        mediaUrl = uploadRes.url;
+        mediaType = uploadRes.type;
+        mediaName = uploadRes.name;
+        mediaSize = uploadRes.size;
+      }
+
+      await api.sendMinistryChat(ministry.id, {
+        message: text,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        media_name: mediaName,
+        media_size: mediaSize,
+      });
       await loadChat();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || err.message || 'Could not send message');
@@ -539,7 +604,19 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                       <Text style={[styles.annTitle, { color: colors.text }]}>{item.title}</Text>
                     ) : null}
 
-                    <Text style={[styles.annContent, { color: colors.text }]}>{item.content}</Text>
+                    {item.content ? (
+                      <Text style={[styles.annContent, { color: colors.text }]}>{item.content}</Text>
+                    ) : null}
+
+                    {item.media_url ? (
+                      <MediaAttachmentCard
+                        mediaUrl={item.media_url}
+                        mediaType={item.media_type}
+                        mediaName={item.media_name}
+                        mediaSize={item.media_size}
+                        colors={colors}
+                      />
+                    ) : null}
                   </View>
                 );
               }}
@@ -829,22 +906,63 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                         )}
                       </View>
                     </View>
-                    <Text
-                      style={[
-                        styles.chatMessageText,
-                        { color: isMe ? '#ffffff' : colors.text },
-                      ]}
-                    >
-                      {item.message}
-                    </Text>
+                    {item.message ? (
+                      <Text
+                        style={[
+                          styles.chatMessageText,
+                          { color: isMe ? '#ffffff' : colors.text },
+                        ]}
+                      >
+                        {item.message}
+                      </Text>
+                    ) : null}
+
+                    {item.media_url ? (
+                      <MediaAttachmentCard
+                        mediaUrl={item.media_url}
+                        mediaType={item.media_type}
+                        mediaName={item.media_name}
+                        mediaSize={item.media_size}
+                        isMe={isMe}
+                        colors={colors}
+                      />
+                    ) : null}
                   </View>
                 </View>
               );
             }}
           />
 
+          {chatMedia && (
+            <View style={[styles.chatMediaPreviewChip, { backgroundColor: colors.badgeBg, borderColor: colors.border }]}>
+              <Ionicons
+                name={chatMedia.type === 'video' ? 'videocam' : 'image'}
+                size={16}
+                color={colors.primaryDark}
+              />
+              <Text style={[styles.chatMediaPreviewText, { color: colors.text }]} numberOfLines={1}>
+                {chatMedia.fileName} ({chatMedia.fileSize ? (chatMedia.fileSize / 1024).toFixed(0) + 'KB' : '<10MB'})
+              </Text>
+              <TouchableOpacity onPress={() => setChatMedia(null)}>
+                <Ionicons name="close-circle" size={18} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Bottom Chat Input */}
           <View style={[styles.chatInputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.chatAttachBtn}
+              onPress={handlePickChatMedia}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={chatMedia ? 'checkmark-circle' : 'attach'}
+                size={22}
+                color={chatMedia ? colors.primary : colors.subText}
+              />
+            </TouchableOpacity>
+
             <TextInput
               style={[styles.chatTextInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={chatInput}
@@ -856,9 +974,9 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
               style={[
                 styles.chatSendBtn,
                 { backgroundColor: colors.primary },
-                (!chatInput.trim() || sendingChat) && { opacity: 0.5 },
+                ((!chatInput.trim() && !chatMedia) || sendingChat) && { opacity: 0.5 },
               ]}
-              disabled={!chatInput.trim() || sendingChat}
+              disabled={(!chatInput.trim() && !chatMedia) || sendingChat}
               onPress={handleSendChat}
             >
               <Ionicons name="send" size={16} color="#ffffff" />
@@ -894,7 +1012,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                 placeholderTextColor={colors.subText}
               />
 
-              <Text style={[styles.inputLabel, { color: colors.subText }]}>Announcement Message *</Text>
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>Announcement Message</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -908,6 +1026,36 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                 placeholder="Share details, worship songs, audio setup instructions, or prayer points..."
                 placeholderTextColor={colors.subText}
               />
+
+              {/* Media Attachment for Announcement */}
+              <View style={{ marginTop: 12, marginBottom: 8 }}>
+                <Text style={[styles.inputLabel, { color: colors.subText }]}>Media Attachment (Photo or Video &lt; 10MB)</Text>
+                {annMedia ? (
+                  <View style={[styles.chatMediaPreviewChip, { backgroundColor: colors.badgeBg, borderColor: colors.border }]}>
+                    <Ionicons
+                      name={annMedia.type === 'video' ? 'videocam' : 'image'}
+                      size={18}
+                      color={colors.primaryDark}
+                    />
+                    <Text style={[styles.chatMediaPreviewText, { color: colors.text }]} numberOfLines={1}>
+                      {annMedia.fileName} ({annMedia.fileSize ? (annMedia.fileSize / 1024).toFixed(0) + 'KB' : '<10MB'})
+                    </Text>
+                    <TouchableOpacity onPress={() => setAnnMedia(null)}>
+                      <Ionicons name="close-circle" size={20} color={colors.subText} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.annMediaPickerBtn, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                    onPress={handlePickAnnMedia}
+                  >
+                    <Ionicons name="image-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.annMediaPickerText, { color: colors.primary }]}>
+                      Attach Photo or Video (&lt; 10MB)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
               <Text style={[styles.noticeSubText, { color: colors.subText }]}>
                 * This announcement will appear on the {ministry.name} Hub stream for all volunteers.
@@ -923,8 +1071,8 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.saveBtn, { backgroundColor: colors.primary }, (!postContent.trim() || posting) && { opacity: 0.5 }]}
-                disabled={!postContent.trim() || posting}
+                style={[styles.saveBtn, { backgroundColor: colors.primary }, ((!postContent.trim() && !annMedia) || posting) && { opacity: 0.5 }]}
+                disabled={(!postContent.trim() && !annMedia) || posting}
                 onPress={handlePostAnnouncement}
               >
                 {posting ? (
@@ -1701,5 +1849,42 @@ const styles = StyleSheet.create({
   roleChoiceText: {
     fontSize: 11,
     fontWeight: '800',
+  },
+  chatAttachBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatMediaPreviewChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: 12,
+    marginTop: 6,
+    marginBottom: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  chatMediaPreviewText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  annMediaPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  annMediaPickerText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

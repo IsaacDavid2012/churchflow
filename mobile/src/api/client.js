@@ -429,6 +429,13 @@ class ApiClient {
     return this.request(`/songbook/songs/${id}/export/pdf`);
   }
 
+  async shareSongbookToMinistry(data) {
+    return this.request('/songbook/share-to-ministry', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   getSongbookSetlistSbpUrl(id) {
     return `${this.baseUrl}/songbook/setlists/${id}/export/sbp`;
   }
@@ -602,10 +609,11 @@ class ApiClient {
     return this.request(`/ministries/${ministryId}/chat`);
   }
 
-  async sendMinistryChat(ministryId, message) {
+  async sendMinistryChat(ministryId, payload) {
+    const body = typeof payload === 'string' ? { message: payload } : payload;
     return this.request(`/ministries/${ministryId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -616,6 +624,13 @@ class ApiClient {
   }
 
   // --- Church Community (WhatsApp Community architecture) ---
+  async uploadMedia(data) {
+    return this.request('/community/upload', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getCommunityAnnouncements() {
     return this.request('/community/announcements');
   }
@@ -637,10 +652,11 @@ class ApiClient {
     return this.request('/community/chat');
   }
 
-  async sendCommunityChat(message) {
+  async sendCommunityChat(payload) {
+    const body = typeof payload === 'string' ? { message: payload } : payload;
     return this.request('/community/chat', {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(body),
     });
   }
 
