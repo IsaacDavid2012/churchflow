@@ -51,9 +51,10 @@ function getTransposedKey(originalKey, semitones) {
 }
 
 export default function SongBookScreen({ user, isDark = false }) {
-  const [activeTab, setActiveTab] = useState('songs'); // 'songs' | 'setlists'
+  const [activeTab, setActiveTab] = useState('user'); // 'user' (My Songs) | 'team' (Jesus My Rock) | 'setlists' | 'online'
   const [songs, setSongs] = useState([]);
   const [setlists, setSetlists] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedKey, setSelectedKey] = useState('All');
@@ -75,6 +76,21 @@ export default function SongBookScreen({ user, isDark = false }) {
   const scrollOffsetRef = useRef(0);
   const scrollIntervalRef = useRef(null);
 
+  // Online Search State
+  const [onlineQuery, setOnlineQuery] = useState('');
+  const [onlineSite, setOnlineSite] = useState('all');
+  const [onlineResults, setOnlineResults] = useState([]);
+  const [onlineLoading, setOnlineLoading] = useState(false);
+  const [importingOnlineId, setImportingOnlineId] = useState(null);
+
+  // Add / Edit Song Modal State
+  const [isAddSongModalOpen, setIsAddSongModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newArtist, setNewArtist] = useState('');
+  const [newKey, setNewKey] = useState('C');
+  const [newContent, setNewContent] = useState('');
+  const [savingSong, setSavingSong] = useState(false);
+
   const colors = {
     bg: isDark ? '#020617' : '#ffffff',
     card: isDark ? '#0f172a' : '#ffffff',
@@ -87,15 +103,18 @@ export default function SongBookScreen({ user, isDark = false }) {
     chord: isDark ? '#fbbf24' : '#b45309',
   };
 
-  const fetchLibrary = async () => {
+  const fetchLibrary = async (targetScope = activeTab) => {
     try {
       setLoading(true);
-      const [songsRes, setlistsRes] = await Promise.all([
-        api.getSongbookSongs({ limit: 1000 }).catch(() => ({ songs: [] })),
-        api.getSongbookSetlists().catch(() => []),
+      const scopeParam = targetScope === 'team' ? 'team' : 'user';
+      const [songsRes, setlistsRes, meRes] = await Promise.all([
+        api.getSongbookSongs({ scope: scopeParam, limit: 1000 }).catch(() => ({ songs: [] })),
+        api.getSongbookSetlists({ scope: scopeParam }).catch(() => []),
+        api.getSongbookMe().catch(() => null),
       ]);
       setSongs(songsRes.songs || []);
       setSetlists(setlistsRes || []);
+      if (meRes) setProfile(meRes);
     } catch (err) {
       console.error('Fetch SongBook library error:', err);
     } finally {
@@ -104,8 +123,10 @@ export default function SongBookScreen({ user, isDark = false }) {
   };
 
   useEffect(() => {
-    fetchLibrary();
-  }, []);
+    if (activeTab === 'user' || activeTab === 'team' || activeTab === 'setlists') {
+      fetchLibrary(activeTab);
+    }
+  }, [activeTab]);
 
   const openSongReader = async (song, setlist = null) => {
     setSelectedSong(song);
@@ -169,6 +190,97 @@ export default function SongBookScreen({ user, isDark = false }) {
     return () => clearInterval(scrollIntervalRef.current);
   }, [isAutoScrolling, scrollSpeed]);
 
+  // Online Search
+  const handleSearchOnline = async () => {
+    if (!onlineQuery.trim()) return;
+    setOnlineLoading(true);
+    setOnlineResults([]);
+    try {
+      const res = await api.searchSongbookOnline({ query: onlineQuery.trim(), site: onlineSite });
+      setOnlineResults(res.results || []);
+    } catch (err) {
+      Alert.alert('Online Search Failed', err.message || 'Could not query online sources');
+    } finally {
+      setOnlineLoading(false);
+    }
+  };
+
+  const handleImportOnline = async (item) => {
+    setImportingOnlineId(item.id || item.url);
+    try {
+      const saved = await api.importSongbookOnline({
+        url: item.url,
+        site: item.site,
+        targetOwnerType: activeTab === 'team' ? 'team' : 'user',
+      });
+      Alert.alert('Imported!', `"${saved.title}" has been added to your songbook library.`);
+      fetchLibrary(activeTab);
+    } catch (err) {
+      Alert.alert('Import Failed', err.message || 'Could not import song');
+    } finally {
+      setImportingOnlineId(null);
+    }
+  };
+
+  // Add Song
+  const handleSaveNewSong = async () => {
+    if (!newTitle.trim()) {
+      Alert.alert('Required', 'Please enter a song title');
+      return;
+    }
+    setSavingSong(true);
+    try {
+      const saved = await api.createSongbookSong({
+        title: newTitle.trim(),
+        artist: newArtist.trim(),
+        key: newKey,
+        content: newContent || '{c:Verse 1}\n[C]Enter lyrics here',
+        ownerType: activeTab === 'team' ? 'team' : 'user',
+      });
+      setIsAddSongModalOpen(false);
+      setNewTitle('');
+      setNewArtist('');
+      setNewContent('');
+      fetchLibrary(activeTab);
+      openSongReader(saved);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to save song');
+    } finally {
+      setSavingSong(false);
+    }
+  };
+
+  // Delete Song
+  const handleDeleteSong = (songId) => {
+    Alert.alert('Delete Song', 'Are you sure you want to delete this song from your library?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteSongbookSong(songId);
+            setIsReaderOpen(false);
+            fetchLibrary(activeTab);
+          } catch (err) {
+            Alert.alert('Error', err.message || 'Failed to delete song');
+          }
+        },
+      },
+    ]);
+  };
+
+  // Copy Song Between Scopes
+  const handleCopySong = async (songId, targetScope) => {
+    try {
+      await api.copySongbookSong(songId, { targetScope });
+      Alert.alert('Copied!', `Song copied to ${targetScope === 'team' ? 'Team Library' : 'My Songs'}`);
+      fetchLibrary(activeTab);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to copy song');
+    }
+  };
+
   const filteredSongs = songs.filter((s) => {
     const q = search.trim().toLowerCase();
     const matchSearch =
@@ -222,13 +334,9 @@ export default function SongBookScreen({ user, isDark = false }) {
         const parts = [];
         const regex = /\[([^\]]+)\]([^\[]*)/g;
         let match;
-
         const firstBracket = line.indexOf('[');
         if (firstBracket > 0) {
-          parts.push({
-            chord: '',
-            text: line.substring(0, firstBracket),
-          });
+          parts.push({ chord: '', text: line.substring(0, firstBracket) });
         }
 
         while ((match = regex.exec(line)) !== null) {
@@ -241,22 +349,12 @@ export default function SongBookScreen({ user, isDark = false }) {
         return (
           <View key={idx} style={styles.chordLineContainer}>
             {parts.map((p, pIdx) => (
-              <View key={pIdx} style={styles.chordWordBox}>
-                <Text
-                  style={[
-                    styles.chordText,
-                    { color: colors.chord, fontSize: fontSize - 2 },
-                  ]}
-                >
+              <View key={pIdx} style={styles.chordPair}>
+                <Text style={[styles.chordText, { fontSize: fontSize * 0.9, color: colors.chord }]}>
                   {p.chord || ' '}
                 </Text>
-                <Text
-                  style={[
-                    styles.lyricText,
-                    { color: colors.text, fontSize },
-                  ]}
-                >
-                  {p.text || (p.chord ? ' ' : '')}
+                <Text style={[styles.lyricText, { fontSize, color: colors.text }]}>
+                  {p.text || ' '}
                 </Text>
               </View>
             ))}
@@ -264,89 +362,93 @@ export default function SongBookScreen({ user, isDark = false }) {
         );
       }
 
-      // Normal lyric line
+      // Plain lyric line
       return (
-        <Text key={idx} style={[styles.plainLyric, { color: colors.text, fontSize }]}>
+        <Text key={idx} style={[styles.plainLyric, { fontSize, color: colors.text }]}>
           {line}
         </Text>
       );
     });
   };
 
-  const currentKey = getTransposedKey(fullSong?.key || selectedSong?.key, semitones);
-  const setlistSongs = selectedSetlist?.songs || [];
-  const currentSetlistIndex = setlistSongs.findIndex((s) => s.id === selectedSong?.id);
+  const currentKey = getTransposedKey(fullSong?.key || selectedSong?.key || 'C', semitones);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Top Header & Switcher */}
-      <View style={[styles.header, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={[styles.iconBadge, { backgroundColor: colors.primaryLight }]}>
-              <Ionicons name="musical-notes" size={20} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={[styles.title, { color: colors.text }]}>Worship SongBook</Text>
-              <Text style={[styles.subText, { color: colors.subText }]}>
-                {songs.length} Church Songs • SongBook Pro
-              </Text>
-            </View>
+      {/* Scope Selector Header */}
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <View style={styles.headerTitleRow}>
+          <View>
+            <Text style={[styles.title, { color: colors.text }]}>SongBook</Text>
+            <Text style={[styles.subTitle, { color: colors.subText }]}>
+              {profile?.songbookUsername ? `Signed in as ${profile.songbookUsername}` : 'Worship Songs & Chords'}
+            </Text>
           </View>
 
-          <TouchableOpacity onPress={fetchLibrary} style={styles.refreshBtn}>
-            <Ionicons name="refresh" size={18} color={colors.subText} />
+          {/* Add Song Button */}
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+            onPress={() => setIsAddSongModalOpen(true)}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.addBtnText}>New Song</Text>
           </TouchableOpacity>
         </View>
 
-        {/* View Segmented Switch */}
-        <View style={styles.segmentContainer}>
+        {/* 4-Tab Scope Bar */}
+        <View style={[styles.tabBar, { backgroundColor: colors.inputBg }]}>
           <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              activeTab === 'songs' && { backgroundColor: colors.primary },
-            ]}
-            onPress={() => setActiveTab('songs')}
+            style={[styles.tabBtn, activeTab === 'user' && [styles.tabBtnActive, { backgroundColor: colors.card }]]}
+            onPress={() => setActiveTab('user')}
           >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'songs' ? '#ffffff' : colors.subText },
-              ]}
-            >
-              All Songs ({songs.length})
+            <Ionicons name="person" size={14} color={activeTab === 'user' ? colors.primary : colors.subText} />
+            <Text style={[styles.tabBtnText, { color: activeTab === 'user' ? colors.primary : colors.subText }]}>
+              My Songs ({profile?.personalSongCount || songs.length})
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              activeTab === 'setlists' && { backgroundColor: colors.primary },
-            ]}
+            style={[styles.tabBtn, activeTab === 'team' && [styles.tabBtnActive, { backgroundColor: colors.card }]]}
+            onPress={() => setActiveTab('team')}
+          >
+            <Ionicons name="people" size={14} color={activeTab === 'team' ? colors.primary : colors.subText} />
+            <Text style={[styles.tabBtnText, { color: activeTab === 'team' ? colors.primary : colors.subText }]}>
+              Team
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'setlists' && [styles.tabBtnActive, { backgroundColor: colors.card }]]}
             onPress={() => setActiveTab('setlists')}
           >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'setlists' ? '#ffffff' : colors.subText },
-              ]}
-            >
-              Setlists ({setlists.length})
+            <Ionicons name="list" size={14} color={activeTab === 'setlists' ? colors.primary : colors.subText} />
+            <Text style={[styles.tabBtnText, { color: activeTab === 'setlists' ? colors.primary : colors.subText }]}>
+              Setlists
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'online' && [styles.tabBtnActive, { backgroundColor: colors.card }]]}
+            onPress={() => setActiveTab('online')}
+          >
+            <Ionicons name="globe" size={14} color={activeTab === 'online' ? colors.primary : colors.subText} />
+            <Text style={[styles.tabBtnText, { color: activeTab === 'online' ? colors.primary : colors.subText }]}>
+              Online
             </Text>
           </TouchableOpacity>
         </View>
 
-        {activeTab === 'songs' && (
+        {/* Search & Key Filters (when on songs tabs) */}
+        {(activeTab === 'user' || activeTab === 'team') && (
           <>
-            {/* Search Input */}
             <View style={[styles.searchBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Ionicons name="search" size={16} color={colors.subText} />
               <TextInput
                 style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Search title, artist..."
+                placeholderTextColor={colors.subText}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search songs or artists..."
-                placeholderTextColor={colors.subText}
               />
               {search ? (
                 <TouchableOpacity onPress={() => setSearch('')}>
@@ -369,12 +471,7 @@ export default function SongBookScreen({ user, isDark = false }) {
                   ]}
                   onPress={() => setSelectedKey(k)}
                 >
-                  <Text
-                    style={[
-                      styles.keyPillText,
-                      { color: selectedKey === k ? '#ffffff' : colors.text },
-                    ]}
-                  >
+                  <Text style={[styles.keyPillText, { color: selectedKey === k ? '#ffffff' : colors.text }]}>
                     {k}
                   </Text>
                 </TouchableOpacity>
@@ -384,13 +481,116 @@ export default function SongBookScreen({ user, isDark = false }) {
         )}
       </View>
 
-      {/* Main List */}
+      {/* Main Content Area */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.subText }]}>Loading SongBook...</Text>
         </View>
-      ) : activeTab === 'songs' ? (
+      ) : activeTab === 'online' ? (
+        /* Online Search Tab */
+        <View style={{ flex: 1 }}>
+          <View style={[styles.onlineSearchRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            <TextInput
+              style={[styles.onlineInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+              placeholder="Search UltimateGuitar & WorshipTogether..."
+              placeholderTextColor={colors.subText}
+              value={onlineQuery}
+              onChangeText={setOnlineQuery}
+              onSubmitEditing={handleSearchOnline}
+              returnKeyType="search"
+            />
+            <TouchableOpacity
+              style={[styles.onlineSearchBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSearchOnline}
+            >
+              {onlineLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="search" size={18} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={onlineResults}
+            keyExtractor={(item, idx) => item.id || idx.toString()}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <View style={[styles.onlineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={[styles.songArtist, { color: colors.subText }]} numberOfLines={1}>
+                    {item.artist} • {item.site} {item.key ? `• Key: ${item.key}` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.importBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => handleImportOnline(item)}
+                  disabled={importingOnlineId === (item.id || item.url)}
+                >
+                  {importingOnlineId === (item.id || item.url) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="download-outline" size={14} color="#fff" />
+                      <Text style={styles.importBtnText}>Import</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="globe-outline" size={48} color={colors.subText} />
+                <Text style={[styles.emptyText, { color: colors.text }]}>
+                  {onlineLoading ? 'Searching online chord charts...' : 'Search online for worship songs'}
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      ) : activeTab === 'setlists' ? (
+        /* Setlists Tab */
+        <FlatList
+          data={setlists}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => {
+            const count = Array.isArray(item.songIds)
+              ? item.songIds.length
+              : Array.isArray(item.songs)
+              ? item.songs.length
+              : 0;
+
+            return (
+              <TouchableOpacity
+                style={[styles.setlistCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => openSetlist(item)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Ionicons name="folder-open" size={24} color={colors.primary} />
+                  <View>
+                    <Text style={[styles.setlistName, { color: colors.text }]}>{item.name}</Text>
+                    <Text style={[styles.setlistSub, { color: colors.subText }]}>{count} songs in set</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.subText} />
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="folder-open-outline" size={48} color={colors.subText} />
+              <Text style={[styles.emptyText, { color: colors.text }]}>No setlists found</Text>
+            </View>
+          }
+        />
+      ) : (
+        /* Songs Tab (User / Team) */
         <FlatList
           data={filteredSongs}
           keyExtractor={(item) => item.id.toString()}
@@ -421,43 +621,12 @@ export default function SongBookScreen({ user, isDark = false }) {
             </View>
           }
         />
-      ) : (
-        /* Setlists Tab */
-        <FlatList
-          data={setlists}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
-            const count = Array.isArray(item.songIds)
-              ? item.songIds.length
-              : Array.isArray(item.songs)
-              ? item.songs.length
-              : 0;
-
-            return (
-              <TouchableOpacity
-                style={[styles.setlistCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => openSetlist(item)}
-                activeOpacity={0.7}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="folder-open" size={24} color={colors.primary} />
-                  <View>
-                    <Text style={[styles.setlistName, { color: colors.text }]}>{item.name}</Text>
-                    <Text style={[styles.setlistSub, { color: colors.subText }]}>{count} songs in set</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.subText} />
-              </TouchableOpacity>
-            );
-          }}
-        />
       )}
 
-      {/* Full-Screen Stage Chord Sheet Modal */}
+      {/* Full-Screen Stage Reader Modal */}
       <Modal visible={isReaderOpen} animationType="slide" onRequestClose={() => setIsReaderOpen(false)}>
         <SafeAreaView style={[styles.readerContainer, { backgroundColor: colors.bg }]}>
-          {/* Reader Top Header */}
+          {/* Header */}
           <View style={[styles.readerHeader, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={[styles.readerTitle, { color: colors.text }]} numberOfLines={1}>
@@ -465,9 +634,21 @@ export default function SongBookScreen({ user, isDark = false }) {
               </Text>
               <Text style={[styles.readerArtist, { color: colors.subText }]} numberOfLines={1}>
                 {fullSong?.artist || selectedSong?.artist}
-                {selectedSetlist ? ` • Set: ${selectedSetlist.name}` : ''}
+                {selectedSetlist ? ` • Setlist (${selectedSetlist.songs.findIndex((s) => s.id === selectedSong?.id) + 1}/${selectedSetlist.songs.length})` : ''}
               </Text>
             </View>
+
+            {/* Setlist Prev / Next */}
+            {selectedSetlist?.songs && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 }}>
+                <TouchableOpacity onPress={() => navigateSetlist(-1)} style={styles.navBtn}>
+                  <Ionicons name="chevron-back" size={20} color={colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigateSetlist(1)} style={styles.navBtn}>
+                  <Ionicons name="chevron-forward" size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={() => {
@@ -480,7 +661,7 @@ export default function SongBookScreen({ user, isDark = false }) {
             </TouchableOpacity>
           </View>
 
-          {/* Reader Controls Toolbar */}
+          {/* Controls Toolbar */}
           <View style={[styles.readerToolbar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             {/* Transpose Widget */}
             <View style={styles.transposeWidget}>
@@ -508,9 +689,8 @@ export default function SongBookScreen({ user, isDark = false }) {
               </TouchableOpacity>
             </View>
 
-            {/* Font & Auto-Scroll Controls */}
+            {/* Font & Auto-Scroll */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {/* Font Size */}
               <TouchableOpacity
                 onPress={() => setFontSize((s) => Math.max(12, s - 1))}
                 style={[styles.iconBtnSmall, { borderColor: colors.border }]}
@@ -525,23 +705,48 @@ export default function SongBookScreen({ user, isDark = false }) {
                 <Ionicons name="add" size={14} color={colors.text} />
               </TouchableOpacity>
 
-              {/* Auto Scroll */}
               <TouchableOpacity
                 onPress={() => setIsAutoScrolling(!isAutoScrolling)}
-                style={[
-                  styles.autoScrollBtn,
-                  { backgroundColor: isAutoScrolling ? '#ef4444' : colors.primary },
-                ]}
+                style={[styles.autoScrollBtn, { backgroundColor: isAutoScrolling ? '#ef4444' : colors.primary }]}
               >
                 <Ionicons name={isAutoScrolling ? 'pause' : 'play'} size={14} color="#fff" />
-                <Text style={styles.autoScrollBtnText}>
-                  {isAutoScrolling ? 'Stop' : 'Scroll'}
-                </Text>
+                <Text style={styles.autoScrollBtnText}>{isAutoScrolling ? 'Stop' : 'Scroll'}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Chord Sheet Body */}
+          {/* Action Row: Copy & Delete */}
+          {selectedSong && (
+            <View style={[styles.actionRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+              {selectedSong.ownerType === 'team' ? (
+                <TouchableOpacity
+                  style={styles.actionChip}
+                  onPress={() => handleCopySong(selectedSong.id, 'user')}
+                >
+                  <Ionicons name="copy-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.actionChipText, { color: colors.primary }]}>Copy to My Songs</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionChip}
+                  onPress={() => handleCopySong(selectedSong.id, 'team')}
+                >
+                  <Ionicons name="share-social-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.actionChipText, { color: colors.primary }]}>Copy to Team</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.actionChip}
+                onPress={() => handleDeleteSong(selectedSong.id)}
+              >
+                <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                <Text style={[styles.actionChipText, { color: '#ef4444' }]}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Sheet Body */}
           <ScrollView
             ref={scrollRef}
             style={styles.sheetScroll}
@@ -552,65 +757,162 @@ export default function SongBookScreen({ user, isDark = false }) {
             scrollEventThrottle={16}
           >
             {loadingSong ? (
-              <View style={styles.center}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.subText }]}>Loading chords...</Text>
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ marginTop: 8, fontSize: 12, color: colors.subText }}>Loading chords...</Text>
               </View>
             ) : (
               renderChordProLines(fullSong?.content || selectedSong?.content)
             )}
           </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
-          {/* Setlist Next/Prev Bottom Bar */}
-          {selectedSetlist && setlistSongs.length > 0 && (
-            <View style={[styles.setlistBottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-              <TouchableOpacity
-                onPress={() => navigateSetlist(-1)}
-                disabled={currentSetlistIndex <= 0}
-                style={[styles.setlistNavBtn, { opacity: currentSetlistIndex <= 0 ? 0.4 : 1 }]}
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.primary} />
-                <Text style={[styles.setlistNavText, { color: colors.primary }]}>Previous</Text>
-              </TouchableOpacity>
-
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.subText }}>
-                Song {currentSetlistIndex + 1} of {setlistSongs.length}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => navigateSetlist(1)}
-                disabled={currentSetlistIndex >= setlistSongs.length - 1}
-                style={[styles.setlistNavBtn, { opacity: currentSetlistIndex >= setlistSongs.length - 1 ? 0.4 : 1 }]}
-              >
-                <Text style={[styles.setlistNavText, { color: colors.primary }]}>Next</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+      {/* Add New Song Modal */}
+      <Modal visible={isAddSongModalOpen} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.addSongModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.addModalHeader}>
+              <Text style={[styles.addModalTitle, { color: colors.text }]}>Add New Song</Text>
+              <TouchableOpacity onPress={() => setIsAddSongModalOpen(false)}>
+                <Ionicons name="close" size={24} color={colors.subText} />
               </TouchableOpacity>
             </View>
-          )}
-        </SafeAreaView>
+
+            <TextInput
+              style={[styles.addInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+              placeholder="Song Title *"
+              placeholderTextColor={colors.subText}
+              value={newTitle}
+              onChangeText={setNewTitle}
+            />
+
+            <TextInput
+              style={[styles.addInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+              placeholder="Artist / Author"
+              placeholderTextColor={colors.subText}
+              value={newArtist}
+              onChangeText={setNewArtist}
+            />
+
+            {/* Key Selector */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.subText, marginRight: 8 }}>
+                Key:
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {SHARP_KEYS.map((k) => (
+                  <TouchableOpacity
+                    key={k}
+                    style={[
+                      styles.keyChoice,
+                      {
+                        backgroundColor: newKey === k ? colors.primary : colors.inputBg,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => setNewKey(k)}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: newKey === k ? '#fff' : colors.text }}>
+                      {k}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* ChordPro Content */}
+            <TextInput
+              style={[styles.addTextArea, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+              placeholder="[G]Write chords inside brackets..."
+              placeholderTextColor={colors.subText}
+              value={newContent}
+              onChangeText={setNewContent}
+              multiline
+              numberOfLines={6}
+            />
+
+            <TouchableOpacity
+              style={[styles.saveSongBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSaveNewSong}
+              disabled={savingSong}
+            >
+              {savingSong ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveSongBtnText}>Save Song to {activeTab === 'team' ? 'Team' : 'My Songs'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  header: { padding: 14, borderBottomWidth: 1 },
-  iconBadge: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 16, fontWeight: '800' },
-  subText: { fontSize: 11, fontWeight: '500' },
-  refreshBtn: { padding: 8 },
-  segmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    padding: 3,
-    marginTop: 10,
-    marginBottom: 8,
+  container: {
+    flex: 1,
   },
-  segmentBtn: { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' },
-  segmentText: { fontSize: 11, fontWeight: '700' },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  subTitle: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  addBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 10,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  tabBtnActive: {
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  tabBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,11 +920,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
-    gap: 6,
     marginBottom: 8,
   },
-  searchInput: { flex: 1, fontSize: 12, paddingVertical: 0 },
-  keyRow: { flexDirection: 'row', marginBottom: 2 },
+  searchInput: {
+    flex: 1,
+    fontSize: 12,
+    marginLeft: 6,
+    padding: 0,
+  },
+  keyRow: {
+    flexDirection: 'row',
+    paddingBottom: 2,
+  },
   keyPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -630,61 +939,183 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginRight: 6,
   },
-  keyPillText: { fontSize: 10, fontWeight: '700' },
-  listContent: { padding: 12, gap: 8 },
+  keyPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  listContent: {
+    padding: 12,
+    paddingBottom: 40,
+  },
   songCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 12,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
   },
-  songTitle: { fontSize: 13, fontWeight: '700' },
-  songArtist: { fontSize: 11, marginTop: 2 },
-  keyBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  keyBadgeText: { fontSize: 11, fontWeight: '800' },
+  songTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  songArtist: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  keyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  keyBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
   setlistCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 14,
     borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+  },
+  setlistName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  setlistSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  onlineSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  onlineInput: {
+    flex: 1,
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
   },
-  setlistName: { fontSize: 13, fontWeight: '700' },
-  setlistSub: { fontSize: 11, marginTop: 2 },
-  emptyState: { alignItems: 'center', marginTop: 40 },
-  emptyText: { fontSize: 13, fontWeight: '600', marginTop: 8 },
-  loadingText: { fontSize: 12, marginTop: 8 },
-
-  // Reader Modal Styles
-  readerContainer: { flex: 1 },
+  onlineSearchBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+  },
+  importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  importBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  readerContainer: {
+    flex: 1,
+  },
   readerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  readerTitle: { fontSize: 16, fontWeight: '800' },
-  readerArtist: { fontSize: 11, marginTop: 1 },
-  closeBtn: { padding: 2 },
+  readerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  readerArtist: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  navBtn: {
+    padding: 4,
+  },
+  closeBtn: {
+    padding: 2,
+  },
   readerToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  transposeWidget: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tBtn: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  tBtnText: { fontSize: 10, fontWeight: '700' },
-  tPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  tPillText: { fontSize: 10, fontWeight: '800' },
-  iconBtnSmall: { width: 24, height: 24, borderRadius: 6, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  transposeWidget: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  tPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  iconBtnSmall: {
+    padding: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
   autoScrollBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -693,32 +1124,127 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 8,
   },
-  autoScrollBtnText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  sheetScroll: { flex: 1 },
-  sheetContent: { padding: 16, paddingBottom: 60 },
+  autoScrollBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  actionChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sheetScroll: {
+    flex: 1,
+  },
+  sheetContent: {
+    padding: 16,
+    paddingBottom: 80,
+  },
   sectionBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(197, 156, 108, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     marginTop: 14,
     marginBottom: 6,
   },
-  sectionBadgeText: { fontSize: 10, fontWeight: '800', color: '#b45309', letterSpacing: 0.5 },
-  chordLineContainer: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', marginVertical: 2 },
-  chordWordBox: { marginRight: 4 },
-  chordText: { fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', lineHeight: 14 },
-  lyricText: { fontWeight: '500', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  plainLyric: { marginVertical: 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  setlistBottomBar: {
+  sectionBadgeText: {
+    color: '#d97706',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  chordLineContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 2,
+  },
+  chordPair: {
+    marginRight: 4,
+  },
+  chordText: {
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: -2,
+  },
+  lyricText: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  plainLyric: {
+    marginVertical: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  addSongModal: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  addModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderTopWidth: 1,
+    marginBottom: 12,
   },
-  setlistNavBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
-  setlistNavText: { fontSize: 12, fontWeight: '700' },
+  addModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  addInput: {
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  keyChoice: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 4,
+  },
+  addTextArea: {
+    fontSize: 11,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginVertical: 8,
+    textAlignVertical: 'top',
+  },
+  saveSongBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  saveSongBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
 });

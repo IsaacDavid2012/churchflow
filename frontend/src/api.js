@@ -17,7 +17,7 @@ async function request(endpoint, options = {}) {
     headers,
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && endpoint !== '/auth/login') {
     localStorage.removeItem('servesync_token');
     localStorage.removeItem('servesync_user');
     window.dispatchEvent(new Event('auth-logout'));
@@ -228,19 +228,15 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Standalone SongBook Pro Integration
+  // Standalone SongBook Pro Integration (User-Scoped & Online Engine)
   getSongbookStatus: () => request('/songbook/status'),
+  getSongbookMe: () => request('/songbook/me'),
   getSongbookStats: () => request('/songbook/stats'),
   getSongbookSongs: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/songbook/songs${query ? `?${query}` : ''}`);
   },
   getSongbookSong: (id) => request(`/songbook/songs/${id}`),
-  getSongbookSetlists: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/songbook/setlists${query ? `?${query}` : ''}`);
-  },
-  getSongbookSetlist: (id) => request(`/songbook/setlists/${id}`),
   createSongbookSong: (data) =>
     request('/songbook/songs', {
       method: 'POST',
@@ -254,6 +250,73 @@ export const api = {
   deleteSongbookSong: (id) =>
     request(`/songbook/songs/${id}`, {
       method: 'DELETE',
+    }),
+  copySongbookSong: (id, data = {}) =>
+    request(`/songbook/songs/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getSongbookSetlists: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/songbook/setlists${query ? `?${query}` : ''}`);
+  },
+  getSongbookSetlist: (id) => request(`/songbook/setlists/${id}`),
+  createSongbookSetlist: (data) =>
+    request('/songbook/setlists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteSongbookSetlist: (id) =>
+    request(`/songbook/setlists/${id}`, {
+      method: 'DELETE',
+    }),
+  parseSongbookBackup: (data) =>
+    request('/songbook/backup/parse', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  previewSongbookBackup: (data) =>
+    request('/songbook/backup/preview', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  importSongbookBackup: (data) =>
+    request('/songbook/backup/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  exportSongbookBackup: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const token = localStorage.getItem('servesync_token');
+    const url = `/api/songbook/backup/export${query ? `?${query}` : ''}`;
+    // Directly trigger browser download
+    return fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `SongBook_${Date.now()}.sbp`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      });
+  },
+  searchSongbookOnline: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/songbook/online/search${query ? `?${query}` : ''}`);
+  },
+  fetchSongbookOnline: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/songbook/online/fetch${query ? `?${query}` : ''}`);
+  },
+  importSongbookOnline: (data) =>
+    request('/songbook/online/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
   // Church Ministries

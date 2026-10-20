@@ -15,8 +15,15 @@ import NotificationsFeed from './components/NotificationsFeed';
 import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('servesync_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [loadingAuth, setLoadingAuth] = useState(() => !localStorage.getItem('servesync_token'));
   const [currentTab, setCurrentTab] = useState('services'); // 'services', 'people', 'users', 'groups', 'positions', 'church', 'notifications'
   
   // Services data
@@ -33,27 +40,39 @@ export default function App() {
 
   useEffect(() => {
     checkAuth();
-    const handleLogoutEvent = () => setUser(null);
+    const handleLogoutEvent = () => {
+      localStorage.removeItem('servesync_token');
+      localStorage.removeItem('servesync_user');
+      setUser(null);
+    };
     window.addEventListener('auth-logout', handleLogoutEvent);
     return () => window.removeEventListener('auth-logout', handleLogoutEvent);
   }, []);
 
   async function checkAuth() {
-    setLoadingAuth(true);
     const storedToken = localStorage.getItem('servesync_token');
     if (!storedToken) {
+      setUser(null);
       setLoadingAuth(false);
       return;
     }
 
     try {
       const res = await api.getMe();
-      setUser(res.user);
+      if (res && res.user) {
+        setUser(res.user);
+        localStorage.setItem('servesync_user', JSON.stringify(res.user));
+      }
       loadServices();
     } catch (err) {
-      localStorage.removeItem('servesync_token');
-      localStorage.removeItem('servesync_user');
-      setUser(null);
+      console.warn('Auth check warning:', err.message);
+      if (err.message && (err.message.includes('401') || err.message.includes('Unauthorized') || err.message.includes('Invalid credentials'))) {
+        localStorage.removeItem('servesync_token');
+        localStorage.removeItem('servesync_user');
+        setUser(null);
+      } else {
+        loadServices();
+      }
     } finally {
       setLoadingAuth(false);
     }

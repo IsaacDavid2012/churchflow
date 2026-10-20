@@ -36,14 +36,25 @@ export default function App() {
 
   useEffect(() => {
     api.setOnUnauthorized(() => {
-      setUser(null);
-      setSelectedService(null);
+      handleLogout();
     });
 
     const initApp = async () => {
       try {
-        // Clear any legacy phone storage so everything comes 100% live from server
-        await api.init();
+        const savedUser = await api.init();
+        if (savedUser) {
+          setUser(savedUser);
+          // Verify session in background without blocking initial render
+          api.getMe().then((res) => {
+            if (res && res.user) {
+              setUser(res.user);
+            }
+          }).catch((err) => {
+            if (err && err.message && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
+              handleLogout();
+            }
+          });
+        }
       } catch (err) {
         console.error('App init error:', err);
       } finally {

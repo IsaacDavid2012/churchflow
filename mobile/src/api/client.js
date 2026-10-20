@@ -29,25 +29,59 @@ class ApiClient {
 
   async init() {
     try {
-      // Wipe any legacy phone storage data so the app never uses phone storage
-      await AsyncStorage.clear();
+      const [token, refreshToken, userStr] = await Promise.all([
+        AsyncStorage.getItem('@churchflow_token'),
+        AsyncStorage.getItem('@churchflow_refresh_token'),
+        AsyncStorage.getItem('@churchflow_user'),
+      ]);
+      this.token = token || null;
+      this.refreshToken = refreshToken || null;
+      if (userStr) {
+        try {
+          return JSON.parse(userStr);
+        } catch (e) {
+          return null;
+        }
+      }
+      return null;
     } catch (e) {
-      // Ignore storage clear errors
+      this.token = null;
+      this.refreshToken = null;
+      return null;
     }
-    this.token = null;
-    this.refreshToken = null;
   }
 
-  async setTokens(token, refreshToken) {
+  async setTokens(token, refreshToken, user = null) {
     this.token = token || null;
     this.refreshToken = refreshToken || null;
+    try {
+      if (token) {
+        await AsyncStorage.setItem('@churchflow_token', token);
+      } else {
+        await AsyncStorage.removeItem('@churchflow_token');
+      }
+      if (refreshToken) {
+        await AsyncStorage.setItem('@churchflow_refresh_token', refreshToken);
+      } else {
+        await AsyncStorage.removeItem('@churchflow_refresh_token');
+      }
+      if (user) {
+        await AsyncStorage.setItem('@churchflow_user', JSON.stringify(user));
+      }
+    } catch (e) {
+      console.warn('AsyncStorage setTokens error:', e);
+    }
   }
 
   async clearTokens() {
     this.token = null;
     this.refreshToken = null;
     try {
-      await AsyncStorage.clear();
+      await AsyncStorage.multiRemove([
+        '@churchflow_token',
+        '@churchflow_refresh_token',
+        '@churchflow_user',
+      ]);
     } catch (e) {}
   }
 
@@ -138,7 +172,7 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    await this.setTokens(data.token, data.refreshToken);
+    await this.setTokens(data.token, data.refreshToken, data.user);
     return data;
   }
 
@@ -282,9 +316,13 @@ class ApiClient {
     });
   }
 
-  // --- Standalone SongBook Pro Integration ---
+  // --- Standalone SongBook Pro Integration (User-Scoped & Online Engine) ---
   async getSongbookStatus() {
     return this.request('/songbook/status');
+  }
+
+  async getSongbookMe() {
+    return this.request('/songbook/me');
   }
 
   async getSongbookStats() {
@@ -299,12 +337,88 @@ class ApiClient {
     return this.request(`/songbook/songs/${id}`);
   }
 
+  async createSongbookSong(data) {
+    return this.request('/songbook/songs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSongbookSong(id, data) {
+    return this.request(`/songbook/songs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSongbookSong(id) {
+    return this.request(`/songbook/songs/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async copySongbookSong(id, data = {}) {
+    return this.request(`/songbook/songs/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getSongbookSetlists(params = {}) {
     return this.request(`/songbook/setlists${buildQueryString(params)}`);
   }
 
   async getSongbookSetlist(id) {
     return this.request(`/songbook/setlists/${id}`);
+  }
+
+  async createSongbookSetlist(data) {
+    return this.request('/songbook/setlists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSongbookSetlist(id) {
+    return this.request(`/songbook/setlists/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async parseSongbookBackup(data) {
+    return this.request('/songbook/backup/parse', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async previewSongbookBackup(data) {
+    return this.request('/songbook/backup/preview', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async importSongbookBackup(data) {
+    return this.request('/songbook/backup/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async searchSongbookOnline(params = {}) {
+    return this.request(`/songbook/online/search${buildQueryString(params)}`);
+  }
+
+  async fetchSongbookOnline(params = {}) {
+    return this.request(`/songbook/online/fetch${buildQueryString(params)}`);
+  }
+
+  async importSongbookOnline(data) {
+    return this.request('/songbook/online/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   // --- Service Plan (Run Sheet) ---
