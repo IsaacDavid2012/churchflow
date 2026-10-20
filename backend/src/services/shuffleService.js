@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const whatsappService = require('./whatsappService');
 
 /**
  * Checks if a musician's tagged roles match a given position name.
@@ -629,6 +630,21 @@ async function handleMusicianDeclined(dbClient, serviceId, musicianId) {
           `INSERT INTO notifications_log (service_id, type, message, metadata) VALUES ($1, 'promotion', $2, $3)`,
           [serviceId, msg, JSON.stringify({ position: positionName, declined: musician.name, promoted: promotedMusician.name, newBackup: newBackup ? newBackup.name : null })]
         );
+
+        // Automated WhatsApp notification to the promoted backup
+        try {
+          const pInfo = await dbClient.query('SELECT id, name, phone FROM musicians WHERE id = $1', [promotedMusician.id]);
+          if (pInfo.rows.length > 0 && pInfo.rows[0].phone) {
+            whatsappService.sendEmergencyPromotionAlert({
+              musician: pInfo.rows[0],
+              service,
+              positionName,
+              declinedByName: musician.name,
+            }).catch((err) => console.error('[WhatsApp Promotion Alert Error]:', err));
+          }
+        } catch (waErr) {
+          console.error('[WhatsApp Promotion Alert Error]:', waErr.message);
+        }
       } else {
         // No backup existed: Automatically put in the next fairest candidate into Primary!
         if (candidateList.length > 0) {
@@ -650,6 +666,20 @@ async function handleMusicianDeclined(dbClient, serviceId, musicianId) {
             `INSERT INTO notifications_log (service_id, type, message, metadata) VALUES ($1, 'reshuffle', $2, $3)`,
             [serviceId, msg, JSON.stringify({ position: positionName, declined: musician.name, newPrimary: newPrimary.name })]
           );
+
+          // Automated WhatsApp notification to newly scheduled primary
+          try {
+            if (newPrimary && newPrimary.phone) {
+              whatsappService.sendEmergencyPromotionAlert({
+                musician: newPrimary,
+                service,
+                positionName,
+                declinedByName: musician.name,
+              }).catch((err) => console.error('[WhatsApp Primary Alert Error]:', err));
+            }
+          } catch (waErr) {
+            console.error('[WhatsApp Primary Alert Error]:', waErr.message);
+          }
         } else {
           // No one else available for this role
           await dbClient.query(
@@ -663,6 +693,37 @@ async function handleMusicianDeclined(dbClient, serviceId, musicianId) {
             `INSERT INTO notifications_log (service_id, type, message, metadata) VALUES ($1, 'reshuffle', $2, $3)`,
             [serviceId, msg, JSON.stringify({ position: positionName, declined: musician.name, vacant: true })]
           );
+
+          // Alert Worship Leader or Pastor of unfilled/vacant slot via WhatsApp
+          try {
+            let leaderPhone = null;
+            let leaderName = null;
+            if (service.worship_leader_id) {
+              const wlRes = await dbClient.query('SELECT name, phone FROM musicians WHERE id = $1', [service.worship_leader_id]);
+              if (wlRes.rows.length > 0) {
+                leaderName = wlRes.rows[0].name;
+                leaderPhone = wlRes.rows[0].phone;
+              }
+            }
+            if (!leaderPhone) {
+              const cpRes = await dbClient.query('SELECT lead_pastor, phone FROM church_profile LIMIT 1');
+              if (cpRes.rows.length > 0) {
+                leaderName = cpRes.rows[0].lead_pastor;
+                leaderPhone = cpRes.rows[0].phone;
+              }
+            }
+            if (leaderPhone) {
+              whatsappService.sendLeaderUnfilledSlotAlert({
+                leaderPhone,
+                leaderName,
+                service,
+                positionName,
+                declinedByName: musician.name,
+              }).catch((err) => console.error('[WhatsApp Leader Unfilled Alert Error]:', err));
+            }
+          } catch (waErr) {
+            console.error('[WhatsApp Leader Unfilled Alert Error]:', waErr.message);
+          }
         }
       }
     } else if (currentAssign.role_slot === 'backup') {

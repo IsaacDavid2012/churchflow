@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../config/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../../../shared/roles');
+const whatsappService = require('../services/whatsappService');
 const {
   autoShuffleService,
   manualOverrideSlot,
@@ -746,6 +747,142 @@ router.get('/:id/candidates/:positionId', async (req, res) => {
   } catch (err) {
     console.error('Candidate fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch candidate list' });
+  }
+});
+
+// GET /api/services/whatsapp/status - Check if WhatsApp automated gateway is connected
+router.get('/whatsapp/status', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
+  try {
+    const ready = await whatsappService.isReady();
+    res.json({ ready, gateway: ready ? 'connected' : 'disconnected' });
+  } catch (err) {
+    res.status(500).json({ ready: false, error: err.message });
+  }
+});
+
+// POST /api/services/:id/whatsapp-notify-all - Send direct RSVP links to all scheduled primary volunteers
+router.post('/:id/whatsapp-notify-all', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const sRes = await db.query('SELECT * FROM services WHERE id = $1', [id]);
+    if (sRes.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const service = sRes.rows[0];
+
+    const assignRes = await db.query(
+      `
+      SELECT a.id, a.position_id, a.musician_id, a.role_slot, a.status,
+             m.name AS musician_name, m.phone AS musician_phone,
+             p.name AS position_name
+      FROM assignments a
+      JOIN musicians m ON m.id = a.musician_id
+      JOIN positions_template p ON p.id = a.position_id
+      WHERE a.service_id = $1 AND a.role_slot = 'primary' AND a.musician_id IS NOT NULL AND a.status != 'declined'
+    `,
+      [id]
+    );
+
+    const results = [];
+    for (const row of assignRes.rows) {
+      if (!row.musician_phone) {
+        results.push({ musician: row.musician_name, status: 'skipped', reason: 'No phone on record' });
+        continue;
+      }
+
+      const sendRes = await whatsappService.sendVolunteerRsvpInvite({
+        musician: { id: row.musician_id, name: row.musician_name, phone: row.musician_phone },
+        service,
+        positionName: row.position_name,
+      });
+
+      results.push({
+        musician: row.musician_name,
+        phone: row.musician_phone,
+        status: sendRes.success ? 'sent' : 'failed',
+        error: sendRes.error || null,
+      });
+
+      // Human-like delay between sends to respect rate limits
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    res.json({
+      success: true,
+      service_id: id,
+      total: assignRes.rows.length,
+      dispatched: results.filter((r) => r.status === 'sent').length,
+      details: results,
+    });
+  } catch (err) {
+    console.error('WhatsApp notify all error:', err);
+    res.status(500).json({ error: 'Failed to dispatch WhatsApp invites' });
+  }
+});
+
+// POST /api/services/:id/whatsapp-broadcast - Broadcast full run-sheet and lineup to WhatsApp Group
+router.post('/:id/whatsapp-broadcast', requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER, ROLES.LEADER]), async (req, res) => {
+  const { id } = req.params;
+  const { group_id } = req.body;
+
+  if (!group_id) {
+    return res.status(400).json({ error: 'group_id is required' });
+  }
+
+  try {
+    const sRes = await db.query(
+      `SELECT s.*, c.name as campus_name FROM services s LEFT JOIN campuses c ON c.id = s.campus_id WHERE s.id = $1`,
+      [id]
+    );
+    if (sRes.rows.length === 0) return res.status(404).json({ error: 'Service not found' });
+    const service = sRes.rows[0];
+
+    // Fetch lineup
+    const assignRes = await db.query(
+      `
+      SELECT a.id, a.position_id, a.role_slot, a.status,
+             m.name AS musician_name,
+             p.name AS position_name, p.sort_order
+      FROM assignments a
+      JOIN positions_template p ON p.id = a.position_id
+      LEFT JOIN musicians m ON m.id = a.musician_id
+      WHERE a.service_id = $1 AND a.role_slot = 'primary'
+      ORDER BY p.sort_order ASC, p.name ASC
+    `,
+      [id]
+    );
+
+    const lineup = assignRes.rows.map((r) => ({
+      positionName: r.position_name,
+      primary: r.musician_name ? { name: r.musician_name, status: r.status } : null,
+    }));
+
+    // Fetch plan items
+    const planRes = await db.query(
+      `
+      SELECT spi.*, sng.title AS song_title, sng.default_key AS song_key
+      FROM service_plan_items spi
+      LEFT JOIN songs sng ON sng.id = spi.song_id
+      WHERE spi.service_id = $1
+      ORDER BY spi.item_order ASC
+    `,
+      [id]
+    );
+
+    const broadcastRes = await whatsappService.broadcastServiceRunSheet({
+      groupId: group_id,
+      service,
+      lineup,
+      planItems: planRes.rows,
+    });
+
+    if (!broadcastRes.success) {
+      return res.status(500).json({ error: broadcastRes.error || 'Failed to broadcast to WhatsApp group' });
+    }
+
+    res.json({ success: true, message: 'Service run-sheet successfully broadcasted to WhatsApp group!' });
+  } catch (err) {
+    console.error('WhatsApp broadcast error:', err);
+    res.status(500).json({ error: 'Failed to broadcast run-sheet' });
   }
 });
 
