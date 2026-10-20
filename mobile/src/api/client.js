@@ -527,15 +527,22 @@ class ApiClient {
     return this.request(`/public/avail/${token}`);
   }
 
-  async submitPublicAvailability(token, musicianId, status) {
-    return this.request(`/public/avail/${token}`, {
+  async verifyPublicPin(token, musicianId, pin) {
+    return this.request(`/public/avail/${token}/verify-pin`, {
       method: 'POST',
-      body: JSON.stringify({ musician_id: musicianId, status }),
+      body: JSON.stringify({ musician_id: musicianId, pin }),
     });
   }
 
-  async submitPublicResponse(token, musicianId, status) {
-    return this.submitPublicAvailability(token, musicianId, status);
+  async submitPublicAvailability(token, musicianId, status, claimToken = null, pin = null) {
+    return this.request(`/public/avail/${token}`, {
+      method: 'POST',
+      body: JSON.stringify({ musician_id: musicianId, status, claim_token: claimToken, pin }),
+    });
+  }
+
+  async submitPublicResponse(token, musicianId, status, claimToken = null, pin = null) {
+    return this.submitPublicAvailability(token, musicianId, status, claimToken, pin);
   }
 }
 

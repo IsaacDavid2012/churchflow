@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const db = require('../config/db');
+const { JWT_SECRET } = require('../middleware/auth');
 const { handleMusicianDeclined } = require('../services/shuffleService');
 
 // GET /api/public/avail/:token - Musician view data
@@ -39,6 +41,12 @@ router.get('/avail/:token', async (req, res) => {
     const service = serviceRes.rows[0];
     const activePositionIds = Array.isArray(service.position_ids) && service.position_ids.length > 0 ? service.position_ids : null;
 
+    // Check expiration (past service date or finalized)
+    const today = new Date().toISOString().split('T')[0];
+    const isPast = Boolean(service.service_date && service.service_date < today);
+    const isCompleted = ['completed', 'cancelled', 'archived'].includes(service.status);
+    const isExpired = isPast || isCompleted;
+
     // 2. Fetch current drafted assignments for this service
     const assignRes = await db.query(
       `
@@ -51,6 +59,7 @@ router.get('/avail/:token', async (req, res) => {
         a.role_slot,
         a.musician_id,
         m.name AS musician_name,
+        (m.phone IS NOT NULL AND TRIM(m.phone) != '' AND LENGTH(REGEXP_REPLACE(m.phone, '\\D', '', 'g')) >= 4) AS has_phone,
         a.status,
         a.notes
       FROM positions_template p
@@ -69,6 +78,7 @@ router.get('/avail/:token', async (req, res) => {
         m.id,
         m.name,
         m.roles,
+        (m.phone IS NOT NULL AND TRIM(m.phone) != '' AND LENGTH(REGEXP_REPLACE(m.phone, '\\D', '', 'g')) >= 4) AS has_phone,
         COALESCE(av.status, 'no_response') AS current_status,
         av.responded_at
       FROM musicians m
@@ -92,6 +102,7 @@ router.get('/avail/:token', async (req, res) => {
 
     res.json({
       service,
+      is_expired: isExpired,
       assignments: assignRes.rows,
       musicians: musiciansRes.rows,
       church,
@@ -102,10 +113,82 @@ router.get('/avail/:token', async (req, res) => {
   }
 });
 
-// POST /api/public/avail/:token - Musician marks availability
+// POST /api/public/avail/:token/verify-pin - Verify 4-digit phone PIN and issue claim token
+router.post('/avail/:token/verify-pin', async (req, res) => {
+  const { token } = req.params;
+  const { musician_id, pin } = req.body;
+
+  if (!musician_id) {
+    return res.status(400).json({ error: 'musician_id is required' });
+  }
+
+  try {
+    const serviceRes = await db.query('SELECT id, service_date, status FROM services WHERE token = $1', [token]);
+    if (serviceRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired service link' });
+    }
+    const service = serviceRes.rows[0];
+
+    const today = new Date().toISOString().split('T')[0];
+    if (service.service_date && service.service_date < today) {
+      return res.status(400).json({ error: 'This service date has passed. Attendance can no longer be updated.' });
+    }
+
+    const musicianRes = await db.query('SELECT id, name, phone, active FROM musicians WHERE id = $1 AND active = true', [musician_id]);
+    if (musicianRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Team member not found or inactive' });
+    }
+    const musician = musicianRes.rows[0];
+
+    const rawPhone = (musician.phone || '').trim();
+    const phoneDigits = rawPhone.replace(/\D/g, '');
+
+    // Requirement: "Message showing you are not registered pls contact admin"
+    if (!rawPhone || phoneDigits.length < 4) {
+      return res.status(400).json({
+        error: 'You are not registered with a mobile number. Please contact your church administrator to register your phone.',
+        not_registered: true,
+      });
+    }
+
+    if (!pin || pin.toString().trim().length < 4) {
+      return res.status(400).json({ error: 'Please enter the 4-digit PIN (last 4 digits of your phone).' });
+    }
+
+    const inputDigits = pin.toString().replace(/\D/g, '');
+    const expectedLast4 = phoneDigits.slice(-4);
+
+    if (inputDigits !== expectedLast4 && inputDigits.slice(-4) !== expectedLast4) {
+      return res.status(400).json({ error: 'Incorrect PIN. Please enter the last 4 digits of your registered phone number.' });
+    }
+
+    // Success! Generate a signed claim token
+    const claimToken = jwt.sign(
+      {
+        service_id: service.id,
+        musician_id: musician.id,
+        type: 'avail_claim',
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      musician_id: musician.id,
+      musician_name: musician.name,
+      claim_token: claimToken,
+    });
+  } catch (err) {
+    console.error('Verify PIN error:', err);
+    res.status(500).json({ error: 'Failed to verify PIN' });
+  }
+});
+
+// POST /api/public/avail/:token - Musician marks availability (requires claim token or valid PIN)
 router.post('/avail/:token', async (req, res) => {
   const { token } = req.params;
-  const { musician_id, status } = req.body;
+  const { musician_id, status, claim_token, pin } = req.body;
 
   if (!musician_id || !status) {
     return res.status(400).json({ error: 'musician_id and status (available/declined) are required' });
@@ -117,20 +200,59 @@ router.post('/avail/:token', async (req, res) => {
 
   try {
     // 1. Validate service token
-    const serviceRes = await db.query('SELECT id, service_date FROM services WHERE token = $1', [token]);
+    const serviceRes = await db.query('SELECT id, service_date, status FROM services WHERE token = $1', [token]);
     if (serviceRes.rows.length === 0) {
       return res.status(404).json({ error: 'Invalid or expired service link' });
     }
     const service = serviceRes.rows[0];
 
+    // Check expiration
+    const today = new Date().toISOString().split('T')[0];
+    if (service.service_date && service.service_date < today) {
+      return res.status(400).json({ error: 'This service date has passed. Attendance can no longer be updated.' });
+    }
+
     // 2. Check musician exists and is active
-    const musicianRes = await db.query('SELECT id, name FROM musicians WHERE id = $1 AND active = true', [musician_id]);
+    const musicianRes = await db.query('SELECT id, name, phone FROM musicians WHERE id = $1 AND active = true', [musician_id]);
     if (musicianRes.rows.length === 0) {
       return res.status(404).json({ error: 'Musician not found or inactive' });
     }
     const musician = musicianRes.rows[0];
 
-    // 3. Row-level upsert in availability table (Safe against concurrent requests!)
+    // 3. Security Verification: Validate Claim Token or PIN
+    let verified = false;
+
+    if (claim_token) {
+      try {
+        const decoded = jwt.verify(claim_token, JWT_SECRET);
+        if (decoded.service_id === service.id && decoded.musician_id === musician_id) {
+          verified = true;
+        }
+      } catch (e) {
+        // Token expired or invalid
+      }
+    }
+
+    if (!verified && pin) {
+      const rawPhone = (musician.phone || '').trim();
+      const phoneDigits = rawPhone.replace(/\D/g, '');
+      if (phoneDigits.length >= 4) {
+        const inputDigits = pin.toString().replace(/\D/g, '');
+        const expectedLast4 = phoneDigits.slice(-4);
+        if (inputDigits === expectedLast4 || inputDigits.slice(-4) === expectedLast4) {
+          verified = true;
+        }
+      }
+    }
+
+    if (!verified) {
+      return res.status(401).json({
+        error: 'Identity verification required. Please verify your PIN before confirming attendance.',
+        requires_pin: true,
+      });
+    }
+
+    // 4. Row-level upsert in availability table (Safe against concurrent requests!)
     const upsertRes = await db.query(
       `
       INSERT INTO availability (musician_id, service_id, status, responded_at)
@@ -146,7 +268,7 @@ router.post('/avail/:token', async (req, res) => {
 
     let reShuffleResult = null;
 
-    // 4. If musician confirmed available, mark their active assignment(s) for this service as 'confirmed'
+    // 5. If musician confirmed available, mark their active assignment(s) for this service as 'confirmed'
     if (status === 'available') {
       const confirmRes = await db.query(
         `
@@ -178,7 +300,7 @@ router.post('/avail/:token', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Thank you, ${musician.name}! Your status has been recorded as: ${status}.`,
+      message: `Thank you, ${musician.name}! Your status has been recorded as: ${status === 'available' ? 'Serving' : 'Declined'}.`,
       availability: upsertRes.rows[0],
       reShuffle: reShuffleResult,
     });

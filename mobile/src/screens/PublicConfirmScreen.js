@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { api } from '../api/client';
 
@@ -14,6 +16,10 @@ export default function PublicConfirmScreen({ token, onDone }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMusician, setSelectedMusician] = useState(null);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pin, setPin] = useState('');
+  const [verifyingPin, setVerifyingPin] = useState(false);
+  const [claimToken, setClaimToken] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState(null);
 
@@ -21,9 +27,6 @@ export default function PublicConfirmScreen({ token, onDone }) {
     try {
       const res = await api.getPublicService(token);
       setData(res);
-      if (res.musicians && res.musicians.length === 1) {
-        setSelectedMusician(res.musicians[0]);
-      }
     } catch (err) {
       Alert.alert('Error', err.message || 'Invalid or expired service link');
     } finally {
@@ -35,17 +38,71 @@ export default function PublicConfirmScreen({ token, onDone }) {
     if (token) fetchServiceData();
   }, [token]);
 
+  const handleSelectMusician = (m) => {
+    if (claimToken && selectedMusician?.id === m.id) {
+      // Already verified for this person
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Identity',
+      `You selected ${m.name}. Once confirmed, this phone will be linked to ${m.name} for this service.\n\nIs this you?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, this is me',
+          onPress: () => {
+            setSelectedMusician(m);
+            if (m.has_phone === false) {
+              Alert.alert(
+                'Phone Not Registered',
+                'You are not registered with a mobile number. Please contact your church administrator or leader to register your phone.'
+              );
+            } else {
+              setPin('');
+              setPinModalVisible(true);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleVerifyPin = async () => {
+    if (!pin || pin.trim().length < 4) {
+      Alert.alert('Invalid PIN', 'Please enter the 4-digit PIN (last 4 digits of your phone).');
+      return;
+    }
+
+    setVerifyingPin(true);
+    try {
+      const res = await api.verifyPublicPin(token, selectedMusician.id, pin.trim());
+      setClaimToken(res.claim_token);
+      setPinModalVisible(false);
+      Alert.alert('Verified!', `Welcome, ${selectedMusician.name}. Please select your availability below.`);
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Incorrect PIN. Enter the last 4 digits of your phone.');
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
+
   const handleRespond = async (status) => {
     if (!selectedMusician) {
       Alert.alert('Select Your Name', 'Please select your name from the roster list first.');
       return;
     }
 
+    if (!claimToken) {
+      setPinModalVisible(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const res = await api.submitPublicAvailability(token, selectedMusician.id, status);
+      const res = await api.submitPublicAvailability(token, selectedMusician.id, status, claimToken);
       setSubmittedStatus(status);
-      Alert.alert('Response Recorded', res.message || `You have marked: ${status}`);
+      Alert.alert('Response Recorded', res.message || `You have marked: ${status === 'available' ? 'Serving' : 'Declined'}`);
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to submit response');
     } finally {
@@ -72,7 +129,7 @@ export default function PublicConfirmScreen({ token, onDone }) {
     );
   }
 
-  const { service, church, assignments = [] } = data;
+  const { service, church } = data;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -95,7 +152,7 @@ export default function PublicConfirmScreen({ token, onDone }) {
               {submittedStatus === 'available' ? 'Availability Confirmed!' : 'Declined'}
             </Text>
             <Text style={styles.submittedSub}>
-              Thank you for keeping our team schedule accurate.
+              Thank you {selectedMusician?.name} for keeping our team schedule accurate.
             </Text>
             <TouchableOpacity style={styles.btnSecondary} onPress={onDone}>
               <Text style={styles.btnSecondaryText}>Back to App</Text>
@@ -107,42 +164,101 @@ export default function PublicConfirmScreen({ token, onDone }) {
             <View style={styles.musicianList}>
               {data.musicians?.map((m) => {
                 const isSelected = selectedMusician?.id === m.id;
+                const isLockedOther = claimToken && selectedMusician && selectedMusician.id !== m.id;
+
                 return (
                   <TouchableOpacity
                     key={m.id}
-                    style={[styles.musicianItem, isSelected && styles.musicianItemSelected]}
-                    onPress={() => setSelectedMusician(m)}
+                    style={[
+                      styles.musicianItem,
+                      isSelected && styles.musicianItemSelected,
+                      isLockedOther && styles.musicianItemLocked,
+                    ]}
+                    onPress={() => handleSelectMusician(m)}
+                    disabled={isLockedOther}
                   >
-                    <Text style={[styles.musicianName, isSelected && styles.musicianNameSelected]}>
-                      {m.name}
-                    </Text>
+                    <View style={styles.musicianRow}>
+                      <Text style={[styles.musicianName, isSelected && styles.musicianNameSelected]}>
+                        {m.name} {isSelected && claimToken ? ' (YOU)' : ''}
+                      </Text>
+                      {isLockedOther && <Text style={styles.lockedBadge}>🔒 Locked</Text>}
+                    </View>
                     <Text style={styles.musicianRoles}>{m.roles?.join(', ')}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={[styles.stepTitle, { marginTop: 20 }]}>2. Confirm Your Availability</Text>
-            <View style={styles.btnRow}>
-              <TouchableOpacity
-                style={[styles.respondBtn, styles.btnAvailable, submitting && styles.btnDisabled]}
-                onPress={() => handleRespond('available')}
-                disabled={submitting}
-              >
-                <Text style={styles.respondBtnText}>✓ Available / Accept</Text>
-              </TouchableOpacity>
+            {claimToken && (
+              <View style={{ marginTop: 22 }}>
+                <Text style={styles.stepTitle}>2. Confirm Your Availability ({selectedMusician?.name})</Text>
+                <View style={styles.btnRow}>
+                  <TouchableOpacity
+                    style={[styles.respondBtn, styles.btnAvailable, submitting && styles.btnDisabled]}
+                    onPress={() => handleRespond('available')}
+                    disabled={submitting}
+                  >
+                    <Text style={styles.respondBtnText}>✓ Available / Serving</Text>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.respondBtn, styles.btnDecline, submitting && styles.btnDisabled]}
-                onPress={() => handleRespond('declined')}
-                disabled={submitting}
-              >
-                <Text style={styles.respondBtnText}>✕ Decline</Text>
-              </TouchableOpacity>
-            </View>
+                  <TouchableOpacity
+                    style={[styles.respondBtn, styles.btnDecline, submitting && styles.btnDisabled]}
+                    onPress={() => handleRespond('declined')}
+                    disabled={submitting}
+                  >
+                    <Text style={styles.respondBtnText}>✕ Can't Make It</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         )}
       </View>
+
+      {/* PIN Verification Modal */}
+      <Modal visible={pinModalVisible} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>🔒 Enter 4-Digit PIN</Text>
+            <Text style={styles.modalSub}>
+              Enter the last 4 digits of your mobile number to verify as {selectedMusician?.name}:
+            </Text>
+
+            <TextInput
+              style={styles.pinInput}
+              keyboardType="number-pad"
+              maxLength={4}
+              secureTextEntry
+              placeholder="••••"
+              value={pin}
+              onChangeText={setPin}
+              autoFocus
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalBtnCancel}
+                onPress={() => setPinModalVisible(false)}
+                disabled={verifyingPin}
+              >
+                <Text style={styles.modalBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalBtnSubmit}
+                onPress={handleVerifyPin}
+                disabled={verifyingPin}
+              >
+                {verifyingPin ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalBtnSubmitText}>Verify PIN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -216,6 +332,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eadbc4',
   },
+  musicianItemLocked: {
+    opacity: 0.5,
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  musicianRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  lockedBadge: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '700',
+  },
   musicianItemSelected: {
     borderColor: '#c59c6c',
     backgroundColor: '#f5ede1',
@@ -233,6 +364,79 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 12,
     marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#eadbc4',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  pinInput: {
+    width: 160,
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#c59c6c',
+    borderRadius: 12,
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    letterSpacing: 8,
+    backgroundColor: '#fbf8f3',
+    color: '#0f172a',
+    marginBottom: 20,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalBtnCancelText: {
+    color: '#475569',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  modalBtnSubmit: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#c59c6c',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalBtnSubmitText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
   btnRow: {
     flexDirection: 'row',

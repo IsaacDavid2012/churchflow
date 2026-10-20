@@ -14,7 +14,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root[data-theme="light"] {
       --bg: #ffffff;
@@ -41,37 +41,7 @@
       --text-secondary: #475569;
       --text-muted: #64748b;
       --shadow: 0 4px 20px -2px rgba(197, 156, 108, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-      --badge-bg: #fbf8f3;
-      --badge-text: #9e7343;
-    }
-
-    :root[data-theme="dark"] {
-      --bg: #090d16;
-      --card-bg: #131b2e;
-      --card-inner: #1c2640;
-      --border: #233052;
-      --border-strong: #334155;
-      --primary: #c59c6c;
-      --primary-hover: #b38856;
-      --primary-light: rgba(197, 156, 108, 0.15);
-      --primary-border: rgba(197, 156, 108, 0.35);
-      --success: #10b981;
-      --success-hover: #059669;
-      --success-light: rgba(16, 185, 129, 0.15);
-      --success-border: rgba(16, 185, 129, 0.35);
-      --danger: #ef4444;
-      --danger-hover: #dc2626;
-      --danger-light: rgba(239, 68, 68, 0.15);
-      --danger-border: rgba(239, 68, 68, 0.35);
-      --amber: #f59e0b;
-      --amber-light: rgba(245, 158, 11, 0.15);
-      --amber-border: rgba(245, 158, 11, 0.35);
-      --text: #f8fafc;
-      --text-secondary: #cbd5e1;
-      --text-muted: #94a3b8;
-      --shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
-      --badge-bg: #1e293b;
-      --badge-text: #94a3b8;
+      --modal-overlay: rgba(15, 23, 42, 0.65);
     }
 
     * {
@@ -90,7 +60,6 @@
       flex-direction: column;
       align-items: center;
       padding: 16px 14px 60px 14px;
-      transition: background-color 0.25s, color 0.25s;
     }
 
     .container {
@@ -101,7 +70,7 @@
       gap: 16px;
     }
 
-    /* Top Bar with Logo & Theme Switcher */
+    /* Top Bar */
     .top-bar {
       display: flex;
       align-items: center;
@@ -117,63 +86,40 @@
     }
 
     .logo-img {
-      height: 36px;
+      height: 38px;
       width: auto;
       object-fit: contain;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
     }
 
     .brand-text {
-      font-size: 17px;
-      font-weight: 800;
+      font-size: 18px;
+      font-weight: 900;
       color: var(--text);
       letter-spacing: -0.5px;
     }
 
     .brand-tag {
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.6px;
       background: var(--primary-light);
       color: var(--primary);
       border: 1px solid var(--primary-border);
-      padding: 2px 7px;
+      padding: 3px 8px;
       border-radius: 9999px;
       margin-left: 6px;
-    }
-
-    .theme-toggle-btn {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: var(--shadow);
-      font-size: 16px;
-      transition: all 0.2s;
-    }
-
-    .theme-toggle-btn:hover {
-      border-color: var(--primary);
-      transform: scale(1.05);
     }
 
     /* Service Banner Card */
     .header-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 20px;
+      border-radius: 22px;
       padding: 22px;
       box-shadow: var(--shadow);
       position: relative;
       overflow: hidden;
-      transition: all 0.25s;
     }
 
     .header-card::before {
@@ -187,7 +133,7 @@
     }
 
     .church-name {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 1.2px;
@@ -197,7 +143,7 @@
 
     .service-date {
       font-size: 24px;
-      font-weight: 800;
+      font-weight: 900;
       color: var(--text);
       letter-spacing: -0.5px;
       line-height: 1.2;
@@ -219,32 +165,43 @@
       border-radius: 10px;
       padding: 5px 12px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--text-secondary);
     }
 
-    .meta-pill.highlight {
-      background: var(--primary-light);
-      border-color: var(--primary-border);
-      color: var(--primary);
-      font-weight: 700;
-    }
-
-    /* Reshuffle alert notice */
-    .reshuffle-alert {
-      background: var(--amber-light);
-      border: 1px solid var(--amber-border);
-      color: var(--amber);
-      border-radius: 14px;
-      padding: 12px 16px;
-      font-size: 12px;
+    /* Device Lock Status Banner */
+    .lock-status-banner {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      animation: fadeIn 0.3s ease-in;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
     }
 
-    /* Section Instructions Header */
+    .lock-status-banner strong {
+      color: var(--primary);
+    }
+
+    .btn-switch-link {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      text-decoration: underline;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 4px 6px;
+    }
+
+    .btn-switch-link:hover {
+      color: var(--danger);
+    }
+
+    /* Section Header */
     .section-title {
       font-size: 13px;
       font-weight: 800;
@@ -254,37 +211,37 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-top: 4px;
-      margin-bottom: 2px;
+      margin-top: 6px;
     }
 
-    /* Lineup Cards Container */
+    /* Lineup Cards */
     .lineup-container {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
 
-    /* Individual Position Card */
     .position-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 16px;
+      border-radius: 20px;
+      padding: 16px 18px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
       transition: all 0.2s;
     }
 
-    .position-card:hover {
-      border-color: var(--border-strong);
+    .position-card.is-claimed-by-me {
+      border: 2px solid var(--primary);
+      background: #fffdfa;
+      box-shadow: 0 6px 24px -2px rgba(197, 156, 108, 0.25);
     }
 
-    .position-card.is-confirmed {
-      border-color: var(--success-border);
-      background: var(--card-bg);
+    .position-card.is-other-locked {
+      opacity: 0.75;
+      background: #fafaf9;
     }
 
     .position-card-header {
@@ -311,7 +268,7 @@
       align-items: center;
       justify-content: center;
       font-size: 20px;
-      shrink-0: 0;
+      flex-shrink: 0;
     }
 
     .position-titles {
@@ -319,8 +276,8 @@
     }
 
     .position-role-name {
-      font-size: 12px;
-      font-weight: 700;
+      font-size: 11px;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--primary);
@@ -334,11 +291,14 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .status-badge {
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       padding: 4px 10px;
       border-radius: 9999px;
       white-space: nowrap;
@@ -365,74 +325,287 @@
       border: 1px solid var(--amber-border);
     }
 
-    /* Action Buttons within Card */
+    .status-badge.vacant {
+      background: #f1f5f9;
+      color: #94a3b8;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Action Buttons in Card */
     .card-actions-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
       padding-top: 10px;
       border-top: 1px solid var(--border);
     }
 
-    .btn-confirm {
-      background: var(--success);
+    .btn-claim-me {
+      background: var(--primary);
       color: #ffffff;
       border: none;
       border-radius: 12px;
-      padding: 12px;
+      padding: 10px 18px;
       font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(197, 156, 108, 0.3);
+    }
+
+    .btn-claim-me:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-manage-me {
+      background: var(--card-bg);
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: 12px;
+      padding: 9px 16px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn-manage-me:hover {
+      background: var(--primary-light);
+    }
+
+    .locked-card-label {
+      font-size: 11px;
       font-weight: 700;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Modal Backdrop & Sheet */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--modal-overlay);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease-in-out;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 440px;
+      border-radius: 24px;
+      padding: 24px 22px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      text-align: center;
+      transform: translateY(16px);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.open .modal-card {
+      transform: translateY(0);
+    }
+
+    .modal-icon-bubble {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      background: var(--primary-light);
+      border: 1px solid var(--primary-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      margin: 0 auto 16px auto;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--text);
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .notice-box {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .alert-box-danger {
+      background: var(--danger-light);
+      border: 1px solid var(--danger-border);
+      color: var(--danger);
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: left;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+
+    /* PIN Input Field */
+    .pin-input-container {
+      margin-bottom: 18px;
+    }
+
+    .pin-input {
+      width: 180px;
+      height: 52px;
+      text-align: center;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 12px;
+      border: 2px solid var(--border-strong);
+      border-radius: 16px;
+      background: var(--card-inner);
+      color: var(--text);
+      outline: none;
+      transition: all 0.15s;
+    }
+
+    .pin-input:focus {
+      border-color: var(--primary);
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(197, 156, 108, 0.2);
+    }
+
+    .pin-error-text {
+      color: var(--danger);
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    /* Modal Buttons */
+    .modal-buttons-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-modal-cancel {
+      background: #f1f5f9;
+      color: var(--text-secondary);
+      border: none;
+      border-radius: 14px;
+      padding: 13px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-modal-cancel:hover {
+      background: #e2e8f0;
+    }
+
+    .btn-modal-primary {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 14px;
+      padding: 13px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 4px 12px rgba(197, 156, 108, 0.3);
+    }
+
+    .btn-modal-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Large Decision Buttons (Step 4) */
+    .decision-buttons-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .btn-decision-accept {
+      background: var(--success);
+      color: #ffffff;
+      border: none;
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 15px;
+      font-weight: 800;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.3);
       transition: all 0.15s;
-      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
     }
 
-    .btn-confirm:hover {
+    .btn-decision-accept:hover {
       background: var(--success-hover);
       transform: translateY(-1px);
     }
 
-    .btn-confirm:active {
-      transform: translateY(0);
-    }
-
-    .btn-decline {
+    .btn-decision-decline {
       background: var(--danger);
       color: #ffffff;
       border: none;
-      border-radius: 12px;
-      padding: 12px;
-      font-size: 13px;
-      font-weight: 700;
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 15px;
+      font-weight: 800;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
       transition: all 0.15s;
-      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
     }
 
-    .btn-decline:hover {
+    .btn-decision-decline:hover {
       background: var(--danger-hover);
       transform: translateY(-1px);
     }
 
-    .btn-decline:active {
-      transform: translateY(0);
-    }
-
-    .btn-disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-
-    /* Toast notification */
+    /* Toast */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -441,10 +614,10 @@
       padding: 14px 22px;
       border-radius: 16px;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       color: #fff;
       box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
-      z-index: 999;
+      z-index: 2000;
       opacity: 0;
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
@@ -468,7 +641,7 @@
       padding: 60px 20px;
       color: var(--text-muted);
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
     }
 
     .error-card {
@@ -476,13 +649,8 @@
       border: 1px solid var(--danger-border);
       color: var(--danger);
       padding: 24px;
-      border-radius: 18px;
+      border-radius: 20px;
       text-align: center;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
@@ -492,8 +660,15 @@
 
   <div class="container" id="app">
     <div class="loading-box">
-      <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
-      Loading ChurchFlow service schedule...
+      <div style="font-size: 28px; margin-bottom: 10px;">⏳</div>
+      Loading Sunday lineup...
+    </div>
+  </div>
+
+  <!-- Modal Container -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-card" id="modalCard">
+      <!-- Dynamic modal content injected by JS -->
     </div>
   </div>
 
@@ -502,37 +677,26 @@
     let serviceData = null;
     let assignmentsList = [];
     let churchData = null;
-    let activeSubmittingPosId = null;
-    let latestReshuffleMsg = null;
+    let activeClaimed = null; // { musician_id, musician_name, claim_token, status }
 
-    // Always use clean white light theme
-    function setTheme() {
-      document.documentElement.setAttribute('data-theme', 'light');
-      localStorage.setItem('churchflow_theme', 'light');
+    // Load device claim from localStorage
+    function getStoredClaim() {
+      try {
+        const raw = localStorage.getItem('cf_claimed_' + token);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
     }
 
-    setTheme('light');
+    function saveClaim(claimData) {
+      localStorage.setItem('cf_claimed_' + token, JSON.stringify(claimData));
+      activeClaimed = claimData;
+    }
 
-    const iconMap = {
-      'Worship Leader': '🎤',
-      'Guitar': '🎸',
-      'Second Guitar': '🎸',
-      'Bass': '🎸',
-      'Lead Keyboard': '🎹',
-      'Second Keyboard': '🎹',
-      'Keyboard': '🎹',
-      'Drums': '🥁',
-      'Backup Singer': '🎙️',
-      'Vocals': '🎙️',
-      'Sound (FOH)': '🎚️',
-      'Sound': '🎚️'
-    };
-
-    function getPositionIcon(name) {
-      for (const [key, icon] of Object.entries(iconMap)) {
-        if (name.toLowerCase().includes(key.toLowerCase())) return icon;
-      }
-      return '🎵';
+    function clearClaim() {
+      localStorage.removeItem('cf_claimed_' + token);
+      activeClaimed = null;
     }
 
     function showToast(message, type = 'success') {
@@ -555,6 +719,32 @@
       return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
 
+    const iconMap = {
+      'Worship Leader': '🎤',
+      'Guitar': '🎸',
+      'Second Guitar': '🎸',
+      'Bass': '🎸',
+      'Lead Keyboard': '🎹',
+      'Second Keyboard': '🎹',
+      'Keyboard': '🎹',
+      'Drums': '🥁',
+      'Backup Singer': '🎙️',
+      'Vocals': '🎙️',
+      'Sound (FOH)': '🎚️',
+      'Sound': '🎚️',
+      'Media': '🎥',
+      'Visuals': '🖥️',
+      'Camera': '📹',
+      'Usher': '🤝'
+    };
+
+    function getPositionIcon(name) {
+      for (const [key, icon] of Object.entries(iconMap)) {
+        if (name.toLowerCase().includes(key.toLowerCase())) return icon;
+      }
+      return '🎵';
+    }
+
     async function loadData() {
       try {
         const res = await fetch(`/api/public/avail/${token}`);
@@ -565,6 +755,7 @@
         serviceData = data.service;
         assignmentsList = data.assignments || [];
         churchData = data.church;
+        activeClaimed = getStoredClaim();
         render();
       } catch (err) {
         document.getElementById('app').innerHTML = `
@@ -576,14 +767,171 @@
       }
     }
 
-    async function handleConfirm(musicianId, musicianName, positionName, status) {
-      if (!musicianId) {
-        showToast('No volunteer assigned to this position yet.', 'error');
+    // Modal state controllers
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalCard = document.getElementById('modalCard');
+
+    function closeModal() {
+      modalOverlay.classList.remove('open');
+    }
+
+    // Step 2: "Is This You?" Confirmation Modal
+    function openConfirmModal(musicianId, musicianName, positionName, hasPhone) {
+      modalCard.innerHTML = `
+        <div class="modal-icon-bubble">👤</div>
+        <h2 class="modal-title">Confirm Your Identity</h2>
+        <p class="modal-subtitle">
+          You selected: <strong>${musicianName}</strong><br>
+          Assigned to: <strong>${positionName}</strong>
+        </p>
+        <div class="notice-box">
+          ⚠️ <strong>Device Lock Notice:</strong><br>
+          Clicking "Yes, this is me" will link this phone to <strong>${musicianName}</strong> for this Sunday's service. Other team positions will be locked on this device.
+        </div>
+        <div class="modal-buttons-row">
+          <button class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
+          <button class="btn-modal-primary" onclick="proceedToPinStep('${musicianId}', '${escapeHtml(musicianName)}', '${escapeHtml(positionName)}', ${hasPhone})">Yes, this is me</button>
+        </div>
+      `;
+      modalOverlay.classList.add('open');
+    }
+
+    // Step 3: PIN Input or Unregistered Alert
+    function proceedToPinStep(musicianId, musicianName, positionName, hasPhone) {
+      if (!hasPhone) {
+        modalCard.innerHTML = `
+          <div class="modal-icon-bubble" style="background:var(--danger-light); border-color:var(--danger-border); color:var(--danger);">⚠️</div>
+          <h2 class="modal-title" style="color:var(--danger);">Phone Not Registered</h2>
+          <div class="alert-box-danger">
+            You are not registered with a mobile number in our system. Please contact your church administrator or leader to register your phone.
+          </div>
+          <div class="modal-buttons-row">
+            <button class="btn-modal-cancel" style="grid-column: span 2;" onclick="closeModal()">Close</button>
+          </div>
+        `;
         return;
       }
 
-      activeSubmittingPosId = musicianId;
-      render();
+      modalCard.innerHTML = `
+        <div class="modal-icon-bubble">🔒</div>
+        <h2 class="modal-title">Enter 4-Digit PIN</h2>
+        <p class="modal-subtitle">
+          Please enter the <strong>last 4 digits of your mobile number</strong> to verify your identity as <strong>${musicianName}</strong>:
+        </p>
+        <div class="pin-input-container">
+          <input type="password" id="pinInput" class="pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autofocus />
+          <div id="pinError" class="pin-error-text" style="display:none;"></div>
+        </div>
+        <div class="modal-buttons-row">
+          <button class="btn-modal-cancel" onclick="closeModal()">Back</button>
+          <button class="btn-modal-primary" id="btnVerify" onclick="submitPinVerification('${musicianId}', '${escapeHtml(musicianName)}', '${escapeHtml(positionName)}')">Verify PIN</button>
+        </div>
+      `;
+
+      setTimeout(() => {
+        const inp = document.getElementById('pinInput');
+        if (inp) {
+          inp.focus();
+          inp.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') submitPinVerification(musicianId, musicianName, positionName);
+          });
+        }
+      }, 100);
+    }
+
+    async function submitPinVerification(musicianId, musicianName, positionName) {
+      const pinInput = document.getElementById('pinInput');
+      const pinError = document.getElementById('pinError');
+      const btnVerify = document.getElementById('btnVerify');
+      const pin = pinInput.value.trim();
+
+      if (pin.length < 4) {
+        pinError.textContent = 'Please enter all 4 digits.';
+        pinError.style.display = 'block';
+        return;
+      }
+
+      btnVerify.disabled = true;
+      btnVerify.textContent = 'Verifying...';
+      pinError.style.display = 'none';
+
+      try {
+        const res = await fetch(`/api/public/avail/${token}/verify-pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ musician_id: musicianId, pin: pin })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'PIN verification failed.');
+        }
+
+        // Store claim on device
+        saveClaim({
+          musician_id: musicianId,
+          musician_name: musicianName,
+          position_name: positionName,
+          claim_token: data.claim_token,
+        });
+
+        // Advance to Step 4: Decision Screen
+        openDecisionModal(musicianId, musicianName, positionName);
+      } catch (err) {
+        pinError.textContent = err.message;
+        pinError.style.display = 'block';
+        btnVerify.disabled = false;
+        btnVerify.textContent = 'Verify PIN';
+      }
+    }
+
+    // Step 4: Decision Screen (Accept or Decline)
+    function openDecisionModal(musicianId, musicianName, positionName) {
+      modalCard.innerHTML = `
+        <div class="modal-icon-bubble">⛪</div>
+        <h2 class="modal-title">Sunday Service Attendance</h2>
+        <p class="modal-subtitle" style="font-size: 14px;">
+          Hi <strong>${musicianName}</strong>, will you be serving on <strong>${positionName}</strong> this Sunday?
+        </p>
+        <div class="notice-box" style="text-align: center;">
+          📅 <strong>${formatDate(serviceData.service_date)}</strong> • ⏰ ${serviceData.service_time || '10:00 AM'}<br>
+          📍 ${serviceData.campus_name || 'Main Sanctuary'}
+        </div>
+        <div class="decision-buttons-stack">
+          <button class="btn-decision-accept" onclick="executeDecision('${musicianId}', '${escapeHtml(musicianName)}', 'available')">
+            ✅ YES, I'm Serving
+          </button>
+          <button class="btn-decision-decline" onclick="confirmDecline('${musicianId}', '${escapeHtml(musicianName)}')">
+            ❌ NO, Can't Make It
+          </button>
+        </div>
+        <div style="margin-top: 14px;">
+          <button class="btn-modal-cancel" style="width: 100%;" onclick="closeModal()">Decide Later</button>
+        </div>
+      `;
+      modalOverlay.classList.add('open');
+    }
+
+    function confirmDecline(musicianId, musicianName) {
+      modalCard.innerHTML = `
+        <div class="modal-icon-bubble" style="background:var(--danger-light); border-color:var(--danger-border); color:var(--danger);">⚠️</div>
+        <h2 class="modal-title" style="color:var(--danger);">Confirm Decline</h2>
+        <p class="modal-subtitle">
+          Are you sure you cannot serve this Sunday, <strong>${musicianName}</strong>?
+        </p>
+        <div class="alert-box-danger">
+          Notice: Once you decline, ChurchFlow's auto-roster engine will immediately promote a standby backup volunteer to fill your position.
+        </div>
+        <div class="modal-buttons-row">
+          <button class="btn-modal-cancel" onclick="openDecisionModal('${musicianId}', '${escapeHtml(musicianName)}')">Go Back</button>
+          <button class="btn-modal-primary" style="background:var(--danger);" onclick="executeDecision('${musicianId}', '${escapeHtml(musicianName)}', 'declined')">Yes, Decline</button>
+        </div>
+      `;
+    }
+
+    async function executeDecision(musicianId, musicianName, status) {
+      const claim = activeClaimed || getStoredClaim();
+      const claimToken = claim?.claim_token || null;
 
       try {
         const res = await fetch(`/api/public/avail/${token}`, {
@@ -591,32 +939,65 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             musician_id: musicianId,
-            status: status
+            status: status,
+            claim_token: claimToken,
           })
         });
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to submit response.');
 
-        if (data.reShuffle && data.reShuffle.notifications && data.reShuffle.notifications.length > 0) {
-          latestReshuffleMsg = data.reShuffle.notifications[0];
-          showToast(`🔄 ${latestReshuffleMsg}`, 'info');
-        } else {
-          showToast(status === 'available' ? `✅ Attendance Confirmed for ${musicianName}!` : `❌ Marked as Not Available / Declined`, 'success');
+        // Update stored claim status
+        if (activeClaimed) {
+          activeClaimed.status = status;
+          saveClaim(activeClaimed);
         }
 
-        await loadData();
+        // Show Success in modal
+        modalCard.innerHTML = `
+          <div class="modal-icon-bubble" style="background: ${status === 'available' ? 'var(--success-light)' : 'var(--danger-light)'}; border-color: ${status === 'available' ? 'var(--success-border)' : 'var(--danger-border)'}; font-size: 32px;">
+            ${status === 'available' ? '✅' : '👋'}
+          </div>
+          <h2 class="modal-title">${status === 'available' ? 'Attendance Confirmed!' : 'Response Recorded'}</h2>
+          <p class="modal-subtitle">
+            ${status === 'available' 
+              ? `Thank you, <strong>${musicianName}</strong>! You are confirmed to serve this Sunday.`
+              : `Thank you for letting us know, <strong>${musicianName}</strong>. Our team has been notified.`}
+          </p>
+          <div style="margin-top: 18px;">
+            <button class="btn-modal-primary" style="width: 100%;" onclick="closeModalAndRefresh()">View Full Lineup</button>
+          </div>
+        `;
+
+        if (data.reShuffle && data.reShuffle.notifications && data.reShuffle.notifications.length > 0) {
+          showToast(`🔄 ${data.reShuffle.notifications[0]}`, 'info');
+        }
       } catch (err) {
         showToast(err.message, 'error');
-      } finally {
-        activeSubmittingPosId = null;
+        closeModal();
+      }
+    }
+
+    async function closeModalAndRefresh() {
+      closeModal();
+      await loadData();
+    }
+
+    function switchMusicianIdentity() {
+      if (confirm('Do you want to switch to a different name on this device?')) {
+        clearClaim();
+        showToast('Device lock cleared. You may now select your name.', 'info');
         render();
       }
     }
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
     function render() {
       const app = document.getElementById('app');
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
 
       // Group assignments uniquely by position
       const grouped = {};
@@ -627,24 +1008,27 @@
             position_name: name,
             musician_id: a.musician_id || null,
             musician: a.musician_name || null,
+            has_phone: a.has_phone !== undefined ? a.has_phone : true,
             status: a.status || (a.musician_name ? 'pending' : 'vacant')
           };
         } else if (a.musician_name && !grouped[name].musician) {
           grouped[name].musician_id = a.musician_id;
           grouped[name].musician = a.musician_name;
+          grouped[name].has_phone = a.has_phone !== undefined ? a.has_phone : true;
           grouped[name].status = a.status || 'pending';
         }
       }
 
       const rows = Object.values(grouped).filter(r => !r.position_name.toLowerCase().includes('worship leader'));
+      const hasClaimed = Boolean(activeClaimed && activeClaimed.musician_id);
 
       let html = `
         <!-- Top Bar with Brand -->
         <div class="top-bar">
           <div class="logo-badge">
-            <img src="/churchflow-logo.png" alt="ChurchFlow" class="logo-img" onerror="this.style.display='none'" />
+            <img src="/churchflow-logo.png" alt="ChurchFlow" class="logo-img" onerror="this.src='/churchflow.png'" />
             <span class="brand-text">ChurchFlow</span>
-            <span class="brand-tag">Live</span>
+            <span class="brand-tag">RSVP</span>
           </div>
         </div>
 
@@ -660,18 +1044,19 @@
           </div>
         </div>
 
-        ${latestReshuffleMsg ? `
-          <div class="reshuffle-alert">
-            <span style="font-size: 18px;">🔄</span>
+        <!-- Device Identity Status Banner -->
+        ${hasClaimed ? `
+          <div class="lock-status-banner">
             <div>
-              <strong>Auto-Replacement:</strong> ${latestReshuffleMsg}
+              <span>📱 Connected as: <strong>${activeClaimed.musician_name}</strong></span>
             </div>
+            <button class="btn-switch-link" onclick="switchMusicianIdentity()">Not you? Switch</button>
           </div>
         ` : ''}
 
         <!-- Lineup Section Header -->
         <div class="section-title">
-          <span>🎬 Tap Your Position To Confirm Attendance</span>
+          <span>👥 Sunday Serving Team</span>
         </div>
 
         <!-- Position Cards List -->
@@ -679,13 +1064,13 @@
           ${rows.map(r => {
             const icon = getPositionIcon(r.position_name);
             const isAssigned = Boolean(r.musician && r.musician_id);
-            const isSubmitting = activeSubmittingPosId === r.musician_id;
+            const isMyCard = hasClaimed && activeClaimed.musician_id === r.musician_id;
             const pStatus = isAssigned ? (r.status || 'pending') : 'vacant';
             const isConfirmed = pStatus === 'confirmed';
             const isDeclined = pStatus === 'declined';
 
             return `
-              <div class="position-card ${isConfirmed ? 'is-confirmed' : ''}">
+              <div class="position-card ${isMyCard ? 'is-claimed-by-me' : (hasClaimed ? 'is-other-locked' : '')}">
                 <div class="position-card-header">
                   <div class="position-info">
                     <div class="position-icon-bubble">
@@ -695,29 +1080,37 @@
                       <div class="position-role-name">${r.position_name}</div>
                       <div class="musician-assigned-name">
                         ${isAssigned ? r.musician : '<span style="color:var(--text-muted); font-weight:500; font-style:italic;">Vacant / Unassigned</span>'}
+                        ${isMyCard ? '<span style="font-size:10px; background:var(--primary); color:#fff; padding:2px 7px; border-radius:999px; font-weight:900;">YOU</span>' : ''}
                       </div>
                     </div>
                   </div>
 
                   <span class="status-badge ${pStatus}">
-                    ${isConfirmed ? '✓ Confirmed' : isDeclined ? '✕ Declined' : '⏳ Pending'}
+                    ${isConfirmed ? '✓ Confirmed' : isDeclined ? '✕ Declined' : (isAssigned ? '⏳ Pending' : 'Vacant')}
                   </span>
                 </div>
 
                 ${isAssigned ? `
                   <div class="card-actions-row">
-                    <button 
-                      class="btn-confirm ${isSubmitting ? 'btn-disabled' : ''}" 
-                      onclick="handleConfirm('${r.musician_id}', '${r.musician}', '${r.position_name}', 'available')"
-                    >
-                      ${isSubmitting ? 'Saving...' : (isConfirmed ? '✓ I\'m Serving' : '✅ I\'m Serving')}
-                    </button>
-                    <button 
-                      class="btn-decline ${isSubmitting ? 'btn-disabled' : ''}" 
-                      onclick="handleConfirm('${r.musician_id}', '${r.musician}', '${r.position_name}', 'declined')"
-                    >
-                      ${isSubmitting ? 'Saving...' : (isDeclined ? '✕ Declined' : '❌ Can\'t Make It')}
-                    </button>
+                    ${!hasClaimed ? `
+                      <button 
+                        class="btn-claim-me" 
+                        onclick="openConfirmModal('${r.musician_id}', '${escapeHtml(r.musician)}', '${escapeHtml(r.position_name)}', ${r.has_phone})"
+                      >
+                        👤 This is Me
+                      </button>
+                    ` : (isMyCard ? `
+                      <button 
+                        class="btn-manage-me" 
+                        onclick="openDecisionModal('${r.musician_id}', '${escapeHtml(r.musician)}', '${escapeHtml(r.position_name)}')"
+                      >
+                        📝 Update Attendance
+                      </button>
+                    ` : `
+                      <span class="locked-card-label">
+                        🔒 Locked to ${r.musician.split(' ')[0]}
+                      </span>
+                    `)}
                   </div>
                 ` : ''}
               </div>
