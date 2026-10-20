@@ -14,6 +14,7 @@ import {
   SafeAreaView,
   Share,
   Linking,
+  BackHandler,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -523,6 +524,49 @@ export default function SongBookScreen({
     }
     return () => clearInterval(scrollIntervalRef.current);
   }, [isAutoScrolling, scrollSpeed]);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isSongPickerOpen) {
+        setIsSongPickerOpen(false);
+        return true;
+      }
+      if (isSetlistBuilderOpen) {
+        setIsSetlistBuilderOpen(false);
+        return true;
+      }
+      if (isImportModalOpen) {
+        setIsImportModalOpen(false);
+        if (onClearPendingSbp) onClearPendingSbp();
+        return true;
+      }
+      if (isAddSongModalOpen) {
+        setIsAddSongModalOpen(false);
+        return true;
+      }
+      if (isReaderOpen) {
+        setIsAutoScrolling(false);
+        setIsReaderOpen(false);
+        return true;
+      }
+      if (activeTab === 'online' || activeTab === 'setlists' || activeTab === 'team') {
+        setActiveTab('user');
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [
+    isSongPickerOpen,
+    isSetlistBuilderOpen,
+    isImportModalOpen,
+    isAddSongModalOpen,
+    isReaderOpen,
+    activeTab,
+  ]);
 
   // Online Search
   const handleSearchOnline = async () => {
@@ -1225,7 +1269,7 @@ export default function SongBookScreen({
       </Modal>
 
       {/* Add New Song Modal */}
-      <Modal visible={isAddSongModalOpen} animationType="slide" transparent>
+      <Modal visible={isAddSongModalOpen} animationType="slide" transparent onRequestClose={() => setIsAddSongModalOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.addSongModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.addModalHeader}>

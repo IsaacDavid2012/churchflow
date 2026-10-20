@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   StatusBar as RNStatusBar,
   Platform,
+  BackHandler,
+  ToastAndroid,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
@@ -31,9 +33,62 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isDark, setIsDark] = useState(false); // Clean light mode default
   const [activeTab, setActiveTab] = useState('services');
+  const [tabHistory, setTabHistory] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [publicToken, setPublicToken] = useState(null);
   const [pendingSbpUri, setPendingSbpUri] = useState(null);
+  const lastBackPressRef = useRef(0);
+
+  const switchTab = (nextTab) => {
+    if (nextTab === activeTab) return;
+    setTabHistory((prev) => [...prev.filter((t) => t !== nextTab), activeTab]);
+    setActiveTab(nextTab);
+  };
+
+  // Android Hardware / Swipe Back Button Handling
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. If viewing deep link token screen, close it
+      if (publicToken) {
+        setPublicToken(null);
+        return true;
+      }
+
+      // 2. If viewing a service detail, return to services list
+      if (selectedService) {
+        setSelectedService(null);
+        return true;
+      }
+
+      // 3. If there is navigation history between tabs, pop previous tab
+      if (tabHistory.length > 0) {
+        const prevTab = tabHistory[tabHistory.length - 1];
+        setTabHistory((prev) => prev.slice(0, -1));
+        setActiveTab(prevTab);
+        return true;
+      }
+
+      // 4. If on another tab without history, navigate back to 'services' tab
+      if (activeTab !== 'services') {
+        setActiveTab('services');
+        return true;
+      }
+
+      // 5. At root services screen: double-tap to exit within 2 seconds
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        return false; // Exit app
+      }
+      lastBackPressRef.current = now;
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Press back again to exit', ToastAndroid.SHORT);
+      }
+      return true; // Prevent exit on first press
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [publicToken, selectedService, tabHistory, activeTab]);
 
   useEffect(() => {
     api.setOnUnauthorized(() => {
@@ -77,7 +132,7 @@ export default function App() {
         (rawUrl.startsWith('file://') && (rawUrl.includes('.sbp') || rawUrl.includes('WhatsApp') || rawUrl.includes('SongBook')))
       ) {
         setPendingSbpUri(rawUrl);
-        setActiveTab('songbook');
+        switchTab('songbook');
         return;
       }
 
@@ -111,6 +166,7 @@ export default function App() {
     await api.clearTokens();
     setUser(null);
     setSelectedService(null);
+    setTabHistory([]);
     setActiveTab('services');
   };
 
@@ -187,7 +243,7 @@ export default function App() {
 
               <TouchableOpacity
                 style={[styles.userBadge, { backgroundColor: isDark ? '#1e293b' : '#f5ede1' }]}
-                onPress={() => setActiveTab('church')}
+                onPress={() => switchTab('church')}
               >
                 <Text style={[styles.userBadgeText, { color: '#9e7343' }]}>
                   {(user?.name || 'U').slice(0, 2).toUpperCase()}
@@ -238,7 +294,7 @@ export default function App() {
           >
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('services')}
+              onPress={() => switchTab('services')}
             >
               <Ionicons
                 name={activeTab === 'services' ? 'calendar' : 'calendar-outline'}
@@ -260,7 +316,7 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('songbook')}
+              onPress={() => switchTab('songbook')}
             >
               <Ionicons
                 name={activeTab === 'songbook' ? 'musical-notes' : 'musical-notes-outline'}
@@ -282,7 +338,7 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('people')}
+              onPress={() => switchTab('people')}
             >
               <Ionicons
                 name={activeTab === 'people' ? 'people' : 'people-outline'}
@@ -304,7 +360,7 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('positions')}
+              onPress={() => switchTab('positions')}
             >
               <Ionicons
                 name={activeTab === 'positions' ? 'layers' : 'layers-outline'}
@@ -326,7 +382,7 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('ministries')}
+              onPress={() => switchTab('ministries')}
             >
               <Ionicons
                 name={activeTab === 'ministries' || activeTab === 'groups' ? 'heart-circle' : 'heart-circle-outline'}
@@ -348,7 +404,7 @@ export default function App() {
 
             <TouchableOpacity
               style={styles.tabItem}
-              onPress={() => setActiveTab('church')}
+              onPress={() => switchTab('church')}
             >
               <Ionicons
                 name={activeTab === 'church' ? 'business' : 'business-outline'}

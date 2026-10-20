@@ -12,6 +12,7 @@ import {
   Linking,
   Platform,
   Share,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -142,6 +143,47 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
   useEffect(() => {
     fetchServiceData();
   }, [service.id]);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isWhatsAppModalOpen) {
+        setIsWhatsAppModalOpen(false);
+        return true;
+      }
+      if (isEditServiceModalOpen) {
+        setIsEditServiceModalOpen(false);
+        return true;
+      }
+      if (isPlanModalOpen) {
+        setIsPlanModalOpen(false);
+        return true;
+      }
+      if (isWorshipLeaderModalOpen) {
+        setIsWorshipLeaderModalOpen(false);
+        return true;
+      }
+      if (isAssignModalOpen) {
+        setIsAssignModalOpen(false);
+        return true;
+      }
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [
+    isWhatsAppModalOpen,
+    isEditServiceModalOpen,
+    isPlanModalOpen,
+    isWorshipLeaderModalOpen,
+    isAssignModalOpen,
+    onBack,
+  ]);
 
   const handleAddServiceType = async () => {
     if (!newTypeName.trim()) {
@@ -1183,7 +1225,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       </ScrollView>
 
       {/* Candidate / Swap Volunteer Modal */}
-      <Modal visible={isAssignModalOpen} animationType="slide" transparent>
+      <Modal visible={isAssignModalOpen} animationType="slide" transparent onRequestClose={() => setIsAssignModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -1233,7 +1275,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       </Modal>
 
       {/* Worship Leader Picker Modal */}
-      <Modal visible={isWorshipLeaderModalOpen} animationType="slide" transparent>
+      <Modal visible={isWorshipLeaderModalOpen} animationType="slide" transparent onRequestClose={() => setIsWorshipLeaderModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -1266,7 +1308,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       </Modal>
 
       {/* Add Plan Item Modal */}
-      <Modal visible={isPlanModalOpen} animationType="slide" transparent>
+      <Modal visible={isPlanModalOpen} animationType="slide" transparent onRequestClose={() => setIsPlanModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -1360,7 +1402,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       </Modal>
 
       {/* Edit Service Details Modal */}
-      <Modal visible={isEditServiceModalOpen} animationType="slide" transparent>
+      <Modal visible={isEditServiceModalOpen} animationType="slide" transparent onRequestClose={() => setIsEditServiceModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -1614,7 +1656,7 @@ export default function ServiceDetailScreen({ service, onBack, user, isDark = fa
       </Modal>
 
       {/* WhatsApp Automation Gateway Modal */}
-      <Modal visible={isWhatsAppModalOpen} animationType="slide" transparent>
+      <Modal visible={isWhatsAppModalOpen} animationType="slide" transparent onRequestClose={() => setIsWhatsAppModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {/* Header */}

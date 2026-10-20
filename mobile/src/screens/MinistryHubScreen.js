@@ -13,6 +13,7 @@ import {
   Linking,
   Platform,
   KeyboardAvoidingView,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -122,6 +123,32 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
       console.error('Load chat error:', err);
     }
   };
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isPostModalOpen) {
+        setIsPostModalOpen(false);
+        return true;
+      }
+      if (isAssignModalOpen) {
+        setIsAssignModalOpen(false);
+        return true;
+      }
+      if (activeTab !== 'stream') {
+        setActiveTab('stream');
+        return true;
+      }
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isPostModalOpen, isAssignModalOpen, activeTab, onBack]);
 
   const handlePostAnnouncement = async () => {
     if (!postContent.trim()) {
@@ -841,7 +868,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
       )}
 
       {/* Post Announcement Modal */}
-      <Modal visible={isPostModalOpen} animationType="slide" transparent>
+      <Modal visible={isPostModalOpen} animationType="slide" transparent onRequestClose={() => setIsPostModalOpen(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
@@ -912,7 +939,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
       </Modal>
 
       {/* Assign Member Modal */}
-      <Modal visible={isAssignModalOpen} animationType="slide" transparent>
+      <Modal visible={isAssignModalOpen} animationType="slide" transparent onRequestClose={() => setIsAssignModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>

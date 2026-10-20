@@ -12,6 +12,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -94,6 +95,24 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
   useEffect(() => {
     fetchServices();
   }, []);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isTypesModalOpen) {
+        setIsTypesModalOpen(false);
+        return true;
+      }
+      if (isModalOpen) {
+        setIsModalOpen(false);
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isTypesModalOpen, isModalOpen]);
 
   const handleAddServiceType = async () => {
     if (!newTypeName.trim()) {
@@ -489,7 +508,7 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
       )}
 
       {/* Plan / Edit Service Modal Bottom Sheet */}
-      <Modal visible={isModalOpen} animationType="slide" transparent>
+      <Modal visible={isModalOpen} animationType="slide" transparent onRequestClose={() => setIsModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -736,7 +755,7 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
       </Modal>
 
       {/* Dedicated Manage Service Types Modal */}
-      <Modal visible={isTypesModalOpen} animationType="slide" transparent>
+      <Modal visible={isTypesModalOpen} animationType="slide" transparent onRequestClose={() => setIsTypesModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>

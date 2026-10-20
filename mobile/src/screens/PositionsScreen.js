@@ -11,6 +11,7 @@ import {
   Modal,
   Alert,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -50,6 +51,20 @@ export default function PositionsScreen({ user, isDark = false }) {
   useEffect(() => {
     fetchPositions();
   }, []);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isModalOpen) {
+        setIsModalOpen(false);
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isModalOpen]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -179,7 +194,7 @@ export default function PositionsScreen({ user, isDark = false }) {
         <Text style={styles.fabText}>Add Position</Text>
       </TouchableOpacity>
 
-      <Modal visible={isModalOpen} animationType="slide" transparent>
+      <Modal visible={isModalOpen} animationType="slide" transparent onRequestClose={() => setIsModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>

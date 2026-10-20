@@ -222,7 +222,7 @@ export default function SongsScreen({ user, isDark = false }) {
       </TouchableOpacity>
 
       {/* Add Song Bottom Sheet Modal */}
-      <Modal visible={isModalOpen} animationType="slide" transparent>
+      <Modal visible={isModalOpen} animationType="slide" transparent onRequestClose={() => setIsModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>

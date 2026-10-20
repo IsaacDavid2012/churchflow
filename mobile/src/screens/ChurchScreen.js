@@ -12,6 +12,7 @@ import {
   Linking,
   Switch,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -93,6 +94,24 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isUserModalOpen) {
+        setIsUserModalOpen(false);
+        return true;
+      }
+      if (isEditChurchModalOpen) {
+        setIsEditChurchModalOpen(false);
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isUserModalOpen, isEditChurchModalOpen]);
 
   const handleCreateUser = async () => {
     if (!userName.trim() || !userEmail.trim() || !userPassword.trim()) {
@@ -366,7 +385,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       </View>
 
       {/* Add Staff Modal */}
-      <Modal visible={isUserModalOpen} animationType="slide" transparent>
+      <Modal visible={isUserModalOpen} animationType="slide" transparent onRequestClose={() => setIsUserModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
@@ -464,7 +483,7 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
       </Modal>
 
       {/* Edit Church Profile Modal */}
-      <Modal visible={isEditChurchModalOpen} animationType="slide" transparent>
+      <Modal visible={isEditChurchModalOpen} animationType="slide" transparent onRequestClose={() => setIsEditChurchModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>

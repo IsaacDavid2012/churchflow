@@ -13,6 +13,7 @@ import {
   Linking,
   Platform,
   KeyboardAvoidingView,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -135,6 +136,32 @@ export default function MinistriesScreen({ user, isDark = false }) {
       console.error('Fetch community chat error:', err);
     }
   };
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isModalOpen) {
+        setIsModalOpen(false);
+        return true;
+      }
+      if (isAnnModalOpen) {
+        setIsAnnModalOpen(false);
+        return true;
+      }
+      if (selectedMinistry) {
+        setSelectedMinistry(null);
+        return true;
+      }
+      if (activeSection !== 'ministries') {
+        setActiveSection('ministries');
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isModalOpen, isAnnModalOpen, selectedMinistry, activeSection]);
 
   // --- Ministry Modal Handlers ---
   const handleOpenCreate = () => {
@@ -810,7 +837,7 @@ export default function MinistriesScreen({ user, isDark = false }) {
       {/* ======================================================== */}
       {/* MODAL: BROADCAST GENERAL ANNOUNCEMENT                    */}
       {/* ======================================================== */}
-      <Modal visible={isAnnModalOpen} animationType="slide" transparent>
+      <Modal visible={isAnnModalOpen} animationType="slide" transparent onRequestClose={() => setIsAnnModalOpen(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
@@ -874,7 +901,7 @@ export default function MinistriesScreen({ user, isDark = false }) {
       {/* MODAL: CREATE / EDIT MINISTRY                            */}
       {/* ======================================================== */}
       {isModalOpen && canManage && (
-        <Modal visible={isModalOpen} animationType="slide" transparent>
+        <Modal visible={isModalOpen} animationType="slide" transparent onRequestClose={() => setIsModalOpen(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, maxHeight: '85%' }]}>
               <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>

@@ -14,6 +14,7 @@ import {
   Linking,
   Platform,
   Share,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -63,6 +64,24 @@ export default function PeopleScreen({ user, isDark = false }) {
   useEffect(() => {
     fetchPeople();
   }, []);
+
+  // Handle Android Hardware / Swipe Back Button
+  useEffect(() => {
+    const handleBack = () => {
+      if (isModalOpen) {
+        setIsModalOpen(false);
+        return true;
+      }
+      if (selectedMinistry !== 'All') {
+        setSelectedMinistry('All');
+        return true;
+      }
+      return false; // Propagate to App.js tab navigation
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => backSub.remove();
+  }, [isModalOpen, selectedMinistry]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -485,7 +504,7 @@ export default function PeopleScreen({ user, isDark = false }) {
       )}
 
       {/* Add / Edit Member Bottom Sheet Modal */}
-      <Modal visible={isModalOpen} animationType="slide" transparent>
+      <Modal visible={isModalOpen} animationType="slide" transparent onRequestClose={() => setIsModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
