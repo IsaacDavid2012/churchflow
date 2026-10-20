@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.0] - 2026-10-20
+
+### Added
+- **WhatsApp Community Architecture**:
+  - **General Announcements Broadcast**: Church-wide broadcast channel where Pastors and Admins post urgent notices, category-tagged updates (`urgent`, `general`, `worship`, `event`), and pinned announcements with author badges.
+  - **Church-Wide Fellowship Chat**: Real-time open chat space for all verified church members for fellowship, prayer requests, and testimonies.
+  - **Dedicated Ministry Hubs (Sub-Groups)**: Isolated department channels for Worship Team, Tech & AV Production, Ushers & Greeters, Kids Rock, and Intercession. Each hub includes department announcements and private team chat so leaders can coordinate rehearsals and run-sheets without cluttering the main congregation.
+- **Unified User & People Directory**:
+  - Seamless 1:1 integration between `users` authentication accounts and `musicians` serving profiles (`musicians.user_id = users.id`).
+  - Consolidates credentials and ministry serving capabilities into a single source of truth.
+  - Single consolidated Isaac super-admin account (`Isaac` / `IDC-201Two`).
+- **Strict 4-Tier Role-Based Access Control (RBAC)**:
+  - Standardized roles: **Admin** (master operations & organization settings), **Pastor** (announcements broadcast, run sheets, sermons & discipleship), **Manager** (department leadership, team chat, roster management), and **Member** (self-schedule, WhatsApp RSVP, fellowship chat).
+  - Enforced route-level guards across all REST endpoints in `backend/src/middleware/auth.js`.
+- **Dynamic Custom Position System**:
+  - Dynamic registration, editing, and assignment of custom ministry positions with multi-skill tagging.
+  - Dynamic position selection dropdowns in volunteer management and roster builders.
+- **Self-Service Volunteer Onboarding (`/join`)**:
+  - Public mobile-optimized `/join` portal allowing prospective volunteers to register, set passwords, and declare ministry interests.
+  - Automated dual provisioning of `users` credentials and `musicians` directory entry with `pending` status for leadership approval.
+- **Marketing Landing Page Modernization (`landing.html`)**:
+  - Root `GET /` cleanly serves the marketing page while `GET /app` launches the React admin dashboard.
+  - Integrated WhatsApp Community showcase, 4 metric counters, expanded 9-feature capability grid, and direct Android APK download section.
+  - Maintained JMR warm gold (`#c59c6c`) branding and interactive live service lineup preview.
+
+### Changed
+- **Express Route Handling**: Configured `express.static` with `{ index: false }` to prevent static index files from preempting root route handlers.
+- **Database Schema Upgrades**: Migrated schema with `general_announcements`, `general_chat_messages`, `groups` (`leader_id`), `ministry_members`, `ministry_announcements`, and `ministry_chat_messages`.
+
+---
+
 ## [1.1.0] - 2026-10-19
 
 ### Added

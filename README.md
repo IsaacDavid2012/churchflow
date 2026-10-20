@@ -28,13 +28,19 @@
 
 ## 🌟 Executive Overview
 
-**ChurchFlow** is an enterprise-grade, self-hosted ministry scheduling and worship management suite engineered as a full Planning Center alternative for Jesus My Rock Church. It orchestrates:
+**ChurchFlow** is an enterprise-grade, self-hosted ministry scheduling, community, and worship operations platform engineered as a complete Planning Center and Church Community alternative for Jesus My Rock Church. It orchestrates:
 
-- **Order of Service Run Sheets**: Minute-by-minute order of service timeline planner with dynamic time calculations.
-- **Fairness Auto-Rostering Engine**: Proprietary auto-scheduling algorithm that balances volunteer serving frequencies and prevents burnout.
-- **1-Tap WhatsApp Availability Confirmation**: Zero-login secure token links for mobile volunteers to accept or decline with a single tap.
+- **WhatsApp Community Architecture**: A unified church communication hierarchy mirroring WhatsApp Communities:
+  - **General Announcements Broadcast**: Pastor and Admin church-wide broadcast channel with category tags, pinned alerts, and high-priority push notifications.
+  - **Church-Wide Fellowship Chat**: Real-time church chat room for open fellowship, prayer requests, and community discussions.
+  - **Dedicated Ministry Hubs**: Isolated department sub-groups (Worship, Production, Ushers, Media, Kids) with private team chats and department announcements for shift coordination without spamming the entire church.
+- **Unified People Directory & 4-Tier RBAC**: Consolidated user accounts and volunteer roster (`users` ↔ `musicians`) governed by strict 4-tier Role-Based Access Control (**Admin**, **Pastor**, **Manager**, **Member**).
+- **Dynamic Position Management**: Customizable ministry positions with multi-skill tagging, default team quotas, and seamless assignment dropdowns.
+- **Self-Service Volunteer Onboarding (`/join`)**: Dedicated mobile-optimized volunteer portal where new members set passwords, select ministry interests, and submit availability.
+- **Fairness Auto-Rostering Engine**: Proprietary auto-scheduling algorithm that balances volunteer serving frequencies, prevents back-to-back burnout, and reserves automatic backups.
+- **1-Tap WhatsApp Availability Confirmation**: Zero-login secure token links for mobile volunteers to accept or decline service calls with a single tap.
+- **Order of Service Run Sheets**: Minute-by-minute order of service timeline planner with dynamic time calculations for musicians and AV production.
 - **Cascading Service Management**: Full create, edit, and cascade deletion of services with automated cleanup across web and mobile.
-- **People & Family Directory**: Member profiles, household grouping, attendance tracking, and serving history.
 - **Music & Song Library**: Worship song catalog with keys, BPM, time signature, CCLI numbers, and chord chart integrations.
 - **Small Groups & Discipleship**: Life group tracking, leadership assignments, and meeting schedules.
 - **Native Android Mobile App**: Production React Native / Expo app compiled into an installable Android APK with push notifications and WhatsApp integration.
@@ -52,12 +58,18 @@
                  ┌────────────────────────────────┼────────────────────────────────┐
                  ▼                                ▼                                ▼
        ┌──────────────────┐             ┌──────────────────┐             ┌──────────────────┐
-       │   Services &     │             │     People &     │             │   Music Library  │
-       │   Run Sheets     │             │    Households    │             │   & Song Sheets  │
-       │ (Auto-Roster)    │             │   (Directory)    │             │ (CCLI, Keys, BPM)│
+       │   Services &     │             │   Community &    │             │   Music Library  │
+       │   Run Sheets     │             │  Ministry Hubs   │             │   & Song Sheets  │
+       │ (Auto-Roster)    │             │ (Chat & Broadcast│             │ (CCLI, Keys, BPM)│
        └─────────┬────────┘             └─────────┬────────┘             └─────────┬────────┘
                  │                                │                                │
                  └────────────────────────────────┼────────────────────────────────┘
+                                                  │
+                                                  ▼
+                                 ┌─────────────────────────────────┐
+                                 │   Unified People & Directory    │
+                                 │   (4-Tier RBAC, Single Auth)    │
+                                 └────────────────┬────────────────┘
                                                   │
                                                   ▼
                                  ┌─────────────────────────────────┐
@@ -123,19 +135,20 @@ churchflow/
 │   │   ├── routes/
 │   │   │   ├── auth.js                # Admin/volunteer authentication & tokens
 │   │   │   ├── church.js              # Church profile, campuses, & ministries
-│   │   │   ├── musicians.js           # Directory of volunteers & household relations
-│   │   │   ├── positions.js           # Position templates (Lead Vocals, Keys, Audio, etc.)
+│   │   │   ├── community.js           # General announcements, fellowship chat, & ministry hubs
+│   │   │   ├── musicians.js           # Unified user directory, custom positions, & household links
+│   │   │   ├── positions.js           # Dynamic position templates & multi-skill tags
 │   │   │   ├── services.js            # Service CRUD, PUT updates, DELETE cascade, lineup
 │   │   │   ├── songs.js               # Song library catalog with CCLI & chord links
 │   │   │   ├── groups.js              # Small group discipleship tracking
 │   │   │   ├── notifications.js       # Audit logs & device FCM tokens
-│   │   │   └── public.js              # Zero-login token availability responder
+│   │   │   └── public.js              # Zero-login token responder & /join onboarding portal
 │   │   ├── services/
 │   │   │   ├── shuffleService.js      # Fairness algorithm & backup auto-promotions
 │   │   │   ├── cronService.js         # Scheduled deadline monitoring background daemon
 │   │   │   └── fcmService.js          # Firebase Cloud Messaging push service
-│   │   └── server.js                  # Main Express application & static file server
-│   ├── public/                        # Static landing, about, and APK download files
+│   │   └── server.js                  # Main Express application, static file router & APK server
+│   ├── public/                        # Static landing, about, join onboarding & APK downloads
 │   └── tests/                         # Backend test suite
 ├── frontend/                          # Web Admin Single Page App (React 18 + Vite)
 │   ├── src/
@@ -251,14 +264,16 @@ The compiled binary will be generated at:
 
 ---
 
-## 🔐 Role-Based Access Control (RBAC)
+## 🔐 Role-Based Access Control (4-Tier RBAC)
 
-| Role | Permissions |
+ChurchFlow enforces a consolidated 4-tier Role-Based Access Control model across both the API gateway and the UI layers:
+
+| Role | Permissions & Access Scope |
 | :--- | :--- |
-| **Admin** | Full system administration, user provisioning, church settings, campus editing, full service lifecycle, people directory, and song libraries. |
-| **Pastor** | Pastoral oversight, all services, run sheets, sermons, people profiles, discipleship groups. |
-| **Leader** | Team management, roster assignment, candidate swapping, department members. |
-| **Volunteer** | View assigned services, accept/decline invites via 1-tap WhatsApp token link. |
+| **Admin** | Full system master control. Super-admin privileges, organization settings, campus & department management, user role provisioning, staff position management, fairness engine configuration, and database administration. |
+| **Pastor** | Pastoral leadership oversight. Publish church-wide general announcements, view all ministry hubs, sermon run sheets, member pastoral notes, and discipleship groups. |
+| **Manager** | Department & ministry leadership (e.g., Worship Leader, Production Director). Manage dedicated ministry hubs, post department announcements, lead team chat spaces, assign volunteers to services, and approve replacements. |
+| **Member** | Church member & serving volunteer. View personal serving schedule, participate in church fellowship chat, access assigned ministry hubs and team chats, 1-tap WhatsApp RSVP confirmations, and self-manage profile. |
 
 ---
 

@@ -76,26 +76,21 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Marketing page as main root route (https://serve.creativeclicks.art/)
+app.get(['/', '/landing', '/about'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.sendFile(path.join(__dirname, '../public/landing.html'));
+});
+
 // Explicit APK download route with strict no-cache headers
-app.get(['/churchflow.apk', '/churchflow-latest.apk'], (req, res) => {
+app.get(['/churchflow.apk', '/churchflow-latest.apk', '/servesync.apk'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-  res.setHeader('Content-Disposition', 'attachment; filename="ChurchFlow-v1.1.0.apk"');
+  res.setHeader('Content-Disposition', 'attachment; filename="ChurchFlow-v1.2.0.apk"');
   res.sendFile(path.join(__dirname, '../public/churchflow.apk'));
 });
-
-// Serve public static assets (with no-cache so APK and public pages are always fresh)
-app.use(express.static(path.join(__dirname, '../public'), {
-  etag: false,
-  lastModified: false,
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-  }
-}));
 
 // Musician-facing token URL routes to public HTML view
 app.get('/avail/:token', (req, res) => {
@@ -106,6 +101,18 @@ app.get('/avail/:token', (req, res) => {
 app.get(['/join', '/volunteer-join', '/register-member'], (req, res) => {
   res.sendFile(path.join(__dirname, '../public/join.html'));
 });
+
+// Serve public static assets (with index: false so index.html never overrides /)
+app.use(express.static(path.join(__dirname, '../public'), {
+  index: false,
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
 
 // Never cache API responses (live server data only)
 app.use('/api', (req, res, next) => {
@@ -129,14 +136,8 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/service-types', serviceTypesRoutes);
 app.use('/api/community', communityRoutes);
 
-// In production, serve React frontend build
+// In production, serve React frontend build for /app and SPA routes
 const frontendDist = path.join(__dirname, '../../frontend/dist');
-
-// Marketing page as main root route (https://serve.creativeclicks.art/)
-app.get(['/', '/landing', '/about'], (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.sendFile(path.join(__dirname, '../public/landing.html'));
-});
 
 // Serve hashed static assets with caching, but never index.html on root
 app.use(express.static(frontendDist, {
