@@ -228,6 +228,34 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Standalone SongBook Pro Integration
+  getSongbookStatus: () => request('/songbook/status'),
+  getSongbookStats: () => request('/songbook/stats'),
+  getSongbookSongs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/songbook/songs${query ? `?${query}` : ''}`);
+  },
+  getSongbookSong: (id) => request(`/songbook/songs/${id}`),
+  getSongbookSetlists: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/songbook/setlists${query ? `?${query}` : ''}`);
+  },
+  getSongbookSetlist: (id) => request(`/songbook/setlists/${id}`),
+  createSongbookSong: (data) =>
+    request('/songbook/songs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateSongbookSong: (id, data) =>
+    request(`/songbook/songs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteSongbookSong: (id) =>
+    request(`/songbook/songs/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Church Ministries
   getMinistries: (params = {}) => {
     const query = new URLSearchParams(params).toString();

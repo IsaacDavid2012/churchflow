@@ -18,6 +18,7 @@ const notificationsRoutes = require('./routes/notifications');
 const publicRoutes = require('./routes/public');
 const serviceTypesRoutes = require('./routes/serviceTypes');
 const communityRoutes = require('./routes/community');
+const songbookRoutes = require('./routes/songbook');
 const { startDeadlineMonitor } = require('./services/cronService');
 
 const app = express();
@@ -135,6 +136,7 @@ app.use('/api/ministries', groupsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/service-types', serviceTypesRoutes);
 app.use('/api/community', communityRoutes);
+app.use('/api/songbook', songbookRoutes);
 
 // In production, serve React frontend build for /app and SPA routes
 const frontendDist = path.join(__dirname, '../../frontend/dist');

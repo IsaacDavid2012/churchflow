@@ -282,6 +282,31 @@ class ApiClient {
     });
   }
 
+  // --- Standalone SongBook Pro Integration ---
+  async getSongbookStatus() {
+    return this.request('/songbook/status');
+  }
+
+  async getSongbookStats() {
+    return this.request('/songbook/stats');
+  }
+
+  async getSongbookSongs(params = {}) {
+    return this.request(`/songbook/songs${buildQueryString(params)}`);
+  }
+
+  async getSongbookSong(id) {
+    return this.request(`/songbook/songs/${id}`);
+  }
+
+  async getSongbookSetlists(params = {}) {
+    return this.request(`/songbook/setlists${buildQueryString(params)}`);
+  }
+
+  async getSongbookSetlist(id) {
+    return this.request(`/songbook/setlists/${id}`);
+  }
+
   // --- Service Plan (Run Sheet) ---
   async getPlanItems(serviceId) {
     return this.request(`/services/${serviceId}/plan`);

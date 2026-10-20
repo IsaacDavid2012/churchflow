@@ -16,6 +16,7 @@ import {
 export default function Navbar({ currentTab, setTab, user, theme = 'light', onToggleTheme, onLogout }) {
   const tabs = [
     { id: 'services', label: 'Services', icon: Calendar },
+    { id: 'songbook', label: 'SongBook', icon: Music },
     { id: 'people', label: 'People', icon: Users },
     { id: 'ministries', label: 'Ministries', icon: HeartHandshake },
     { id: 'positions', label: 'Positions', icon: Sliders },

@@ -22,6 +22,7 @@ import ServiceDetailScreen from './src/screens/ServiceDetailScreen';
 import PeopleScreen from './src/screens/PeopleScreen';
 import PositionsScreen from './src/screens/PositionsScreen';
 import MinistriesScreen from './src/screens/MinistriesScreen';
+import SongBookScreen from './src/screens/SongBookScreen';
 import ChurchScreen from './src/screens/ChurchScreen';
 import PublicConfirmScreen from './src/screens/PublicConfirmScreen';
 
@@ -178,6 +179,7 @@ export default function App() {
                 onLogout={handleLogout}
               />
             )}
+            {activeTab === 'songbook' && <SongBookScreen user={user} isDark={isDark} />}
             {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
             {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
             {(activeTab === 'ministries' || activeTab === 'groups') && (
@@ -219,6 +221,28 @@ export default function App() {
                 ]}
               >
                 Services
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => setActiveTab('songbook')}
+            >
+              <Ionicons
+                name={activeTab === 'songbook' ? 'musical-notes' : 'musical-notes-outline'}
+                size={22}
+                color={activeTab === 'songbook' ? themeColors.primary : themeColors.subText}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: activeTab === 'songbook' ? themeColors.primary : themeColors.subText,
+                    fontWeight: activeTab === 'songbook' ? '800' : '600',
+                  },
+                ]}
+              >
+                SongBook
               </Text>
             </TouchableOpacity>
 

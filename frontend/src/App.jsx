@@ -10,6 +10,7 @@ import MinistriesManager from './components/MinistriesManager';
 import PositionsManager from './components/PositionsManager';
 import ChurchProfileManager from './components/ChurchProfileManager';
 import UsersManager from './components/UsersManager';
+import SongBookManager from './components/SongBookManager';
 import NotificationsFeed from './components/NotificationsFeed';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -140,6 +141,7 @@ export default function App() {
             </>
           )}
 
+          {currentTab === 'songbook' && <SongBookManager currentUser={user} />}
           {currentTab === 'people' && <PeopleManager currentUser={user} />}
           {currentTab === 'users' && <UsersManager currentUser={user} />}
           {(currentTab === 'ministries' || currentTab === 'groups') && <MinistriesManager currentUser={user} />}
