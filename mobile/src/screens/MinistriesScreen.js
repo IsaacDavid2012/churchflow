@@ -396,7 +396,7 @@ export default function MinistriesScreen({ user, isDark = false }) {
           <Text style={[styles.footerLabel, { color: colors.subText }]}>Active Volunteers</Text>
           <View style={[styles.memberCountBadge, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
             <Text style={[styles.memberCountText, { color: colors.primaryDark }]}>
-              {item.member_count || 0} serving
+              {item.member_count === 1 ? '1 member serving' : `${item.member_count || 0} members serving`}
             </Text>
           </View>
         </View>

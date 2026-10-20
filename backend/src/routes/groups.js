@@ -9,7 +9,26 @@ router.get('/', async (req, res, next) => {
   try {
     const { category, search } = req.query;
     let query = `
-      SELECT g.*, COALESCE(g.leader_phone, m.phone) AS leader_phone
+      SELECT 
+        g.id,
+        g.name,
+        g.category,
+        g.leader_name,
+        g.leader_id,
+        g.meeting_day,
+        g.meeting_time,
+        g.location,
+        g.description,
+        g.active,
+        g.created_at,
+        g.updated_at,
+        COALESCE(g.leader_phone, m.phone) AS leader_phone,
+        (
+          SELECT COUNT(DISTINCT mm.musician_id)::int
+          FROM ministry_members mm
+          JOIN musicians mus ON mus.id = mm.musician_id
+          WHERE mm.ministry_id = g.id AND mus.active = true
+        ) AS member_count
       FROM groups g
       LEFT JOIN musicians m ON m.id = g.leader_id
       WHERE g.active = true
@@ -38,7 +57,26 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const result = await db.query(
-      `SELECT g.*, COALESCE(g.leader_phone, m.phone) AS leader_phone 
+      `SELECT 
+         g.id,
+         g.name,
+         g.category,
+         g.leader_name,
+         g.leader_id,
+         g.meeting_day,
+         g.meeting_time,
+         g.location,
+         g.description,
+         g.active,
+         g.created_at,
+         g.updated_at,
+         COALESCE(g.leader_phone, m.phone) AS leader_phone,
+         (
+           SELECT COUNT(DISTINCT mm.musician_id)::int
+           FROM ministry_members mm
+           JOIN musicians mus ON mus.id = mm.musician_id
+           WHERE mm.ministry_id = g.id AND mus.active = true
+         ) AS member_count
        FROM groups g 
        LEFT JOIN musicians m ON m.id = g.leader_id 
        WHERE g.id = $1 AND g.active = true`,

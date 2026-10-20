@@ -87,6 +87,7 @@ async function runMigrations() {
 
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'groups') THEN
           ALTER TABLE groups ADD COLUMN IF NOT EXISTS leader_phone VARCHAR(50);
+          ALTER TABLE groups ALTER COLUMN member_count SET DEFAULT 0;
         END IF;
       END $$;
     `);

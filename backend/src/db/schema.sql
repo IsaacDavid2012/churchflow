@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS groups (
     meeting_time VARCHAR(50) DEFAULT '7:00 PM',
     location VARCHAR(255) DEFAULT 'Fellowship Hall Room 201',
     description TEXT,
-    member_count INT DEFAULT 8,
+    member_count INT DEFAULT 0,
     leader_phone VARCHAR(50),
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),

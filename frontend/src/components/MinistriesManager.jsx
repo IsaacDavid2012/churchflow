@@ -483,7 +483,7 @@ export default function MinistriesManager({ currentUser }) {
                     <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
                       <span>Serving Volunteers</span>
                       <span className="font-bold text-[#8c6738] bg-[#f5ede1] px-2 py-0.5 rounded-md border border-[#eadbc4]">
-                        {m.member_count || 0} members serving
+                        {m.member_count === 1 ? '1 member serving' : `${m.member_count || 0} members serving`}
                       </span>
                     </div>
 
