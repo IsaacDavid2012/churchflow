@@ -204,7 +204,7 @@ router.post('/', async (req, res) => {
         email ? email.trim() : null,
         phone ? phone.trim() : null,
         rolesArray,
-        ministry || 'Worship Team',
+        ministry || 'Media Team',
         status || 'member',
         household_id || null,
         household_role || 'individual',
@@ -216,7 +216,13 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const createdMusician = result.rows[0];
+
+    // Auto-Enroll into corresponding ministries based on selected positions
+    await syncMusicianMinistries(createdMusician.id, rolesArray);
+
+    const refetched = await db.query('SELECT * FROM musicians WHERE id = $1', [createdMusician.id]);
+    res.status(201).json(refetched.rows[0] || createdMusician);
   } catch (err) {
     console.error('Create person error:', err);
     res.status(500).json({ error: 'Failed to create person' });
@@ -290,7 +296,13 @@ router.put('/:id', async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    // Auto-Sync Ministry Memberships based on updated positions
+    if (rolesArray !== undefined) {
+      await syncMusicianMinistries(id, rolesArray);
+    }
+
+    const refetched = await db.query('SELECT * FROM musicians WHERE id = $1', [id]);
+    res.json(refetched.rows[0] || result.rows[0]);
   } catch (err) {
     console.error('Update person error:', err);
     res.status(500).json({ error: 'Failed to update person' });
@@ -314,5 +326,144 @@ router.delete('/:id', requireRole([ROLES.ADMIN, ROLES.PASTOR]), async (req, res)
     res.status(500).json({ error: 'Failed to delete person' });
   }
 });
+
+/**
+ * Automatically syncs a musician's ministry memberships based on their assigned positions.
+ * - Selecting positions in a ministry automatically enrolls them into that ministry's group & chat.
+ * - Removing all positions under a ministry automatically unenrolls them from that ministry (protecting managers).
+ */
+async function syncMusicianMinistries(musicianId, roles = []) {
+  if (!musicianId) return;
+  const rolesArray = Array.isArray(roles) ? roles.map(r => String(r).trim()).filter(Boolean) : [];
+
+  try {
+    // 1. Fetch current ministry memberships for this musician
+    const curRes = await db.query(
+      'SELECT id, ministry_id, role FROM ministry_members WHERE musician_id = $1',
+      [musicianId]
+    );
+    const currentMemberships = curRes.rows;
+    const currentMinistryIds = new Set(currentMemberships.map(m => m.ministry_id));
+
+    // 2. If roles array is empty, unenroll member roles and update ministry to 'None'
+    if (rolesArray.length === 0) {
+      // Delete regular member entries (preserve managers/leaders)
+      await db.query(
+        "DELETE FROM ministry_members WHERE musician_id = $1 AND role != 'manager'",
+        [musicianId]
+      );
+
+      // Update remaining member counts
+      for (const mId of currentMinistryIds) {
+        await updateMinistryMemberCount(mId);
+      }
+
+      // Check if they remain in any ministry as manager
+      const remRes = await db.query(`
+        SELECT g.name FROM ministry_members mm
+        JOIN groups g ON g.id = mm.ministry_id
+        WHERE mm.musician_id = $1
+      `, [musicianId]);
+
+      const finalMinistry = remRes.rows.length > 0
+        ? remRes.rows.map(r => r.name).join(', ')
+        : 'None';
+
+      await db.query('UPDATE musicians SET ministry = $1, updated_at = NOW() WHERE id = $2', [finalMinistry, musicianId]);
+      return;
+    }
+
+    // 3. Find matching positions_template rows
+    const posRes = await db.query(
+      'SELECT id, name, ministry, ministry_id FROM positions_template WHERE LOWER(name) = ANY($1::text[])',
+      [rolesArray.map(r => r.toLowerCase())]
+    );
+
+    // 4. Resolve target ministry group IDs
+    const targetGroupIds = new Set();
+    const unmatchedMinistryNames = new Set();
+
+    for (const pos of posRes.rows) {
+      if (pos.ministry_id) {
+        targetGroupIds.add(pos.ministry_id);
+      } else if (pos.ministry && pos.ministry.trim()) {
+        unmatchedMinistryNames.add(pos.ministry.trim().toLowerCase());
+      }
+    }
+
+    if (unmatchedMinistryNames.size > 0) {
+      const gRes = await db.query(
+        'SELECT id FROM groups WHERE active = true AND (LOWER(name) = ANY($1::text[]) OR LOWER(category) = ANY($1::text[]))',
+        [Array.from(unmatchedMinistryNames)]
+      );
+      for (const g of gRes.rows) {
+        targetGroupIds.add(g.id);
+      }
+    }
+
+    // 5. Auto-Enroll into target ministries
+    for (const groupId of targetGroupIds) {
+      if (!currentMinistryIds.has(groupId)) {
+        await db.query(`
+          INSERT INTO ministry_members (ministry_id, musician_id, role, joined_at)
+          VALUES ($1, $2, 'member', NOW())
+          ON CONFLICT (ministry_id, musician_id) DO NOTHING
+        `, [groupId, musicianId]);
+        await updateMinistryMemberCount(groupId);
+      }
+    }
+
+    // 6. Clean Auto-Unenroll from ministries where they hold 0 positions (protect managers)
+    for (const membership of currentMemberships) {
+      if (!targetGroupIds.has(membership.ministry_id)) {
+        // Only unenroll regular members; do not kick designated managers
+        if (membership.role !== 'manager') {
+          await db.query(
+            'DELETE FROM ministry_members WHERE id = $1',
+            [membership.id]
+          );
+          await updateMinistryMemberCount(membership.ministry_id);
+        }
+      }
+    }
+
+    // 7. Update musicians.ministry with current active enrolled ministry names
+    const activeMinsRes = await db.query(`
+      SELECT DISTINCT g.name FROM ministry_members mm
+      JOIN groups g ON g.id = mm.ministry_id
+      WHERE mm.musician_id = $1 AND g.active = true
+      ORDER BY g.name ASC
+    `, [musicianId]);
+
+    const finalMinistryStr = activeMinsRes.rows.length > 0
+      ? activeMinsRes.rows.map(r => r.name).join(', ')
+      : 'None';
+
+    await db.query(
+      'UPDATE musicians SET ministry = $1, updated_at = NOW() WHERE id = $2',
+      [finalMinistryStr, musicianId]
+    );
+
+  } catch (err) {
+    console.error(`Error in syncMusicianMinistries for musician ${musicianId}:`, err);
+  }
+}
+
+async function updateMinistryMemberCount(groupId) {
+  if (!groupId) return;
+  try {
+    const countRes = await db.query(
+      'SELECT COUNT(*) FROM ministry_members WHERE ministry_id = $1',
+      [groupId]
+    );
+    const count = parseInt(countRes.rows[0].count, 10);
+    await db.query(
+      'UPDATE groups SET member_count = $1, updated_at = NOW() WHERE id = $2',
+      [count, groupId]
+    );
+  } catch (e) {
+    console.error('Failed to update ministry member count:', e);
+  }
+}
 
 module.exports = router;

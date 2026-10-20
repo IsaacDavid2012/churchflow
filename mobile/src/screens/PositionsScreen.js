@@ -198,14 +198,30 @@ export default function PositionsScreen({ user, isDark = false }) {
               placeholderTextColor={colors.subText}
             />
 
-            <Text style={[styles.inputLabel, { color: colors.subText }]}>Team / Ministry</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-              value={ministry}
-              onChangeText={setMinistry}
-              placeholder="Media Team"
-              placeholderTextColor={colors.subText}
-            />
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Select Ministry *</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+              {ministries.map((m) => {
+                const isSelected = (ministry || '').toLowerCase() === (m.name || '').toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    onPress={() => setMinistry(m.name)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      backgroundColor: isSelected ? '#f5ede1' : colors.card,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? colors.primary : colors.text }}>
+                      {m.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <View style={styles.modalActionRow}>
               <TouchableOpacity

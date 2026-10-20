@@ -302,6 +302,46 @@ router.post('/join', async (req, res) => {
 
     const newMusician = insertRes.rows[0];
 
+    // Auto-enroll into ministries based on selected positions
+    try {
+      const posRes = await db.query(
+        'SELECT ministry, ministry_id FROM positions_template WHERE LOWER(name) = ANY($1::text[])',
+        [selectedRoles.map(r => r.toLowerCase())]
+      );
+      const targetGroupIds = new Set();
+      const unmatched = new Set();
+      for (const pos of posRes.rows) {
+        if (pos.ministry_id) targetGroupIds.add(pos.ministry_id);
+        else if (pos.ministry) unmatched.add(pos.ministry.trim().toLowerCase());
+      }
+      if (unmatched.size > 0) {
+        const gRes = await db.query(
+          'SELECT id FROM groups WHERE active = true AND (LOWER(name) = ANY($1::text[]) OR LOWER(category) = ANY($1::text[]))',
+          [Array.from(unmatched)]
+        );
+        for (const g of gRes.rows) targetGroupIds.add(g.id);
+      }
+      for (const gId of targetGroupIds) {
+        await db.query(`
+          INSERT INTO ministry_members (ministry_id, musician_id, role, joined_at)
+          VALUES ($1, $2, 'member', NOW())
+          ON CONFLICT (ministry_id, musician_id) DO NOTHING
+        `, [gId, newMusician.id]);
+        await db.query(`
+          UPDATE groups SET member_count = (SELECT COUNT(*) FROM ministry_members WHERE ministry_id = $1), updated_at = NOW() WHERE id = $1
+        `, [gId]);
+      }
+      const minNamesRes = await db.query(
+        'SELECT name FROM groups WHERE id = ANY($1::uuid[]) ORDER BY name ASC',
+        [Array.from(targetGroupIds)]
+      );
+      if (minNamesRes.rows.length > 0) {
+        await db.query('UPDATE musicians SET ministry = $1 WHERE id = $2', [minNamesRes.rows.map(r => r.name).join(', '), newMusician.id]);
+      }
+    } catch (e) {
+      console.error('Error auto-enrolling in join route:', e);
+    }
+
     // Log notification for admins
     try {
       await db.query(

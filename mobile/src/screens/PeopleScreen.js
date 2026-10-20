@@ -159,21 +159,28 @@ export default function PeopleScreen({ user, isDark = false }) {
 
     setSaving(true);
     try {
+      // Derive ministry from selected positions
+      const selPositions = positions.filter((p) =>
+        selectedRoles.some((r) => r.toLowerCase() === p.name.toLowerCase())
+      );
+      const minNames = Array.from(new Set(selPositions.map((p) => p.ministry).filter(Boolean)));
+      const derivedMinistry = minNames.length > 0 ? minNames.join(', ') : 'None';
+
       const payload = {
         name: name.trim(),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         role: role || 'member',
         roles: selectedRoles,
-        ministry: ministry,
+        ministry: derivedMinistry,
       };
 
       if (editingPerson) {
         await api.updateMusician(editingPerson.id, payload);
-        Alert.alert('Member Updated', `${name}'s roles and profile have been updated.`);
+        Alert.alert('Member Updated', `${name}'s positions and auto-enrolled ministries have been updated.`);
       } else {
         await api.createMusician(payload);
-        Alert.alert('Member Added', `${name} has been added to ChurchFlow.`);
+        Alert.alert('Member Added', `${name} has been added and enrolled into their ministries.`);
       }
 
       setIsModalOpen(false);
@@ -564,6 +571,21 @@ export default function PeopleScreen({ user, isDark = false }) {
                   <Text style={{ fontSize: 10, color: colors.subText }}>Only Admins can change user roles</Text>
                 </View>
               )}
+
+              <View style={{ marginTop: 14, padding: 10, borderRadius: 12, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.border }}>
+                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  ⚡ Auto-Enrolled Ministries
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginTop: 2 }}>
+                  {(() => {
+                    const selPositions = positions.filter((p) =>
+                      selectedRoles.some((r) => r.toLowerCase() === p.name.toLowerCase())
+                    );
+                    const minNames = Array.from(new Set(selPositions.map((p) => p.ministry).filter(Boolean)));
+                    return minNames.length > 0 ? minNames.join(', ') : 'None (Select positions below to auto-enroll)';
+                  })()}
+                </Text>
+              </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 6 }}>
                 <Text style={[styles.inputLabel, { color: colors.subText, marginTop: 0, marginBottom: 0 }]}>

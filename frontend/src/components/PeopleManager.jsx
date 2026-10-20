@@ -61,6 +61,7 @@ export default function PeopleManager({ currentUser }) {
   const [isPersonModalOpen, setIsPersonModalOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [newPositionName, setNewPositionName] = useState('');
+  const [newPosMinistryId, setNewPosMinistryId] = useState('');
   const [addingPosition, setAddingPosition] = useState(false);
   const [personForm, setPersonForm] = useState({
     name: '',
@@ -72,6 +73,12 @@ export default function PeopleManager({ currentUser }) {
     roles: [],
     notes: '',
   });
+
+  useEffect(() => {
+    if (ministries.length > 0 && !newPosMinistryId) {
+      setNewPosMinistryId(ministries[0].id);
+    }
+  }, [ministries]);
 
   useEffect(() => {
     loadData();
@@ -145,12 +152,14 @@ export default function PeopleManager({ currentUser }) {
 
     setAddingPosition(true);
     try {
+      const selectedMin = ministries.find((m) => m.id === newPosMinistryId) || ministries[0];
+      const minName = selectedMin ? selectedMin.name : 'Media Team';
       const created = await api.createPosition({
         name: trimmed,
-        ministry: personForm.ministry || 'Media Team',
-        color: '#6366f1',
+        ministry: minName,
+        ministry_id: selectedMin ? selectedMin.id : null,
       });
-      const newPos = created || { name: trimmed, ministry: personForm.ministry || 'Media Team' };
+      const newPos = created || { name: trimmed, ministry: minName, ministry_id: selectedMin ? selectedMin.id : null };
       setPositions((prev) => {
         if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
         return [...prev, newPos];
@@ -165,10 +174,11 @@ export default function PeopleManager({ currentUser }) {
       setNewPositionName('');
     } catch (err) {
       console.error('Failed to create position:', err);
-      // Fallback local append
+      const selectedMin = ministries.find((m) => m.id === newPosMinistryId) || ministries[0];
+      const minName = selectedMin ? selectedMin.name : 'Media Team';
       setPositions((prev) => {
         if (prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) return prev;
-        return [...prev, { name: trimmed, ministry: personForm.ministry || 'Media Team' }];
+        return [...prev, { name: trimmed, ministry: minName }];
       });
       setPersonForm((prev) => ({
         ...prev,
@@ -186,8 +196,16 @@ export default function PeopleManager({ currentUser }) {
       ? personForm.roles.map((r) => r.trim()).filter(Boolean)
       : [];
 
+    // Derive active ministries from selected positions
+    const selPositions = positions.filter((p) =>
+      rolesArray.some((r) => r.toLowerCase() === p.name.toLowerCase())
+    );
+    const minNames = Array.from(new Set(selPositions.map((p) => p.ministry).filter(Boolean)));
+    const derivedMinistry = minNames.length > 0 ? minNames.join(', ') : 'None';
+
     const payload = {
       ...personForm,
+      ministry: derivedMinistry,
       roles: rolesArray,
     };
 
@@ -483,7 +501,7 @@ export default function PeopleManager({ currentUser }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Status</label>
                   <select
@@ -491,23 +509,27 @@ export default function PeopleManager({ currentUser }) {
                     onChange={(e) => setPersonForm({ ...personForm, status: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                   >
-                    <option value="leader">Ministry Leader</option>
                     <option value="member">Member</option>
+                    <option value="leader">Ministry Leader</option>
                     <option value="staff">Staff / Pastor</option>
                     <option value="volunteer">Volunteer</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Ministry</label>
-                  <select
-                    value={personForm.ministry}
-                    onChange={(e) => setPersonForm({ ...personForm, ministry: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
-                  >
-                    {ministries.map((m) => (
-                      <option key={m.id} value={m.name}>{m.name}</option>
-                    ))}
-                  </select>
+
+                {/* Auto-Enrolled Ministries Banner */}
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 flex flex-col justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-300">
+                    ⚡ Auto-Enrolled Ministries
+                  </span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate mt-0.5">
+                    {(() => {
+                      const selPositions = positions.filter((p) =>
+                        (personForm.roles || []).some((r) => r.toLowerCase() === p.name.toLowerCase())
+                      );
+                      const minNames = Array.from(new Set(selPositions.map((p) => p.ministry).filter(Boolean)));
+                      return minNames.length > 0 ? minNames.join(', ') : 'None (Select positions below)';
+                    })()}
+                  </span>
                 </div>
               </div>
 
@@ -578,59 +600,77 @@ export default function PeopleManager({ currentUser }) {
                 </p>
 
                 {(() => {
-                  const posNames = positions.map((p) => ({ name: p.name, ministry: p.ministry || 'Media Team' }));
-                  const extraRoles = (personForm.roles || [])
-                    .filter((r) => !posNames.some((p) => p.name.toLowerCase() === r.toLowerCase()))
-                    .map((r) => ({ name: r, ministry: 'Custom Role' }));
-                  const allOptions = [...posNames, ...extraRoles];
+                  if (positions.length === 0) {
+                    return <div className="text-xs text-slate-400 py-3 text-center">No positions configured yet. Create positions in the Positions tab.</div>;
+                  }
 
-                  if (allOptions.length === 0) {
-                    return <div className="text-xs text-slate-400 py-2 text-center">No positions configured yet.</div>;
+                  // Group positions by parent ministry
+                  const byMinistry = {};
+                  positions.forEach((p) => {
+                    const min = p.ministry || 'Media Team';
+                    if (!byMinistry[min]) byMinistry[min] = [];
+                    byMinistry[min].push(p);
+                  });
+
+                  // Include custom extra roles if any
+                  const extraRoles = (personForm.roles || []).filter(
+                    (r) => !positions.some((p) => p.name.toLowerCase() === r.toLowerCase())
+                  );
+                  if (extraRoles.length > 0) {
+                    byMinistry['Custom Roles'] = extraRoles.map((r) => ({ id: r, name: r, ministry: 'Custom Roles' }));
                   }
 
                   return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
-                      {allOptions.map((opt) => {
-                        const isTicked = (personForm.roles || []).some(
-                          (r) => r.toLowerCase() === opt.name.toLowerCase()
-                        );
-                        return (
-                          <button
-                            key={opt.name}
-                            type="button"
-                            onClick={() => toggleRole(opt.name)}
-                            className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
-                              isTicked
-                                ? 'bg-red-50/90 dark:bg-red-950/40 border-red-400 dark:border-red-500/50 text-slate-900 dark:text-white shadow-sm'
-                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                            }`}
-                          >
-                            <span
-                              className={`w-4.5 h-4.5 rounded-md flex items-center justify-center border shrink-0 transition-colors ${
-                                isTicked
-                                  ? 'bg-red-600 border-red-600 text-white'
-                                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-transparent'
-                              }`}
-                            >
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className={`text-xs font-bold truncate ${isTicked ? 'text-red-700 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                                {opt.name}
-                              </div>
-                              <div className="text-[10px] text-slate-400 truncate">
-                                {opt.ministry}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-3.5 max-h-60 overflow-y-auto pr-1">
+                      {Object.entries(byMinistry).map(([ministryTitle, posList]) => (
+                        <div key={ministryTitle} className="space-y-1.5">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pt-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
+                            <span>{ministryTitle}</span>
+                            <span className="text-[9px] font-normal text-slate-400">({posList.length})</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {posList.map((opt) => {
+                              const isTicked = (personForm.roles || []).some(
+                                (r) => r.toLowerCase() === opt.name.toLowerCase()
+                              );
+                              return (
+                                <button
+                                  key={opt.id || opt.name}
+                                  type="button"
+                                  onClick={() => toggleRole(opt.name)}
+                                  className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isTicked
+                                      ? 'bg-red-50/90 dark:bg-red-950/40 border-red-400 dark:border-red-500/50 text-slate-900 dark:text-white shadow-sm'
+                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-4 h-4 rounded-md flex items-center justify-center border shrink-0 transition-colors ${
+                                      isTicked
+                                        ? 'bg-red-600 border-red-600 text-white'
+                                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-transparent'
+                                    }`}
+                                  >
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className={`text-xs font-bold truncate ${isTicked ? 'text-red-700 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                      {opt.name}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
 
-                {/* Inline custom position creator */}
-                <div className="flex items-center space-x-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                {/* Inline custom position creator with Ministry Selection */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                   <input
                     type="text"
                     value={newPositionName}
@@ -641,17 +681,28 @@ export default function PeopleManager({ currentUser }) {
                         handleAddNewPosition();
                       }
                     }}
-                    placeholder="Add custom position (e.g. Lead Guitar, Audio Engineer)..."
+                    placeholder="New position name..."
                     className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
                   />
+                  <select
+                    value={newPosMinistryId}
+                    onChange={(e) => setNewPosMinistryId(e.target.value)}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 cursor-pointer font-bold"
+                  >
+                    {ministries.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     onClick={handleAddNewPosition}
                     disabled={!newPositionName.trim() || addingPosition}
-                    className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold disabled:opacity-50 flex items-center space-x-1 cursor-pointer transition-colors"
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center space-x-1 cursor-pointer transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>{addingPosition ? 'Adding...' : '+ Add Position'}</span>
+                    <span>{addingPosition ? 'Adding...' : 'Add'}</span>
                   </button>
                 </div>
               </div>

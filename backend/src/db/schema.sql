@@ -109,12 +109,14 @@ CREATE TABLE IF NOT EXISTS positions_template (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL UNIQUE,
     ministry VARCHAR(100) DEFAULT 'Worship Team',
+    ministry_id UUID REFERENCES groups(id) ON DELETE SET NULL,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_positions_sort ON positions_template(sort_order);
 CREATE INDEX IF NOT EXISTS idx_positions_ministry ON positions_template(ministry);
+CREATE INDEX IF NOT EXISTS idx_positions_ministry_id ON positions_template(ministry_id);
 
 -- Songs Library (Planning Center Services Songs)
 CREATE TABLE IF NOT EXISTS songs (

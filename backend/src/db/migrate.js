@@ -74,6 +74,7 @@ async function runMigrations() {
 
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'positions_template') THEN
           ALTER TABLE positions_template ADD COLUMN IF NOT EXISTS ministry VARCHAR(100) DEFAULT 'Worship Team';
+          ALTER TABLE positions_template ADD COLUMN IF NOT EXISTS ministry_id UUID REFERENCES groups(id) ON DELETE SET NULL;
         END IF;
 
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'services') THEN
@@ -146,6 +147,16 @@ async function runMigrations() {
         message TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      CREATE INDEX IF NOT EXISTS idx_positions_ministry_id ON positions_template(ministry_id);
+
+      -- Backfill positions_template.ministry_id by matching groups.name with positions_template.ministry
+      UPDATE positions_template p
+      SET ministry_id = g.id
+      FROM groups g
+      WHERE p.ministry_id IS NULL 
+        AND g.active = true 
+        AND (LOWER(g.name) = LOWER(p.ministry) OR LOWER(g.category) = LOWER(p.ministry));
     `);
 
     // Run core schema
