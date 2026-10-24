@@ -1555,36 +1555,20 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
             <View style={styles.theaterPlayerBox}>
               <WebView
                 source={{
-                  html: `
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                        <style>
-                          * { margin: 0; padding: 0; box-sizing: border-box; }
-                          body { background: #000; overflow: hidden; }
-                          .container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-                          iframe { width: 100%; height: 100%; border: 0; }
-                        </style>
-                      </head>
-                      <body>
-                        <div class="container">
-                          <iframe
-                            src="https://www.youtube.com/embed/${liveTheaterPost.videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowfullscreen>
-                          </iframe>
-                        </div>
-                      </body>
-                    </html>
-                  `,
+                  uri: `https://serve.creativeclicks.art/live-player/${liveTheaterPost.videoId}`,
+                  headers: {
+                    Referer: 'https://serve.creativeclicks.art',
+                  },
                 }}
+                originWhitelist={['*']}
                 style={styles.theaterWebView}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
                 allowsInlineMediaPlayback={true}
                 mediaPlaybackRequiresUserAction={false}
                 allowsFullscreenVideo={true}
+                mixedContentMode="always"
+                userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               />
             </View>
           )}

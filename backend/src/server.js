@@ -85,6 +85,42 @@ app.get(['/', '/landing', '/about'], (req, res) => {
   res.sendFile(path.join(__dirname, '../public/landing.html'));
 });
 
+// Dedicated clean Live Player HTML route for mobile apps and embeds (prevents YouTube Error 153)
+app.get(['/live-player/:videoId', '/player/:videoId', '/api/live-player/:videoId'], (req, res) => {
+  const rawId = req.params.videoId || '';
+  const videoId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>Jesus My Rock Live</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+      .player-box { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+      iframe { width: 100%; height: 100%; border: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="player-box">
+      <iframe
+        id="ytplayer"
+        type="text/html"
+        src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=https://serve.creativeclicks.art"
+        frameborder="0"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen>
+      </iframe>
+    </div>
+  </body>
+</html>`);
+});
+
 // Explicit APK download route with strict no-cache headers
 app.get(['/churchflow.apk', '/churchflow-latest.apk', '/servesync.apk'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
