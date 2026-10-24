@@ -600,11 +600,21 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
         {/* Post Header */}
         <View style={styles.postHeader}>
           <View style={styles.postAuthorGroup}>
-            <View style={[styles.avatarBadge, { backgroundColor: isLiveStream ? '#dc2626' : colors.primary }]}>
-              <Text style={styles.avatarText}>
-                {isLiveStream ? '🔴' : (item.author_name || 'C').slice(0, 2).toUpperCase()}
-              </Text>
-            </View>
+            {(isLiveStream || item.author_name === 'Jesus My Rock') ? (
+              <View style={[styles.avatarBadge, styles.jmrAvatarBadge]}>
+                <Image
+                  source={require('../../assets/jmrlogo.png')}
+                  style={styles.jmrAvatarImg}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : (
+              <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.avatarText}>
+                  {(item.author_name || 'C').slice(0, 2).toUpperCase()}
+                </Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <View style={styles.authorRow}>
                 <Text style={[styles.authorName, { color: colors.text, fontWeight: isLiveStream ? '900' : '800' }]} numberOfLines={1}>
@@ -828,8 +838,13 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                 style={styles.liveHeroBanner}
               >
                 <View style={styles.liveHeroTop}>
+                  <Image
+                    source={require('../../assets/jmrlogo.png')}
+                    style={styles.liveHeroLogo}
+                    resizeMode="contain"
+                  />
                   <View style={styles.livePulseDot} />
-                  <Text style={styles.liveHeroTag}>🔴 JESUS MY ROCK IS LIVE NOW</Text>
+                  <Text style={styles.liveHeroTag}>JESUS MY ROCK • LIVE NOW</Text>
                 </View>
                 <Text style={styles.liveHeroTitle} numberOfLines={2}>
                   {liveStatus.title || 'Sunday Worship Service & Prophetic Word'}
@@ -1490,9 +1505,16 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
             </TouchableOpacity>
 
             <View style={styles.theaterTitleGroup}>
-              <View style={styles.theaterLiveBadge}>
-                <View style={styles.livePulseDot} />
-                <Text style={styles.theaterLiveBadgeText}>LIVE SERVICE</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Image
+                  source={require('../../assets/jmrlogo.png')}
+                  style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#000000' }}
+                  resizeMode="contain"
+                />
+                <View style={styles.theaterLiveBadge}>
+                  <View style={styles.livePulseDot} />
+                  <Text style={styles.theaterLiveBadgeText}>LIVE SERVICE</Text>
+                </View>
               </View>
               <Text style={styles.theaterTitleText} numberOfLines={1}>
                 {liveTheaterPost?.title || 'Jesus My Rock Live Service'}
@@ -1887,6 +1909,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  jmrAvatarBadge: {
+    backgroundColor: '#000000',
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    overflow: 'hidden',
+    shadowColor: '#ef4444',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  jmrAvatarImg: {
+    width: 38,
+    height: 38,
   },
   avatarText: {
     color: '#ffffff',
@@ -2411,6 +2448,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginBottom: 6,
+  },
+  liveHeroLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#000000',
+    marginRight: 2,
+    borderWidth: 1,
+    borderColor: '#ffffff',
   },
   livePulseDot: {
     width: 8,

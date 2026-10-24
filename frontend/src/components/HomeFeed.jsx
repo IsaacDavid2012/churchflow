@@ -518,9 +518,9 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1.5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-black tracking-wider uppercase">
-                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-                <span className="w-2.5 h-2.5 rounded-full bg-white -ml-4" />
-                🔴 JESUS MY ROCK IS LIVE NOW
+                <img src="/jmrlogo.png" alt="Jesus My Rock" className="w-4 h-4 rounded-full object-contain bg-black ring-1 ring-white/50" />
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                JESUS MY ROCK IS LIVE NOW
               </div>
               <h2 className="text-xl sm:text-2xl font-black tracking-tight">
                 {liveStatus.title || 'Sunday Worship Service & Prophetic Word'}
@@ -698,12 +698,20 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
                 {/* Post Top Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-full font-black flex items-center justify-center shrink-0 shadow-sm text-sm text-white ${
-                      isLiveStream
-                        ? 'bg-gradient-to-br from-red-600 to-rose-700 ring-2 ring-red-400'
+                    <div className={`w-10 h-10 rounded-full font-black flex items-center justify-center shrink-0 shadow-sm text-sm text-white overflow-hidden ${
+                      isLiveStream || post.author_name === 'Jesus My Rock'
+                        ? 'bg-black ring-2 ring-red-500'
                         : 'bg-gradient-to-br from-[#c59c6c] to-[#8c6738]'
                     }`}>
-                      {isLiveStream ? '🔴' : (post.author_name || 'C').slice(0, 2).toUpperCase()}
+                      {isLiveStream || post.author_name === 'Jesus My Rock' ? (
+                        <img
+                          src="/jmrlogo.png"
+                          alt="Jesus My Rock"
+                          className="w-full h-full object-contain p-0.5"
+                        />
+                      ) : (
+                        (post.author_name || 'C').slice(0, 2).toUpperCase()
+                      )}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
