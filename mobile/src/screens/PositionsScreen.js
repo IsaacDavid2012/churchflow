@@ -159,7 +159,7 @@ export default function PositionsScreen({ user, isDark = false }) {
       ) : (
         <FlatList
           data={positions}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
           renderItem={renderPositionItem}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

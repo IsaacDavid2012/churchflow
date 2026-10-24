@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from './src/api/client';
 import { registerForPushNotificationsAsync } from './src/services/fcm';
 import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import ServiceDetailScreen from './src/screens/ServiceDetailScreen';
 import PeopleScreen from './src/screens/PeopleScreen';
@@ -27,12 +28,13 @@ import MinistriesScreen from './src/screens/MinistriesScreen';
 import SongBookScreen from './src/screens/SongBookScreen';
 import ChurchScreen from './src/screens/ChurchScreen';
 import PublicConfirmScreen from './src/screens/PublicConfirmScreen';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [isDark, setIsDark] = useState(false); // Clean light mode default
-  const [activeTab, setActiveTab] = useState('services');
+  const [activeTab, setActiveTab] = useState('home');
   const [tabHistory, setTabHistory] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [publicToken, setPublicToken] = useState(null);
@@ -68,13 +70,13 @@ export default function App() {
         return true;
       }
 
-      // 4. If on another tab without history, navigate back to 'services' tab
-      if (activeTab !== 'services') {
-        setActiveTab('services');
+      // 4. If on another tab without history, navigate back to 'home' tab
+      if (activeTab !== 'home') {
+        setActiveTab('home');
         return true;
       }
 
-      // 5. At root services screen: double-tap to exit within 2 seconds
+      // 5. At root home screen: double-tap to exit within 2 seconds
       const now = Date.now();
       if (now - lastBackPressRef.current < 2000) {
         return false; // Exit app
@@ -167,7 +169,7 @@ export default function App() {
     setUser(null);
     setSelectedService(null);
     setTabHistory([]);
-    setActiveTab('services');
+    setActiveTab('home');
   };
 
   const themeColors = {
@@ -198,12 +200,18 @@ export default function App() {
       ) : !user ? (
         <LoginScreen onLoginSuccess={handleLoginSuccess} isDark={isDark} />
       ) : selectedService ? (
-        <ServiceDetailScreen
-          service={selectedService}
-          user={user}
+        <ErrorBoundary
           isDark={isDark}
-          onBack={() => setSelectedService(null)}
-        />
+          onReset={() => setSelectedService(null)}
+          onNavigateHome={() => setSelectedService(null)}
+        >
+          <ServiceDetailScreen
+            service={selectedService}
+            user={user}
+            isDark={isDark}
+            onBack={() => setSelectedService(null)}
+          />
+        </ErrorBoundary>
       ) : (
         <View style={styles.mainWrapper}>
           {/* Top Main Navigation Header */}
@@ -253,37 +261,51 @@ export default function App() {
           </View>
 
           {/* Active Tab Screen Content */}
-          <View style={styles.contentContainer}>
-            {activeTab === 'services' && (
-              <ServicesScreen
-                user={user}
-                isDark={isDark}
-                onSelectService={(s) => setSelectedService(s)}
-                onLogout={handleLogout}
-              />
-            )}
-            {activeTab === 'songbook' && (
-              <SongBookScreen
-                user={user}
-                isDark={isDark}
-                pendingSbpUri={pendingSbpUri}
-                onClearPendingSbp={() => setPendingSbpUri(null)}
-              />
-            )}
-            {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
-            {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
-            {(activeTab === 'ministries' || activeTab === 'groups') && (
-              <MinistriesScreen user={user} isDark={isDark} />
-            )}
-            {activeTab === 'church' && (
-              <ChurchScreen
-                user={user}
-                isDark={isDark}
-                onToggleTheme={handleToggleTheme}
-                onLogout={handleLogout}
-              />
-            )}
-          </View>
+          <ErrorBoundary
+            isDark={isDark}
+            onReset={() => {}}
+            onNavigateHome={() => setActiveTab('home')}
+          >
+            <View style={styles.contentContainer}>
+              {activeTab === 'home' && (
+                <HomeScreen
+                  user={user}
+                  isDark={isDark}
+                  onSelectService={(s) => setSelectedService(s)}
+                  onNavigateTab={(tab) => switchTab(tab)}
+                />
+              )}
+              {activeTab === 'services' && (
+                <ServicesScreen
+                  user={user}
+                  isDark={isDark}
+                  onSelectService={(s) => setSelectedService(s)}
+                  onLogout={handleLogout}
+                />
+              )}
+              {activeTab === 'songbook' && (
+                <SongBookScreen
+                  user={user}
+                  isDark={isDark}
+                  pendingSbpUri={pendingSbpUri}
+                  onClearPendingSbp={() => setPendingSbpUri(null)}
+                />
+              )}
+              {activeTab === 'people' && <PeopleScreen user={user} isDark={isDark} />}
+              {activeTab === 'positions' && <PositionsScreen user={user} isDark={isDark} />}
+              {(activeTab === 'ministries' || activeTab === 'groups') && (
+                <MinistriesScreen user={user} isDark={isDark} />
+              )}
+              {activeTab === 'church' && (
+                <ChurchScreen
+                  user={user}
+                  isDark={isDark}
+                  onToggleTheme={handleToggleTheme}
+                  onLogout={handleLogout}
+                />
+              )}
+            </View>
+          </ErrorBoundary>
 
           {/* Bottom Tab Bar with Ionicons */}
           <View
@@ -292,6 +314,28 @@ export default function App() {
               { backgroundColor: themeColors.navBg, borderColor: themeColors.border },
             ]}
           >
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => switchTab('home')}
+            >
+              <Ionicons
+                name={activeTab === 'home' ? 'home' : 'home-outline'}
+                size={22}
+                color={activeTab === 'home' ? themeColors.primary : themeColors.subText}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: activeTab === 'home' ? themeColors.primary : themeColors.subText,
+                    fontWeight: activeTab === 'home' ? '800' : '600',
+                  },
+                ]}
+              >
+                Home
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.tabItem}
               onPress={() => switchTab('services')}

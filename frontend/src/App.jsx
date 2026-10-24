@@ -12,6 +12,7 @@ import ChurchProfileManager from './components/ChurchProfileManager';
 import UsersManager from './components/UsersManager';
 import SongBookManager from './components/SongBookManager';
 import NotificationsFeed from './components/NotificationsFeed';
+import HomeFeed from './components/HomeFeed';
 import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
@@ -24,7 +25,7 @@ export default function App() {
     }
   });
   const [loadingAuth, setLoadingAuth] = useState(() => !localStorage.getItem('servesync_token'));
-  const [currentTab, setCurrentTab] = useState('services'); // 'services', 'people', 'users', 'groups', 'positions', 'church', 'notifications'
+  const [currentTab, setCurrentTab] = useState('home'); // 'home', 'services', 'people', 'users', 'groups', 'positions', 'church', 'notifications'
   
   // Services data
   const [services, setServices] = useState([]);
@@ -137,6 +138,16 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <ErrorBoundary onReset={() => { setSelectedServiceId(null); loadServices(); }}>
+          {currentTab === 'home' && (
+            <HomeFeed
+              currentUser={user}
+              onNavigateTab={(tab) => {
+                setCurrentTab(tab);
+                setSelectedServiceId(null);
+              }}
+            />
+          )}
+
           {currentTab === 'services' && (
             <>
               {selectedServiceId ? (

@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit strictly enforced
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit strictly enforced
 });
 
 // Helper to determine media type from extension and mime
@@ -50,13 +50,13 @@ function resolveMediaType(fileName, mimeType = '') {
 }
 
 // ========================================================
-// Media Upload (Photos, Videos, SBP, Documents <= 10MB)
+// Media Upload (Photos, Videos, SBP, Documents <= 20MB)
 // Supports multipart/form-data OR base64 payload
 // ========================================================
 router.post('/upload', requireAuth, (req, res, next) => {
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File size exceeds 10MB limit. Please upload files under 10MB.' });
+      return res.status(400).json({ error: 'File size exceeds 20MB limit. Please upload files under 20MB.' });
     } else if (err) {
       return res.status(400).json({ error: err.message });
     }
@@ -82,8 +82,8 @@ router.post('/upload', requireAuth, (req, res, next) => {
     const cleanBase64 = fileBase64.replace(/^data:.*?;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
 
-    if (buffer.length > 10 * 1024 * 1024) {
-      return res.status(400).json({ error: 'File size exceeds 10MB limit. Please upload files under 10MB.' });
+    if (buffer.length > 20 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File size exceeds 20MB limit. Please upload files under 20MB.' });
     }
 
     const mediaType = resolveMediaType(fileName, fileType);

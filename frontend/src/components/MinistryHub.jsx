@@ -42,6 +42,7 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
   const [annMedia, setAnnMedia] = useState(null);
+  const [alsoShareToHome, setAlsoShareToHome] = useState(false);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
 
   // Members State
@@ -231,17 +232,35 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
         mediaSize = uploadRes.size;
       }
 
-      await api.createMinistryAnnouncement(ministry.id, {
-        title: announcementTitle.trim() || undefined,
-        content: announcementContent.trim(),
-        media_url: mediaUrl,
-        media_type: mediaType,
-        media_name: mediaName,
-        media_size: mediaSize,
-      });
+      if (alsoShareToHome) {
+        // Cross-post to both Church Home Feed and Ministry Hub
+        await api.createFeedPost({
+          title: announcementTitle.trim() || `${ministry.name} Update`,
+          content: announcementContent.trim(),
+          post_type: 'announcement',
+          destination: 'both',
+          ministry_id: ministry.id,
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_name: mediaName,
+          media_size: mediaSize,
+          media_attachments: mediaUrl ? [{ url: mediaUrl, type: mediaType, name: mediaName, size: mediaSize }] : [],
+        });
+      } else {
+        await api.createMinistryAnnouncement(ministry.id, {
+          title: announcementTitle.trim() || undefined,
+          content: announcementContent.trim(),
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_name: mediaName,
+          media_size: mediaSize,
+        });
+      }
+
       setAnnouncementTitle('');
       setAnnouncementContent('');
       setAnnMedia(null);
+      setAlsoShareToHome(false);
       loadAnnouncements();
     } catch (err) {
       alert(err.message || 'Failed to post announcement');
@@ -483,17 +502,27 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                   </div>
                 )}
 
-                <div className="flex justify-between items-center pt-1">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-[#c59c6c] hover:bg-[#f5ede1] dark:hover:bg-slate-800 text-[#8c6738] dark:text-[#c59c6c] text-xs font-bold cursor-pointer transition-colors">
                       <Paperclip className="w-3.5 h-3.5" />
-                      <span>{annMedia ? 'Change Attachment' : 'Attach Photo/Video (<10MB)'}</span>
+                      <span>{annMedia ? 'Change Attachment' : 'Attach Photo/Video (≤20MB)'}</span>
                       <input
                         type="file"
                         accept="image/*,video/*,.sbp,.pdf"
                         className="hidden"
                         onChange={(e) => handleSelectMedia(e.target.files?.[0], 'ann')}
                       />
+                    </label>
+
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={alsoShareToHome}
+                        onChange={(e) => setAlsoShareToHome(e.target.checked)}
+                        className="rounded border-slate-300 text-[#c59c6c] focus:ring-[#c59c6c]"
+                      />
+                      <span>Also publish to Church Home Feed</span>
                     </label>
                   </div>
 
@@ -503,7 +532,7 @@ export default function MinistryHub({ ministry, currentUser, onBack }) {
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#c59c6c] hover:bg-[#b08756] text-white font-bold text-xs shadow-md shadow-[#c59c6c]/20 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{postingAnnouncement ? 'Posting...' : 'Post to Ministry'}</span>
+                    <span>{postingAnnouncement ? 'Posting...' : 'Post Announcement'}</span>
                   </button>
                 </div>
               </form>

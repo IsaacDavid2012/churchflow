@@ -475,7 +475,7 @@ export default function PeopleScreen({ user, isDark = false }) {
       ) : (
         <FlatList
           data={filteredPeople}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
           renderItem={renderPersonCard}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

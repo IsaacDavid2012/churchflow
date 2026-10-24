@@ -19,6 +19,7 @@ const publicRoutes = require('./routes/public');
 const serviceTypesRoutes = require('./routes/serviceTypes');
 const communityRoutes = require('./routes/community');
 const songbookRoutes = require('./routes/songbook');
+const feedRoutes = require('./routes/feed');
 const { startDeadlineMonitor } = require('./services/cronService');
 
 const app = express();
@@ -45,8 +46,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
@@ -138,6 +139,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/service-types', serviceTypesRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/songbook', songbookRoutes);
+app.use('/api/feed', feedRoutes);
 
 // In production, serve React frontend build for /app and SPA routes
 const frontendDist = path.join(__dirname, '../../frontend/dist');

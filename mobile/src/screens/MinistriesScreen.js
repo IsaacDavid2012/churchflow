@@ -20,6 +20,7 @@ import { api } from '../api/client';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
 import { pickMediaAttachment } from '../utils/mediaPicker';
 import MediaAttachmentCard from '../components/MediaAttachmentCard';
+import ErrorBoundary from '../components/ErrorBoundary';
 import MinistryHubScreen from './MinistryHubScreen';
 
 export default function MinistriesScreen({ user, isDark = false }) {
@@ -508,15 +509,21 @@ export default function MinistriesScreen({ user, isDark = false }) {
 
   if (selectedMinistry) {
     return (
-      <MinistryHubScreen
-        ministry={selectedMinistry}
-        user={user}
+      <ErrorBoundary
         isDark={isDark}
-        onBack={() => {
-          setSelectedMinistry(null);
-          fetchMinistries();
-        }}
-      />
+        onReset={() => setSelectedMinistry(null)}
+        onNavigateHome={() => setSelectedMinistry(null)}
+      >
+        <MinistryHubScreen
+          ministry={selectedMinistry}
+          user={user}
+          isDark={isDark}
+          onBack={() => {
+            setSelectedMinistry(null);
+            fetchMinistries();
+          }}
+        />
+      </ErrorBoundary>
     );
   }
 
@@ -640,7 +647,7 @@ export default function MinistriesScreen({ user, isDark = false }) {
           ) : (
             <FlatList
               data={filteredMinistries}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
               renderItem={renderMinistryCard}
               contentContainerStyle={styles.listContent}
               refreshing={loading}
@@ -690,7 +697,7 @@ export default function MinistriesScreen({ user, isDark = false }) {
           ) : (
             <FlatList
               data={announcements}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
               contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
               refreshing={loadingAnnouncements}
               onRefresh={fetchAnnouncements}

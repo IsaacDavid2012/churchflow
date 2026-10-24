@@ -180,6 +180,64 @@ async function runMigrations() {
       ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_name VARCHAR(255);
       ALTER TABLE general_chat_messages ADD COLUMN IF NOT EXISTS media_size INTEGER;
       ALTER TABLE general_chat_messages ALTER COLUMN message DROP NOT NULL;
+
+      -- Ensure Feed Posts, Likes, and Comments exist
+      CREATE TABLE IF NOT EXISTS feed_posts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        author_name VARCHAR(255) NOT NULL,
+        author_role VARCHAR(50) NOT NULL DEFAULT 'admin',
+        post_type VARCHAR(50) NOT NULL DEFAULT 'announcement',
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        event_date TIMESTAMPTZ,
+        event_location VARCHAR(255),
+        destination VARCHAR(50) NOT NULL DEFAULT 'home',
+        ministry_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+        media_url TEXT,
+        media_type VARCHAR(50),
+        media_name VARCHAR(255),
+        media_size INTEGER,
+        media_attachments JSONB DEFAULT '[]'::jsonb,
+        is_pinned BOOLEAN DEFAULT false,
+        likes_count INTEGER DEFAULT 0,
+        comments_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE feed_posts ADD COLUMN IF NOT EXISTS media_attachments JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE feed_posts ADD COLUMN IF NOT EXISTS event_date TIMESTAMPTZ;
+      ALTER TABLE feed_posts ADD COLUMN IF NOT EXISTS event_location VARCHAR(255);
+      ALTER TABLE feed_posts ADD COLUMN IF NOT EXISTS destination VARCHAR(50) NOT NULL DEFAULT 'home';
+      ALTER TABLE feed_posts ADD COLUMN IF NOT EXISTS ministry_id UUID REFERENCES groups(id) ON DELETE CASCADE;
+
+      CREATE TABLE IF NOT EXISTS feed_post_likes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES feed_posts(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_feed_post_like UNIQUE (post_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS feed_post_comments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES feed_posts(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_name VARCHAR(255) NOT NULL,
+        user_role VARCHAR(50) NOT NULL DEFAULT 'member',
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      -- Optional seed: migrate any legacy general_announcements into feed_posts if feed_posts is empty
+      INSERT INTO feed_posts (author_id, author_name, author_role, title, content, is_pinned, media_url, media_type, media_name, media_size, destination, created_at)
+      SELECT author_id, author_name, author_role, title, content, is_pinned, media_url, media_type, media_name, media_size, 'home', created_at
+      FROM general_announcements ga
+      WHERE NOT EXISTS (SELECT 1 FROM feed_posts fp WHERE fp.title = ga.title AND fp.created_at = ga.created_at);
+
     `);
 
     // Run core schema

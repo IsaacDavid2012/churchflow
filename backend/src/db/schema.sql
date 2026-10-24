@@ -367,3 +367,60 @@ CREATE TABLE IF NOT EXISTS general_chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_general_chat_created ON general_chat_messages(created_at ASC);
 
+-- Feed Posts (Church Social Media Timeline & Announcements - Pastors, Admins & Managers can post)
+CREATE TABLE IF NOT EXISTS feed_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    author_name VARCHAR(255) NOT NULL,
+    author_role VARCHAR(50) NOT NULL DEFAULT 'admin',
+    post_type VARCHAR(50) NOT NULL DEFAULT 'announcement', -- 'announcement', 'event', 'media', 'devotional'
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    event_date TIMESTAMPTZ,
+    event_location VARCHAR(255),
+    destination VARCHAR(50) NOT NULL DEFAULT 'home', -- 'home', 'ministry', 'both'
+    ministry_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+    media_url TEXT,
+    media_type VARCHAR(50), -- 'image', 'video', 'sbp', 'pdf'
+    media_name VARCHAR(255),
+    media_size INTEGER,
+    media_attachments JSONB DEFAULT '[]'::jsonb, -- Array of up to 10 photos/videos: [{ url, type, name, size }]
+    is_pinned BOOLEAN DEFAULT false,
+    likes_count INTEGER DEFAULT 0,
+    comments_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feed_posts_destination ON feed_posts(destination);
+CREATE INDEX IF NOT EXISTS idx_feed_posts_ministry ON feed_posts(ministry_id);
+CREATE INDEX IF NOT EXISTS idx_feed_posts_created ON feed_posts(is_pinned DESC, created_at DESC);
+
+-- Feed Post Likes (Interactive User Reactions - All registered members can like)
+CREATE TABLE IF NOT EXISTS feed_post_likes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID NOT NULL REFERENCES feed_posts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_feed_post_like UNIQUE (post_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feed_post_likes_post ON feed_post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_feed_post_likes_user ON feed_post_likes(user_id);
+
+-- Feed Post Comments (Interactive Conversation Threads - All registered members can comment)
+CREATE TABLE IF NOT EXISTS feed_post_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID NOT NULL REFERENCES feed_posts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_name VARCHAR(255) NOT NULL,
+    user_role VARCHAR(50) NOT NULL DEFAULT 'member',
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feed_post_comments_post ON feed_post_comments(post_id, created_at ASC);
+
+

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import { api } from '../api/client';
+import { api, API_BASE_URL } from '../api/client';
 
 export default function MediaAttachmentCard({
   mediaUrl,
@@ -27,9 +27,10 @@ export default function MediaAttachmentCard({
 
   if (!mediaUrl) return null;
 
+  const baseOrigin = (api?.baseUrl || API_BASE_URL || 'https://serve.creativeclicks.art/api').replace(/\/api\/?$/, '');
   const fullUrl = mediaUrl.startsWith('http')
     ? mediaUrl
-    : `${api.baseUrl.replace(/\/api\/?$/, '')}${mediaUrl.startsWith('/') ? '' : '/'}${mediaUrl}`;
+    : `${baseOrigin}${mediaUrl.startsWith('/') ? '' : '/'}${mediaUrl}`;
 
   const resolvedType = (mediaType || '').toLowerCase();
   const isImage = resolvedType === 'image' || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(mediaUrl || mediaName || '');
@@ -76,9 +77,11 @@ export default function MediaAttachmentCard({
               }
 
               await api.importSongbookBackup({
-                songs,
-                setlists,
-                scope: 'user',
+                backupData: parsed,
+                targetOwnerType: 'user',
+                strategy: 'skip',
+                createSetlist: true,
+                setlistName: mediaName ? mediaName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ') : 'Imported Setlist',
               });
 
               Alert.alert(

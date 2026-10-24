@@ -15,10 +15,13 @@ import {
   Share,
   Linking,
   BackHandler,
+  KeyboardAvoidingView,
+  PanResponder,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
@@ -100,6 +103,7 @@ export default function SongBookScreen({
   const [fullSong, setFullSong] = useState(null);
   const [loadingSong, setLoadingSong] = useState(false);
   const [isReaderOpen, setIsReaderOpen] = useState(false);
+  const [isReaderMenuOpen, setIsReaderMenuOpen] = useState(false);
   const [selectedSetlist, setSelectedSetlist] = useState(null);
 
   // Reader Controls
@@ -169,8 +173,18 @@ export default function SongBookScreen({
         api.getSongbookSetlists({ scope: scopeParam }).catch(() => []),
         api.getSongbookMe().catch(() => null),
       ]);
-      setSongs(songsRes.songs || []);
-      setSetlists(setlistsRes || []);
+      const loadedSongs = Array.isArray(songsRes?.songs)
+        ? songsRes.songs
+        : Array.isArray(songsRes)
+        ? songsRes
+        : [];
+      const loadedSetlists = Array.isArray(setlistsRes)
+        ? setlistsRes
+        : Array.isArray(setlistsRes?.setlists)
+        ? setlistsRes.setlists
+        : [];
+      setSongs(loadedSongs);
+      setSetlists(loadedSetlists);
       if (meRes) setProfile(meRes);
     } catch (err) {
       console.error('Fetch SongBook library error:', err);
@@ -185,20 +199,58 @@ export default function SongBookScreen({
     }
   }, [activeTab]);
 
+  const [swipeToast, setSwipeToast] = useState(null);
+  const swipeToastTimeoutRef = useRef(null);
+  const selectedSetlistRef = useRef(selectedSetlist);
+  const selectedSongRef = useRef(selectedSong);
+  const navigateSetlistRef = useRef(null);
+
+  useEffect(() => {
+    selectedSetlistRef.current = selectedSetlist;
+  }, [selectedSetlist]);
+
+  useEffect(() => {
+    selectedSongRef.current = selectedSong;
+  }, [selectedSong]);
+
+  const showSwipeNotice = (direction, text) => {
+    if (swipeToastTimeoutRef.current) {
+      clearTimeout(swipeToastTimeoutRef.current);
+    }
+    setSwipeToast({ direction, text });
+    swipeToastTimeoutRef.current = setTimeout(() => {
+      setSwipeToast(null);
+    }, 1500);
+  };
+
   const openSongReader = async (song, setlist = null) => {
     setSelectedSong(song);
     setSelectedSetlist(setlist);
+    selectedSongRef.current = song;
+    selectedSetlistRef.current = setlist;
     setSemitones(0);
     setIsAutoScrolling(false);
     setIsReaderOpen(true);
-    setLoadingSong(true);
+
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ y: 0, animated: false });
+    }
+
+    if (song?.content) {
+      setFullSong(song);
+      setLoadingSong(false);
+    } else {
+      setLoadingSong(true);
+    }
 
     try {
       const data = await api.getSongbookSong(song.id);
       setFullSong(data);
     } catch (err) {
       console.error('Failed to load song content:', err);
-      setFullSong(song);
+      if (!song?.content) {
+        setFullSong(song);
+      }
     } finally {
       setLoadingSong(false);
     }
@@ -220,17 +272,86 @@ export default function SongBookScreen({
     }
   };
 
-  // Next / Previous song in setlist
-  const navigateSetlist = (direction) => {
-    if (!selectedSetlist?.songs || selectedSetlist.songs.length === 0) return;
-    const currentIndex = selectedSetlist.songs.findIndex((s) => s.id === selectedSong?.id);
+  // Next / Previous song in setlist (with swipe indicator support)
+  const navigateSetlist = (direction, isSwipe = false) => {
+    const setlist = selectedSetlistRef.current || selectedSetlist;
+    const song = selectedSongRef.current || selectedSong;
+    if (!setlist?.songs || setlist.songs.length === 0) return;
+
+    const currentIndex = setlist.songs.findIndex(
+      (s) => s?.id === song?.id || (s?.id != null && s?.id == song?.id) || s?.title === song?.title
+    );
     if (currentIndex === -1) return;
 
     const nextIndex = currentIndex + direction;
-    if (nextIndex >= 0 && nextIndex < selectedSetlist.songs.length) {
-      openSongReader(selectedSetlist.songs[nextIndex], selectedSetlist);
+    if (nextIndex >= 0 && nextIndex < setlist.songs.length) {
+      const targetSong = setlist.songs[nextIndex];
+      openSongReader(targetSong, setlist);
+      if (isSwipe) {
+        showSwipeNotice(
+          direction > 0 ? 'next' : 'prev',
+          `${direction > 0 ? 'Next' : 'Previous'}: ${targetSong.title} (${nextIndex + 1}/${setlist.songs.length})`
+        );
+      }
+    } else if (isSwipe) {
+      if (direction > 0) {
+        showSwipeNotice('next', `Last song: ${song?.title || ''}`);
+      } else {
+        showSwipeNotice('prev', `First song: ${song?.title || ''}`);
+      }
     }
   };
+
+  navigateSetlistRef.current = navigateSetlist;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const setlist = selectedSetlistRef.current;
+        if (!setlist?.songs || setlist.songs.length <= 1) return false;
+        const absDx = Math.abs(gestureState.dx);
+        const absDy = Math.abs(gestureState.dy);
+        return absDx > 15 && absDx > absDy * 1.5;
+      },
+
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        const setlist = selectedSetlistRef.current;
+        if (!setlist?.songs || setlist.songs.length <= 1) return false;
+        const absDx = Math.abs(gestureState.dx);
+        const absDy = Math.abs(gestureState.dy);
+        return absDx > 18 && absDx > absDy * 1.5;
+      },
+
+      onPanResponderGrant: () => {},
+
+      onPanResponderRelease: (evt, gestureState) => {
+        const setlist = selectedSetlistRef.current;
+        if (!setlist?.songs || setlist.songs.length <= 1) return;
+
+        const dx = gestureState.dx;
+        const vx = gestureState.vx;
+        const absDx = Math.abs(dx);
+
+        const isQuickFlick = absDx > 30 && Math.abs(vx) > 0.12;
+        const isDrag = absDx > 55;
+
+        if (isQuickFlick || isDrag) {
+          if (dx < 0) {
+            // Swiped Left -> Advance to Next Song
+            navigateSetlistRef.current?.(1, true);
+          } else {
+            // Swiped Right -> Back to Previous Song
+            navigateSetlistRef.current?.(-1, true);
+          }
+        }
+      },
+
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
 
   const handleShareSetlist = async (setlist) => {
     if (!setlist) return;
@@ -251,25 +372,54 @@ export default function SongBookScreen({
     }
   };
 
-  // --- SBP WhatsApp & System File Auto-Import ---
+  // --- SBP File Picker & System File Auto-Import ---
   useEffect(() => {
     if (pendingSbpUri) {
       processIncomingSbp(pendingSbpUri);
     }
   }, [pendingSbpUri]);
 
-  const processIncomingSbp = async (uri) => {
+  const handlePickSbpFile = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['*/*', 'application/octet-stream', 'application/zip'],
+        copyToCacheDirectory: true,
+      });
+
+      if (res.canceled || res.type === 'cancel') {
+        return;
+      }
+
+      const asset = res.assets ? res.assets[0] : res;
+      if (!asset || !asset.uri) {
+        Alert.alert('File Selection', 'No file was selected.');
+        return;
+      }
+
+      await processIncomingSbp(asset.uri, asset.name);
+    } catch (err) {
+      Alert.alert('File Picker Error', err.message || 'Could not open file picker');
+    }
+  };
+
+  const processIncomingSbp = async (uri, customFileName = null) => {
     try {
       setImportingFile(true);
       let fileBase64 = null;
-      let fileName = 'WhatsApp_Import.sbp';
+      let fileName = customFileName || 'Imported.sbp';
 
       if (uri.startsWith('content://') || uri.startsWith('file://')) {
         fileBase64 = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        const segments = uri.split('/');
-        fileName = decodeURIComponent(segments[segments.length - 1] || 'Imported.sbp');
+        if (!customFileName) {
+          const segments = uri.split('/');
+          fileName = decodeURIComponent(segments[segments.length - 1] || 'Imported.sbp');
+        }
+      } else {
+        fileBase64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
       }
 
       if (!fileBase64) {
@@ -288,7 +438,7 @@ export default function SongBookScreen({
         setImportAsSetlist(Boolean(parsed.setlists?.length > 0 || parsed.songs?.length > 1));
         setIsImportModalOpen(true);
       } else {
-        Alert.alert('Import Failed', 'No valid songs or setlists were found in this file.');
+        Alert.alert('Import Notice', 'No valid songs or setlists were found in this file. Please ensure it is a valid SongBook Pro (.sbp) backup.');
       }
     } catch (err) {
       console.error('Failed to process SBP file:', err);
@@ -317,6 +467,9 @@ export default function SongBookScreen({
 
       const count = result.addedCount || parsedImportData.songs?.length || 0;
       const setName = result.createdSetlistName || (importAsSetlist ? importSetlistName : null);
+      if (importAsSetlist) {
+        setActiveTab('setlists');
+      }
       Alert.alert(
         'Import Completed 🎉',
         `Successfully imported ${count} song(s)${setName ? ` and created setlist "${setName}"` : ''} into your ${importScope === 'team' ? 'Team Library' : 'Personal Library'}!`,
@@ -342,7 +495,7 @@ export default function SongBookScreen({
   const [shareItem, setShareItem] = useState(null);
   const [shareItemType, setShareItemType] = useState('setlist');
   const [shareFormat, setShareFormat] = useState('sbp'); // 'sbp' | 'pdf'
-  const [shareTargetType, setShareTargetType] = useState('ministry_chat');
+  const [shareChannelTarget, setShareChannelTarget] = useState('chat'); // 'chat' | 'announcement'
   const [shareMinistries, setShareMinistries] = useState([]);
   const [shareSelectedMinistryId, setShareSelectedMinistryId] = useState(null);
   const [shareMessage, setShareMessage] = useState('');
@@ -352,6 +505,7 @@ export default function SongBookScreen({
     setShareItem(item);
     setShareItemType(type);
     setShareFormat(defaultFormat);
+    setShareChannelTarget('chat');
     setShareMessage('');
     setIsShareToMinistryOpen(true);
 
@@ -359,7 +513,11 @@ export default function SongBookScreen({
       const data = await api.getMinistries();
       const list = Array.isArray(data) ? data : [];
       setShareMinistries(list);
-      if (list.length > 0 && !shareSelectedMinistryId) {
+      // Auto-select Media Team if available, or first ministry
+      const mediaTeam = list.find((m) => (m.name || '').toLowerCase().includes('media'));
+      if (mediaTeam) {
+        setShareSelectedMinistryId(mediaTeam.id);
+      } else if (list.length > 0) {
         setShareSelectedMinistryId(list[0].id);
       }
     } catch (e) {
@@ -369,29 +527,41 @@ export default function SongBookScreen({
 
   const handleConfirmShareToMinistry = async () => {
     if (!shareItem) return;
-    if (['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && !shareSelectedMinistryId) {
-      Alert.alert('Selection Required', 'Please select a ministry target.');
-      return;
+
+    let targetType = 'ministry_chat';
+    let ministryId = shareSelectedMinistryId;
+
+    if (shareSelectedMinistryId === 'general') {
+      targetType = shareChannelTarget === 'chat' ? 'general_chat' : 'general_announcement';
+      ministryId = undefined;
+    } else {
+      if (!shareSelectedMinistryId) {
+        Alert.alert('Selection Required', 'Please select a ministry hub to send to.');
+        return;
+      }
+      targetType = shareChannelTarget === 'chat' ? 'ministry_chat' : 'ministry_announcement';
     }
 
     setSharingToMinistry(true);
     try {
       const isSetlist = shareItemType === 'setlist';
       await api.shareSongbookToMinistry({
-        targetType: shareTargetType,
-        ministryId: shareSelectedMinistryId,
+        targetType,
+        ministryId,
         format: shareFormat,
         setlistId: isSetlist ? shareItem.id : undefined,
         songId: !isSetlist ? shareItem.id : undefined,
         message: shareMessage.trim(),
       });
 
+      const targetMinistryObj = shareMinistries.find((m) => m.id === shareSelectedMinistryId);
+      const targetName = shareSelectedMinistryId === 'general' ? 'General Church' : (targetMinistryObj?.name || 'Ministry Hub');
+      const channelLabel = shareChannelTarget === 'chat' ? 'Team Chat' : 'Announcements';
+
       setIsShareToMinistryOpen(false);
       Alert.alert(
         'Shared Successfully! 🎉',
-        `The ${shareFormat.toUpperCase()} has been sent into ${
-          shareTargetType.includes('general') ? 'General Church' : 'Ministry Hub'
-        }. Members can tap directly to view or import into their personal library.`
+        `The ${shareFormat.toUpperCase()} file has been posted into ${targetName} (${channelLabel}). Volunteers can view or import it immediately.`
       );
     } catch (err) {
       Alert.alert('Share Failed', err.response?.data?.error || err.message || 'Could not share to ministry');
@@ -434,6 +604,10 @@ export default function SongBookScreen({
       const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+
+      if (downloadRes.status && downloadRes.status >= 400) {
+        throw new Error(`Export failed (server responded with status ${downloadRes.status})`);
+      }
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(downloadRes.uri, {
@@ -764,7 +938,8 @@ export default function SongBookScreen({
     }
   };
 
-  const filteredSongs = songs.filter((s) => {
+  const filteredSongs = (Array.isArray(songs) ? songs : []).filter((s) => {
+    if (!s) return false;
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
@@ -868,20 +1043,32 @@ export default function SongBookScreen({
             </Text>
           </View>
 
-          {/* Add Song / New Setlist Button */}
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={() => {
-              if (activeTab === 'setlists') {
-                openNewSetlistModal();
-              } else {
-                setIsAddSongModalOpen(true);
-              }
-            }}
-          >
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>{activeTab === 'setlists' ? 'New Setlist' : 'New Song'}</Text>
-          </TouchableOpacity>
+          {/* Action Buttons: Import SBP & Add Song / Setlist */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={[styles.importHeaderBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+              onPress={handlePickSbpFile}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
+              <Text style={[styles.importHeaderBtnText, { color: colors.primary }]}>Import .sbp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (activeTab === 'setlists') {
+                  openNewSetlistModal();
+                } else {
+                  setIsAddSongModalOpen(true);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>{activeTab === 'setlists' ? 'New Setlist' : 'New Song'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 4-Tab Scope Bar */}
@@ -892,7 +1079,7 @@ export default function SongBookScreen({
           >
             <Ionicons name="person" size={14} color={activeTab === 'user' ? colors.primary : colors.subText} />
             <Text style={[styles.tabBtnText, { color: activeTab === 'user' ? colors.primary : colors.subText }]}>
-              My Songs ({profile?.personalSongCount || songs.length})
+              My Songs ({profile?.personalSongCount ?? (Array.isArray(songs) ? songs.length : 0)})
             </Text>
           </TouchableOpacity>
 
@@ -1045,18 +1232,30 @@ export default function SongBookScreen({
         /* Setlists Tab */
         <FlatList
           data={setlists}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, idx) => (item?.id != null ? item.id.toString() : idx.toString())}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
-            <TouchableOpacity
-              style={[styles.createSetlistBanner, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
-              onPress={openNewSetlistModal}
-            >
-              <Ionicons name="add-circle" size={20} color={colors.primary} />
-              <Text style={[styles.createSetlistBannerText, { color: colors.primary }]}>
-                Create New Worship Setlist
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[styles.createSetlistBanner, { flex: 1, backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+                onPress={openNewSetlistModal}
+              >
+                <Ionicons name="add-circle" size={18} color={colors.primary} />
+                <Text style={[styles.createSetlistBannerText, { color: colors.primary }]}>
+                  New Setlist
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.createSetlistBanner, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.border }]}
+                onPress={handlePickSbpFile}
+              >
+                <Ionicons name="cloud-upload" size={18} color={colors.primary} />
+                <Text style={[styles.createSetlistBannerText, { color: colors.text }]}>
+                  Import .sbp
+                </Text>
+              </TouchableOpacity>
+            </View>
           }
           renderItem={({ item }) => {
             const count = Array.isArray(item.songIds)
@@ -1161,6 +1360,13 @@ export default function SongBookScreen({
             <View style={styles.emptyState}>
               <Ionicons name="folder-open-outline" size={48} color={colors.subText} />
               <Text style={[styles.emptyText, { color: colors.text }]}>No setlists found</Text>
+              <TouchableOpacity
+                style={[styles.importHeaderBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight, marginTop: 12 }]}
+                onPress={handlePickSbpFile}
+              >
+                <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
+                <Text style={[styles.importHeaderBtnText, { color: colors.primary }]}>Import .sbp Backup</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -1168,7 +1374,7 @@ export default function SongBookScreen({
         /* Songs Tab (User / Team) */
         <FlatList
           data={filteredSongs}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, idx) => (item?.id != null ? item.id.toString() : idx.toString())}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -1192,7 +1398,25 @@ export default function SongBookScreen({
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="musical-notes-outline" size={48} color={colors.subText} />
-              <Text style={[styles.emptyText, { color: colors.text }]}>No songs found</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>
+                {search ? 'No matching songs found' : 'Your song library is empty'}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.importHeaderBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                  onPress={handlePickSbpFile}
+                >
+                  <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
+                  <Text style={[styles.importHeaderBtnText, { color: colors.primary }]}>Import .sbp</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setIsAddSongModalOpen(true)}
+                >
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.addBtnText}>Add Song</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           }
         />
@@ -1201,195 +1425,282 @@ export default function SongBookScreen({
       {/* Full-Screen Stage Reader Modal */}
       <Modal visible={isReaderOpen} animationType="slide" onRequestClose={() => setIsReaderOpen(false)}>
         <SafeAreaView style={[styles.readerContainer, { backgroundColor: colors.bg }]}>
-          {/* Header */}
-          <View style={[styles.readerHeader, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={[styles.readerTitle, { color: colors.text }]} numberOfLines={1}>
-                {fullSong?.title || selectedSong?.title}
-              </Text>
-              <Text style={[styles.readerArtist, { color: colors.subText }]} numberOfLines={1}>
-                {fullSong?.artist || selectedSong?.artist}
-                {selectedSetlist ? ` • Setlist (${selectedSetlist.songs.findIndex((s) => s.id === selectedSong?.id) + 1}/${selectedSetlist.songs.length})` : ''}
-              </Text>
-            </View>
-
-            {/* Setlist Prev / Next */}
-            {selectedSetlist?.songs && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 }}>
-                <TouchableOpacity onPress={() => navigateSetlist(-1)} style={styles.navBtn}>
-                  <Ionicons name="chevron-back" size={20} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigateSetlist(1)} style={styles.navBtn}>
-                  <Ionicons name="chevron-forward" size={20} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {selectedSetlist && (
-              <TouchableOpacity
-                onPress={() => handleShareSetlist(selectedSetlist)}
-                style={{ padding: 6, marginRight: 6 }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="share-social-outline" size={22} color="#16a34a" />
-              </TouchableOpacity>
-            )}
-
+          {/* Streamlined Top Navigation Bar */}
+          <View style={[styles.slimReaderHeader, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
             <TouchableOpacity
               onPress={() => {
                 setIsAutoScrolling(false);
                 setIsReaderOpen(false);
               }}
-              style={styles.closeBtn}
+              style={styles.slimBackBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close-circle" size={28} color={colors.subText} />
+              <Ionicons name="arrow-back" size={22} color={colors.text} />
+            </TouchableOpacity>
+
+            <View style={{ flex: 1, paddingHorizontal: 6 }}>
+              <Text style={[styles.slimReaderTitle, { color: colors.text }]} numberOfLines={1}>
+                {fullSong?.title || selectedSong?.title}
+              </Text>
+              <Text style={[styles.slimReaderArtist, { color: colors.subText }]} numberOfLines={1}>
+                {fullSong?.artist || selectedSong?.artist || 'Unknown Artist'}
+                {selectedSetlist && Array.isArray(selectedSetlist.songs)
+                  ? ` • Song ${selectedSetlist.songs.findIndex((s) => s?.id === selectedSong?.id || s?.title === selectedSong?.title) + 1}/${selectedSetlist.songs.length} (Swipe ◄ ►)`
+                  : ''}
+              </Text>
+            </View>
+
+            {/* Setlist Prev / Next */}
+            {selectedSetlist?.songs && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: 4 }}>
+                <TouchableOpacity onPress={() => navigateSetlist(-1)} style={styles.slimNavBtn}>
+                  <Ionicons name="chevron-back" size={18} color={colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigateSetlist(1)} style={styles.slimNavBtn}>
+                  <Ionicons name="chevron-forward" size={18} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Auto-Scroll Toggle */}
+            <TouchableOpacity
+              onPress={() => setIsAutoScrolling(!isAutoScrolling)}
+              style={[styles.slimScrollBtn, { backgroundColor: isAutoScrolling ? '#ef4444' : colors.primaryLight }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name={isAutoScrolling ? 'pause' : 'play'} size={14} color={isAutoScrolling ? '#fff' : colors.primary} />
+            </TouchableOpacity>
+
+            {/* Action Menu (...) */}
+            <TouchableOpacity
+              onPress={() => setIsReaderMenuOpen(true)}
+              style={styles.slimMenuBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          {/* Controls Toolbar */}
-          <View style={[styles.readerToolbar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-            {/* Transpose Widget */}
-            <View style={styles.transposeWidget}>
+          {/* Compact Quick-Controls Strip */}
+          <View style={[styles.slimControlsStrip, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            {/* Transpose Controls */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <TouchableOpacity
                 onPress={() => setSemitones((prev) => prev - 1)}
-                style={[styles.tBtn, { borderColor: colors.border }]}
+                style={[styles.slimTBtn, { borderColor: colors.border }]}
               >
-                <Text style={[styles.tBtnText, { color: colors.text }]}>♭ -1</Text>
+                <Text style={[styles.slimTBtnText, { color: colors.text }]}>♭</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={() => setSemitones(0)}
-                style={[styles.tPill, { backgroundColor: colors.primaryLight }]}
+                style={[styles.slimKeyPill, { backgroundColor: colors.primaryLight }]}
               >
-                <Text style={[styles.tPillText, { color: colors.primary }]}>
-                  {semitones === 0 ? `Key: ${currentKey}` : `${semitones > 0 ? '+' : ''}${semitones} (${currentKey})`}
+                <Text style={[styles.slimKeyPillText, { color: colors.primary }]}>
+                  {currentKey} {semitones !== 0 ? `(${semitones > 0 ? '+' : ''}${semitones})` : ''}
                 </Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={() => setSemitones((prev) => prev + 1)}
-                style={[styles.tBtn, { borderColor: colors.border }]}
+                style={[styles.slimTBtn, { borderColor: colors.border }]}
               >
-                <Text style={[styles.tBtnText, { color: colors.text }]}>♯ +1</Text>
+                <Text style={[styles.slimTBtnText, { color: colors.text }]}>♯</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Font & Auto-Scroll */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Font Size +/- */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <TouchableOpacity
                 onPress={() => setFontSize((s) => Math.max(12, s - 1))}
-                style={[styles.iconBtnSmall, { borderColor: colors.border }]}
+                style={[styles.slimFontBtn, { borderColor: colors.border }]}
               >
-                <Ionicons name="remove" size={14} color={colors.text} />
+                <Text style={[styles.slimFontBtnText, { color: colors.text }]}>A-</Text>
               </TouchableOpacity>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>{fontSize}</Text>
               <TouchableOpacity
-                onPress={() => setFontSize((s) => Math.min(24, s + 1))}
-                style={[styles.iconBtnSmall, { borderColor: colors.border }]}
+                onPress={() => setFontSize((s) => Math.min(26, s + 1))}
+                style={[styles.slimFontBtn, { borderColor: colors.border }]}
               >
-                <Ionicons name="add" size={14} color={colors.text} />
+                <Text style={[styles.slimFontBtnText, { color: colors.text }]}>A+</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Action Icons: PDF, SBP, Hub */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={() => handleExportPdf(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+                style={[styles.slimActionIconBtn, { backgroundColor: '#e0f2fe' }]}
+              >
+                <Ionicons name="document-text" size={13} color="#0284c7" />
+                <Text style={[styles.slimActionIconText, { color: '#0284c7' }]}>PDF</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setIsAutoScrolling(!isAutoScrolling)}
-                style={[styles.autoScrollBtn, { backgroundColor: isAutoScrolling ? '#ef4444' : colors.primary }]}
+                onPress={() => handleExportSbp(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+                style={[styles.slimActionIconBtn, { backgroundColor: colors.primaryLight }]}
               >
-                <Ionicons name={isAutoScrolling ? 'pause' : 'play'} size={14} color="#fff" />
-                <Text style={styles.autoScrollBtnText}>{isAutoScrolling ? 'Stop' : 'Scroll'}</Text>
+                <Ionicons name="share-outline" size={13} color={colors.primary} />
+                <Text style={[styles.slimActionIconText, { color: colors.primary }]}>SBP</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openShareToMinistryModal(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
+                style={[styles.slimActionIconBtn, { backgroundColor: '#f3e8ff' }]}
+              >
+                <Ionicons name="chatbubbles" size={13} color="#9333ea" />
+                <Text style={[styles.slimActionIconText, { color: '#9333ea' }]}>Hub</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Action Row: Export SBP, Export PDF, Copy & Delete */}
-          {selectedSong && (
+          {/* Sheet Body with Left/Right Swipe Navigation for Setlists */}
+          <View style={{ flex: 1 }} {...panResponder.panHandlers}>
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[styles.actionRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
+              ref={scrollRef}
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetContent}
+              onScroll={(e) => {
+                scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
             >
-              {/* Export SBP */}
-              <TouchableOpacity
-                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
-                onPress={() => handleExportSbp(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
-              >
-                <Ionicons name="share-outline" size={14} color={colors.primary} />
-                <Text style={[styles.actionChipText, { color: colors.primary }]}>
-                  {selectedSetlist ? 'Export Set .sbp' : 'Export .sbp'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Export PDF */}
-              <TouchableOpacity
-                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
-                onPress={() => handleExportPdf(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
-              >
-                <Ionicons name="document-text-outline" size={14} color="#0284c7" />
-                <Text style={[styles.actionChipText, { color: '#0284c7' }]}>
-                  {selectedSetlist ? 'Export Set PDF' : 'Export PDF'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Send to Hub / Chat */}
-              <TouchableOpacity
-                style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
-                onPress={() => openShareToMinistryModal(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song')}
-              >
-                <Ionicons name="chatbubbles-outline" size={14} color="#9333ea" />
-                <Text style={[styles.actionChipText, { color: '#9333ea' }]}>
-                  Send to Hub / Chat
-                </Text>
-              </TouchableOpacity>
-
-              {/* Copy between scopes */}
-              {selectedSong.ownerType === 'team' ? (
-                <TouchableOpacity
-                  style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
-                  onPress={() => handleCopySong(selectedSong.id, 'user')}
-                >
-                  <Ionicons name="copy-outline" size={14} color={colors.subText} />
-                  <Text style={[styles.actionChipText, { color: colors.subText }]}>Copy to My Songs</Text>
-                </TouchableOpacity>
+              {loadingSong ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ marginTop: 8, fontSize: 12, color: colors.subText }}>Loading chords...</Text>
+                </View>
               ) : (
-                <TouchableOpacity
-                  style={[styles.actionChip, { backgroundColor: colors.inputBg }]}
-                  onPress={() => handleCopySong(selectedSong.id, 'team')}
-                >
-                  <Ionicons name="share-social-outline" size={14} color={colors.subText} />
-                  <Text style={[styles.actionChipText, { color: colors.subText }]}>Copy to Team</Text>
-                </TouchableOpacity>
+                renderChordProLines(fullSong?.content || selectedSong?.content)
               )}
-
-              {/* Delete Song */}
-              <TouchableOpacity
-                style={[styles.actionChip, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
-                onPress={() => handleDeleteSong(selectedSong.id)}
-              >
-                <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                <Text style={[styles.actionChipText, { color: '#ef4444' }]}>Delete</Text>
-              </TouchableOpacity>
             </ScrollView>
-          )}
 
-          {/* Sheet Body */}
-          <ScrollView
-            ref={scrollRef}
-            style={styles.sheetScroll}
-            contentContainerStyle={styles.sheetContent}
-            onScroll={(e) => {
-              scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
-            }}
-            scrollEventThrottle={16}
-          >
-            {loadingSong ? (
-              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={{ marginTop: 8, fontSize: 12, color: colors.subText }}>Loading chords...</Text>
+            {/* Floating Swipe Feedback Banner */}
+            {swipeToast && (
+              <View style={styles.swipeToastContainer} pointerEvents="none">
+                <View style={[styles.swipeToastPill, { backgroundColor: isDark ? '#1e293b' : '#0f172a' }]}>
+                  <Ionicons
+                    name={swipeToast.direction === 'next' ? 'arrow-forward-circle' : 'arrow-back-circle'}
+                    size={16}
+                    color="#c59c6c"
+                  />
+                  <Text style={styles.swipeToastText}>{swipeToast.text}</Text>
+                </View>
               </View>
-            ) : (
-              renderChordProLines(fullSong?.content || selectedSong?.content)
             )}
-          </ScrollView>
+          </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* Reader Action Sheet Modal */}
+      <Modal
+        visible={isReaderMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsReaderMenuOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.readerMenuBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsReaderMenuOpen(false)}
+        >
+          <View style={[styles.readerMenuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={[styles.readerMenuTitle, { color: colors.text }]}>Song Options</Text>
+              <TouchableOpacity onPress={() => setIsReaderMenuOpen(false)}>
+                <Ionicons name="close" size={20} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Export 2-Column PDF */}
+            <TouchableOpacity
+              style={styles.readerMenuItem}
+              onPress={() => {
+                setIsReaderMenuOpen(false);
+                handleExportPdf(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song');
+              }}
+            >
+              <Ionicons name="document-text-outline" size={20} color="#0284c7" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.readerMenuItemText, { color: colors.text }]}>Export 2-Column PDF</Text>
+                <Text style={{ fontSize: 11, color: colors.subText }}>Printable high-contrast chord charts booklet</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Export .sbp */}
+            <TouchableOpacity
+              style={styles.readerMenuItem}
+              onPress={() => {
+                setIsReaderMenuOpen(false);
+                handleExportSbp(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song');
+              }}
+            >
+              <Ionicons name="share-outline" size={20} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.readerMenuItemText, { color: colors.text }]}>Export .sbp Archive</Text>
+                <Text style={{ fontSize: 11, color: colors.subText }}>SongBook Pro format with 1-tap import</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Send to Ministry Hub */}
+            <TouchableOpacity
+              style={styles.readerMenuItem}
+              onPress={() => {
+                setIsReaderMenuOpen(false);
+                openShareToMinistryModal(selectedSetlist || selectedSong, selectedSetlist ? 'setlist' : 'song');
+              }}
+            >
+              <Ionicons name="chatbubbles-outline" size={20} color="#9333ea" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.readerMenuItemText, { color: colors.text }]}>Send to Ministry Hub / Chat</Text>
+                <Text style={{ fontSize: 11, color: colors.subText }}>Post directly to Media Team, Worship Team, etc.</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Copy between scopes */}
+            {selectedSong?.ownerType === 'team' ? (
+              <TouchableOpacity
+                style={styles.readerMenuItem}
+                onPress={() => {
+                  setIsReaderMenuOpen(false);
+                  handleCopySong(selectedSong.id, 'user');
+                }}
+              >
+                <Ionicons name="copy-outline" size={20} color={colors.subText} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.readerMenuItemText, { color: colors.text }]}>Copy to My Songs</Text>
+                  <Text style={{ fontSize: 11, color: colors.subText }}>Save an editable copy to your personal library</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.readerMenuItem}
+                onPress={() => {
+                  setIsReaderMenuOpen(false);
+                  handleCopySong(selectedSong.id, 'team');
+                }}
+              >
+                <Ionicons name="share-social-outline" size={20} color={colors.subText} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.readerMenuItemText, { color: colors.text }]}>Copy to Team Library</Text>
+                  <Text style={{ fontSize: 11, color: colors.subText }}>Share this chord chart with the whole worship team</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete Song */}
+            <TouchableOpacity
+              style={[styles.readerMenuItem, { borderBottomWidth: 0 }]}
+              onPress={() => {
+                setIsReaderMenuOpen(false);
+                handleDeleteSong(selectedSong.id);
+              }}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.readerMenuItemText, { color: '#ef4444' }]}>Delete Song</Text>
+                <Text style={{ fontSize: 11, color: colors.subText }}>Remove from this library</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Add New Song Modal */}
@@ -1849,11 +2160,12 @@ export default function SongBookScreen({
             </View>
 
             <FlatList
-              data={songs.filter((s) => {
+              data={(Array.isArray(songs) ? songs : []).filter((s) => {
+                if (!s) return false;
                 const q = pickerSearch.trim().toLowerCase();
                 return !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q);
               })}
-              keyExtractor={(s) => s.id.toString()}
+              keyExtractor={(s, idx) => (s?.id != null ? s.id.toString() : idx.toString())}
               renderItem={({ item }) => {
                 const alreadyAdded = setlistBuilderSongs.some((s) => s.id === item.id);
                 return (
@@ -1893,7 +2205,7 @@ export default function SongBookScreen({
         </View>
       </Modal>
 
-      {/* Send to Ministry Hub / Chat Modal */}
+      {/* Send to Ministry Hub Modal */}
       <Modal
         visible={isShareToMinistryOpen}
         animationType="slide"
@@ -1908,15 +2220,15 @@ export default function SongBookScreen({
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Ionicons name="paper-plane" size={18} color={colors.primary} />
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Send to Ministry Hub / Chat</Text>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Export to Ministry Hub</Text>
               </View>
               <TouchableOpacity onPress={() => setIsShareToMinistryOpen(false)}>
                 <Ionicons name="close" size={22} color={colors.subText} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              {/* Item Info */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+              {/* Item Info Banner */}
               <View style={{ padding: 10, borderRadius: 10, backgroundColor: colors.inputBg, marginBottom: 12 }}>
                 <Text style={{ fontSize: 11, color: colors.subText, textTransform: 'uppercase', fontWeight: '800' }}>
                   {shareItemType === 'setlist' ? 'Worship Setlist' : 'Song Chord Chart'}
@@ -1926,14 +2238,105 @@ export default function SongBookScreen({
                 </Text>
               </View>
 
-              {/* Format Selection */}
-              <Text style={[styles.inputLabel, { color: colors.subText }]}>Export Format</Text>
+              {/* STEP 1: Select Ministry Hub */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>1. SELECT MINISTRY HUB</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 12 }}
+              >
+                {shareMinistries.map((m) => {
+                  const isSelected = shareSelectedMinistryId === m.id;
+                  const isMedia = (m.name || '').toLowerCase().includes('media');
+                  const isWorship = (m.name || '').toLowerCase().includes('worship');
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[
+                        styles.ministryCardPill,
+                        isSelected && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                        { borderColor: colors.border, backgroundColor: colors.card },
+                      ]}
+                      onPress={() => setShareSelectedMinistryId(m.id)}
+                    >
+                      <Ionicons
+                        name={isMedia ? 'videocam' : isWorship ? 'musical-notes' : 'people'}
+                        size={16}
+                        color={isSelected ? colors.primary : colors.subText}
+                      />
+                      <Text style={[styles.ministryCardPillText, { color: isSelected ? colors.primary : colors.text }]}>
+                        {m.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* Option for General Church */}
+                <TouchableOpacity
+                  style={[
+                    styles.ministryCardPill,
+                    shareSelectedMinistryId === 'general' && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                    { borderColor: colors.border, backgroundColor: colors.card },
+                  ]}
+                  onPress={() => setShareSelectedMinistryId('general')}
+                >
+                  <Ionicons
+                    name="home"
+                    size={16}
+                    color={shareSelectedMinistryId === 'general' ? colors.primary : colors.subText}
+                  />
+                  <Text style={[styles.ministryCardPillText, { color: shareSelectedMinistryId === 'general' ? colors.primary : colors.text }]}>
+                    General Church
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+
+              {/* STEP 2: Select Channel (Chat vs Announcement) */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>2. DESTINATION CHANNEL</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.channelChoiceCard,
+                    shareChannelTarget === 'chat' && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                    { borderColor: colors.border, backgroundColor: colors.card },
+                  ]}
+                  onPress={() => setShareChannelTarget('chat')}
+                >
+                  <Ionicons name="chatbubbles" size={20} color={shareChannelTarget === 'chat' ? colors.primary : colors.subText} />
+                  <Text style={[styles.channelChoiceTitle, { color: shareChannelTarget === 'chat' ? colors.primary : colors.text }]}>
+                    Team Chat
+                  </Text>
+                  <Text style={[styles.channelChoiceSub, { color: colors.subText }]}>
+                    Discussion & live rehearsal space
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.channelChoiceCard,
+                    shareChannelTarget === 'announcement' && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                    { borderColor: colors.border, backgroundColor: colors.card },
+                  ]}
+                  onPress={() => setShareChannelTarget('announcement')}
+                >
+                  <Ionicons name="megaphone" size={20} color={shareChannelTarget === 'announcement' ? colors.primary : colors.subText} />
+                  <Text style={[styles.channelChoiceTitle, { color: shareChannelTarget === 'announcement' ? colors.primary : colors.text }]}>
+                    Announcement
+                  </Text>
+                  <Text style={[styles.channelChoiceSub, { color: colors.subText }]}>
+                    Classroom stream & permanent feed
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* STEP 3: Format Selection */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>3. EXPORT FORMAT</Text>
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                 <TouchableOpacity
                   style={[
                     styles.shareOptionCard,
                     shareFormat === 'sbp' && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-                    { borderColor: colors.border },
+                    { borderColor: colors.border, backgroundColor: colors.card },
                   ]}
                   onPress={() => setShareFormat('sbp')}
                 >
@@ -1950,94 +2353,30 @@ export default function SongBookScreen({
                   style={[
                     styles.shareOptionCard,
                     shareFormat === 'pdf' && { borderColor: '#0284c7', backgroundColor: isDark ? '#082f49' : '#e0f2fe' },
-                    { borderColor: colors.border },
+                    { borderColor: colors.border, backgroundColor: colors.card },
                   ]}
                   onPress={() => setShareFormat('pdf')}
                 >
                   <Ionicons name="document-text" size={18} color={shareFormat === 'pdf' ? '#0284c7' : colors.subText} />
                   <Text style={[styles.shareOptionTitle, { color: shareFormat === 'pdf' ? '#0284c7' : colors.text }]}>
-                    Lead Sheet PDF
+                    2-Column PDF
                   </Text>
                   <Text style={[styles.shareOptionSub, { color: colors.subText }]}>
-                    Printable high-contrast chord charts & lyrics booklet
+                    Clean 2-column printable lead sheet booklet
                   </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Target Type */}
-              <Text style={[styles.inputLabel, { color: colors.subText }]}>Destination Channel</Text>
-              <View style={{ gap: 6, marginBottom: 12 }}>
-                {[
-                  { key: 'ministry_chat', label: 'Ministry Team Chat', icon: 'chatbubbles', desc: 'Post to ministry volunteers chat space' },
-                  { key: 'ministry_announcement', label: 'Ministry Hub Announcement', icon: 'megaphone', desc: 'Post to ministry classroom stream' },
-                  { key: 'general_chat', label: 'General Church Chat', icon: 'people', desc: 'Post to whole-church general chat' },
-                  { key: 'general_announcement', label: 'General Church Announcement', icon: 'radio', desc: 'Official announcement (pastors/admins)' },
-                ].map((target) => (
-                  <TouchableOpacity
-                    key={target.key}
-                    style={[
-                      styles.targetRadioItem,
-                      shareTargetType === target.key && { borderColor: colors.primary, backgroundColor: colors.inputBg },
-                      { borderColor: colors.border },
-                    ]}
-                    onPress={() => setShareTargetType(target.key)}
-                  >
-                    <Ionicons
-                      name={shareTargetType === target.key ? 'radio-button-on' : 'radio-button-off'}
-                      size={18}
-                      color={shareTargetType === target.key ? colors.primary : colors.subText}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.targetRadioTitle, { color: colors.text }]}>{target.label}</Text>
-                      <Text style={[styles.targetRadioDesc, { color: colors.subText }]}>{target.desc}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Ministry Selector (if ministry target selected) */}
-              {['ministry_chat', 'ministry_announcement'].includes(shareTargetType) && (
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={[styles.inputLabel, { color: colors.subText }]}>Select Ministry</Text>
-                  {shareMinistries.length === 0 ? (
-                    <Text style={{ fontSize: 12, color: colors.subText, fontStyle: 'italic' }}>
-                      Loading ministries...
-                    </Text>
-                  ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', gap: 6 }}>
-                      {shareMinistries.map((m) => {
-                        const isSelected = shareSelectedMinistryId === m.id;
-                        return (
-                          <TouchableOpacity
-                            key={m.id}
-                            style={[
-                              styles.ministryPill,
-                              isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                              { borderColor: colors.border, backgroundColor: colors.inputBg },
-                            ]}
-                            onPress={() => setShareSelectedMinistryId(m.id)}
-                          >
-                            <Text style={[styles.ministryPillText, { color: isSelected ? '#ffffff' : colors.text }]}>
-                              {m.name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-                </View>
-              )}
-
-              {/* Optional Message */}
-              <Text style={[styles.inputLabel, { color: colors.subText }]}>Caption / Note (Optional)</Text>
+              {/* Optional Caption */}
+              <Text style={[styles.inputLabel, { color: colors.subText }]}>4. NOTE / CAPTION (OPTIONAL)</Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border, minHeight: 60, textAlignVertical: 'top' },
+                  { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border, minHeight: 54, textAlignVertical: 'top' },
                 ]}
                 value={shareMessage}
                 onChangeText={setShareMessage}
-                placeholder="e.g. Here is this Sunday's worship setlist for rehearsal!"
+                placeholder="e.g. Chords for this Sunday 10am Service!"
                 placeholderTextColor={colors.subText}
                 multiline
               />
@@ -2059,7 +2398,9 @@ export default function SongBookScreen({
                 {sharingToMinistry ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>Send to Hub / Chat</Text>
+                  <Text style={styles.saveBtnText}>
+                    Send to {shareSelectedMinistryId === 'general' ? 'General Church' : (shareMinistries.find((m) => m.id === shareSelectedMinistryId)?.name || 'Ministry')}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -2711,5 +3052,241 @@ const styles = StyleSheet.create({
   ministryPillText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 12,
+  },
+  input: {
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  saveBtn: {
+    flex: 2,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  importHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  importHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  slimReaderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  slimBackBtn: {
+    padding: 6,
+    marginRight: 2,
+  },
+  slimReaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  slimReaderArtist: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  slimNavBtn: {
+    padding: 5,
+    borderRadius: 6,
+  },
+  slimScrollBtn: {
+    padding: 7,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  slimMenuBtn: {
+    padding: 6,
+    marginLeft: 2,
+  },
+  slimControlsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  slimTBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  slimTBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  slimKeyPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  slimKeyPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  slimFontBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  slimFontBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  slimActionIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  slimActionIconText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  readerMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  readerMenuCard: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 30,
+    borderWidth: 1,
+  },
+  readerMenuTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  readerMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(150,150,150,0.15)',
+  },
+  readerMenuItemText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  ministryCardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  ministryCardPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  channelChoiceCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  channelChoiceTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  channelChoiceSub: {
+    fontSize: 9.5,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  swipeToastContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeToastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  swipeToastText: {
+    color: '#ffffff',
+    fontSize: 12.5,
+    fontWeight: '800',
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { 
+  Home,
   Calendar, 
   Users, 
   Music, 
@@ -15,6 +16,7 @@ import {
 
 export default function Navbar({ currentTab, setTab, user, theme = 'light', onToggleTheme, onLogout }) {
   const tabs = [
+    { id: 'home', label: 'Home Feed', icon: Home },
     { id: 'services', label: 'Services', icon: Calendar },
     { id: 'songbook', label: 'SongBook', icon: Music },
     { id: 'people', label: 'People', icon: Users },
@@ -31,7 +33,7 @@ export default function Navbar({ currentTab, setTab, user, theme = 'light', onTo
           {/* Logo & Brand: ChurchFlow / Jesus My Rock Church */}
           <div 
             className="flex items-center space-x-3 cursor-pointer group" 
-            onClick={() => setTab('services')}
+            onClick={() => setTab('home')}
           >
             <div className="h-10 w-10 rounded-xl bg-white border border-red-200 p-1 flex items-center justify-center shadow-sm shadow-red-500/10 group-hover:border-red-600 transition-all">
               <img 

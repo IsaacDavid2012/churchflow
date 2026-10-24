@@ -458,7 +458,7 @@ export default function ServicesScreen({ onSelectService, user, isDark = false }
       ) : (
         <FlatList
           data={services}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
           renderItem={renderServiceCard}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

@@ -17,10 +17,15 @@ function buildQueryString(params = {}) {
 
 class ApiClient {
   constructor() {
+    this.baseUrl = API_BASE_URL;
     this.token = null;
     this.refreshToken = null;
     this.refreshPromise = null;
     this.onUnauthorized = null;
+  }
+
+  get accessToken() {
+    return this.token;
   }
 
   setOnUnauthorized(callback) {
@@ -662,6 +667,52 @@ class ApiClient {
 
   async deleteCommunityChat(id) {
     return this.request(`/community/chat/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Church Social Home Feed & Cross-Posting ---
+  async getFeedPosts(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/feed${query ? `?${query}` : ''}`);
+  }
+
+  async createFeedPost(data) {
+    return this.request('/feed', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteFeedPost(id) {
+    return this.request(`/feed/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async toggleFeedLike(id) {
+    return this.request(`/feed/${id}/like`, {
+      method: 'POST',
+    });
+  }
+
+  async getFeedPostLikes(id) {
+    return this.request(`/feed/${id}/likes`);
+  }
+
+  async getFeedPostComments(id) {
+    return this.request(`/feed/${id}/comments`);
+  }
+
+  async addFeedPostComment(id, content) {
+    return this.request(`/feed/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async deleteFeedPostComment(id, commentId) {
+    return this.request(`/feed/${id}/comments/${commentId}`, {
       method: 'DELETE',
     });
   }

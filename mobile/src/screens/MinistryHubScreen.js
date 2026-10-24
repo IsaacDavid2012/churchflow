@@ -38,6 +38,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
   const [annMedia, setAnnMedia] = useState(null);
+  const [alsoShareToHome, setAlsoShareToHome] = useState(false);
   const [posting, setPosting] = useState(false);
 
   // Members
@@ -185,17 +186,34 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
         mediaSize = uploadRes.size;
       }
 
-      await api.createMinistryAnnouncement(ministry.id, {
-        title: postTitle.trim() || undefined,
-        content: postContent.trim(),
-        media_url: mediaUrl,
-        media_type: mediaType,
-        media_name: mediaName,
-        media_size: mediaSize,
-      });
+      if (alsoShareToHome) {
+        await api.createFeedPost({
+          title: postTitle.trim() || `${ministry.name} Update`,
+          content: postContent.trim(),
+          post_type: 'announcement',
+          destination: 'both',
+          ministry_id: ministry.id,
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_name: mediaName,
+          media_size: mediaSize,
+          media_attachments: mediaUrl ? [{ url: mediaUrl, type: mediaType, name: mediaName, size: mediaSize }] : [],
+        });
+      } else {
+        await api.createMinistryAnnouncement(ministry.id, {
+          title: postTitle.trim() || undefined,
+          content: postContent.trim(),
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_name: mediaName,
+          media_size: mediaSize,
+        });
+      }
+
       setPostTitle('');
       setPostContent('');
       setAnnMedia(null);
+      setAlsoShareToHome(false);
       setIsPostModalOpen(false);
       loadAnnouncements();
       Alert.alert('Success', 'Announcement posted to ' + ministry.name);
@@ -422,14 +440,14 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 4 }}
-                onPress={() => Linking.openURL(`https://wa.me/${ministry.leader_phone.replace(/[^0-9]/g, '')}`)}
+                onPress={() => Linking.openURL(`https://wa.me/${String(ministry.leader_phone || '').replace(/[^0-9]/g, '')}`)}
               >
                 <Ionicons name="logo-whatsapp" size={12} color="#ffffff" />
                 <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>WhatsApp</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 4 }}
-                onPress={() => Linking.openURL(`tel:${ministry.leader_phone}`)}
+                onPress={() => Linking.openURL(`tel:${encodeURIComponent(String(ministry.leader_phone || ''))}`)}
               >
                 <Ionicons name="call-outline" size={12} color="#ffffff" />
                 <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>Call</Text>
@@ -539,7 +557,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
           ) : (
             <FlatList
               data={announcements}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => (item?.id != null ? item.id.toString() : String(index))}
               contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
               refreshing={loadingAnnouncements}
               onRefresh={loadAnnouncements}
@@ -564,17 +582,17 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                       <View style={styles.annAuthorRow}>
                         <View style={[styles.authorAvatar, { backgroundColor: colors.primaryLight }]}>
                           <Text style={[styles.authorInitials, { color: colors.primaryDark }]}>
-                            {(item.created_by_name || 'L')[0].toUpperCase()}
+                            {(item.author_name || item.created_by_name || 'L')[0].toUpperCase()}
                           </Text>
                         </View>
                         <View>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={[styles.annAuthorName, { color: colors.text }]}>
-                              {item.created_by_name || 'Ministry Leader'}
+                              {item.author_name || item.created_by_name || 'Ministry Leader'}
                             </Text>
                             <View style={[styles.roleMiniBadge, { backgroundColor: colors.badgeBg, borderColor: colors.border }]}>
                               <Text style={[styles.roleMiniBadgeText, { color: colors.primaryDark }]}>
-                                {item.created_by_role || 'Manager'}
+                                {item.author_role || item.created_by_role || 'Manager'}
                               </Text>
                             </View>
                           </View>
@@ -1029,7 +1047,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
 
               {/* Media Attachment for Announcement */}
               <View style={{ marginTop: 12, marginBottom: 8 }}>
-                <Text style={[styles.inputLabel, { color: colors.subText }]}>Media Attachment (Photo or Video &lt; 10MB)</Text>
+                <Text style={[styles.inputLabel, { color: colors.subText }]}>Media Attachment (Photo or Video ≤ 20MB)</Text>
                 {annMedia ? (
                   <View style={[styles.chatMediaPreviewChip, { backgroundColor: colors.badgeBg, borderColor: colors.border }]}>
                     <Ionicons
@@ -1038,7 +1056,7 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                       color={colors.primaryDark}
                     />
                     <Text style={[styles.chatMediaPreviewText, { color: colors.text }]} numberOfLines={1}>
-                      {annMedia.fileName} ({annMedia.fileSize ? (annMedia.fileSize / 1024).toFixed(0) + 'KB' : '<10MB'})
+                      {annMedia.fileName} ({annMedia.fileSize ? (annMedia.fileSize / 1024).toFixed(0) + 'KB' : '≤20MB'})
                     </Text>
                     <TouchableOpacity onPress={() => setAnnMedia(null)}>
                       <Ionicons name="close-circle" size={20} color={colors.subText} />
@@ -1051,11 +1069,25 @@ export default function MinistryHubScreen({ ministry, user, isDark = false, onBa
                   >
                     <Ionicons name="image-outline" size={18} color={colors.primary} />
                     <Text style={[styles.annMediaPickerText, { color: colors.primary }]}>
-                      Attach Photo or Video (&lt; 10MB)
+                      Attach Photo or Video (≤ 20MB)
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
+
+              <TouchableOpacity
+                onPress={() => setAlsoShareToHome(!alsoShareToHome)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 12 }}
+              >
+                <Ionicons
+                  name={alsoShareToHome ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                  Also publish to Church Home Feed
+                </Text>
+              </TouchableOpacity>
 
               <Text style={[styles.noticeSubText, { color: colors.subText }]}>
                 * This announcement will appear on the {ministry.name} Hub stream for all volunteers.

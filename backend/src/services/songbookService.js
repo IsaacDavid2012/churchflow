@@ -550,7 +550,7 @@ async function previewBackup(cfUser, { backupData, targetOwnerType = 'user', tar
 /**
  * Commit import into user's personal or team library
  */
-async function importBackup(cfUser, { backupData, targetOwnerType = 'user', targetOwnerId = null, strategy = 'skip' }) {
+async function importBackup(cfUser, { backupData, targetOwnerType = 'user', targetOwnerId = null, strategy = 'skip', createSetlist = false, setlistName = '' }) {
   const ctx = await getUserContext(cfUser);
   const finalOwnerId = targetOwnerType === 'user' ? ctx.userId : (targetOwnerId || ctx.primaryTeamId);
 
@@ -559,6 +559,8 @@ async function importBackup(cfUser, { backupData, targetOwnerType = 'user', targ
     targetOwnerType,
     targetOwnerId: finalOwnerId,
     strategy, // 'skip' | 'overwrite' | 'duplicate'
+    createSetlist: Boolean(createSetlist),
+    setlistName: setlistName ? setlistName.trim() : '',
   };
 
   const res = await makeRequest('/api/backup/import', 'POST', payload, ctx.token);

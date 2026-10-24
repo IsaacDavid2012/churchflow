@@ -498,4 +498,34 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/notifications${query ? `?${query}` : ''}`);
   },
+
+  // Church Social Home Feed & Cross-Posting
+  getFeedPosts: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/feed${query ? `?${query}` : ''}`);
+  },
+  createFeedPost: (data) =>
+    request('/feed', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteFeedPost: (id) =>
+    request(`/feed/${id}`, {
+      method: 'DELETE',
+    }),
+  toggleFeedLike: (id) =>
+    request(`/feed/${id}/like`, {
+      method: 'POST',
+    }),
+  getFeedPostLikes: (id) => request(`/feed/${id}/likes`),
+  getFeedPostComments: (id) => request(`/feed/${id}/comments`),
+  addFeedPostComment: (id, content) =>
+    request(`/feed/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+  deleteFeedPostComment: (id, commentId) =>
+    request(`/feed/${id}/comments/${commentId}`, {
+      method: 'DELETE',
+    }),
 };
