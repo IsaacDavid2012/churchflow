@@ -121,6 +121,16 @@ app.get(['/live-player/:videoId', '/player/:videoId', '/api/live-player/:videoId
 </html>`);
 });
 
+// Explicit APK download route with strict no-cache headers
+app.get(['/churchflow.apk', '/churchflow-latest.apk', '/servesync.apk'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Content-Disposition', 'attachment; filename="ChurchFlow-v1.2.0.apk"');
+  res.sendFile(path.join(__dirname, '../public/churchflow.apk'));
+});
+
 // Musician-facing token URL routes to public HTML view
 app.get('/avail/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/avail.html'));
