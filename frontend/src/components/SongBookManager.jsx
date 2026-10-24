@@ -32,7 +32,9 @@ import {
   X,
   FileText,
   User,
-  Users
+  Users,
+  MessageCircle,
+  Send
 } from 'lucide-react';
 import { api } from '../api';
 import { copyToClipboard, formatSetlistForWhatsApp } from '../utils/clipboard';
