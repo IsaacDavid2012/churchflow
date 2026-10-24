@@ -157,8 +157,54 @@ async function notifyBackupPromotion(dbClient, { musicianId, serviceId, position
   }
 }
 
+/**
+ * Notify all church members that the church is streaming live on YouTube
+ */
+async function notifyChurchLiveStream(dbClient, { videoId, title }) {
+  try {
+    const tokenRes = await dbClient.query('SELECT DISTINCT token FROM device_tokens WHERE token IS NOT NULL');
+    const tokens = tokenRes.rows.map((r) => r.token);
+
+    const notifTitle = '🔴 Jesus My Rock is LIVE!';
+    const notifBody = `${title || 'Sunday Worship Service'} is streaming live now. Tap to watch and worship!`;
+
+    const pushResult = await sendPushNotification({
+      tokens,
+      title: notifTitle,
+      body: notifBody,
+      data: {
+        type: 'youtube_live',
+        videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      },
+    });
+
+    // Audit log
+    try {
+      await dbClient.query(`
+        INSERT INTO notifications_log (type, message, metadata)
+        VALUES ('youtube_live_broadcast', $1, $2)
+      `, [
+        `🔴 Dispatched live notification for "${title}" to ${tokens.length} devices`,
+        JSON.stringify({ videoId, title, recipientCount: tokens.length }),
+      ]);
+    } catch (e) {
+      // ignore log failure
+    }
+
+    return {
+      ...pushResult,
+      recipientCount: tokens.length,
+    };
+  } catch (err) {
+    console.error('Notify live stream error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   sendPushNotification,
   notifyRosterAssignment,
   notifyBackupPromotion,
+  notifyChurchLiveStream,
 };

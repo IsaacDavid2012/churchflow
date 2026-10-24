@@ -89,6 +89,17 @@ async function runMigrations() {
           ALTER TABLE groups ADD COLUMN IF NOT EXISTS leader_phone VARCHAR(50);
           ALTER TABLE groups ALTER COLUMN member_count SET DEFAULT 0;
         END IF;
+
+        IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'church_profile') THEN
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_channel_id VARCHAR(100) DEFAULT 'UCkgenI4IULye4vDjrGRo-aA';
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_channel_handle VARCHAR(100) DEFAULT '@jesusmyrockchurchkl';
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_auto_post_live BOOLEAN DEFAULT true;
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_api_key VARCHAR(255);
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_is_live BOOLEAN DEFAULT false;
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_current_live_video_id VARCHAR(100);
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_current_live_title VARCHAR(255);
+          ALTER TABLE church_profile ADD COLUMN IF NOT EXISTS youtube_last_checked_at TIMESTAMPTZ;
+        END IF;
       END $$;
     `);
 

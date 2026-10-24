@@ -10,10 +10,18 @@ export default function MediaAttachmentCard({ mediaUrl, mediaType, mediaName, me
   if (!mediaUrl) return null;
 
   const resolvedType = (mediaType || '').toLowerCase();
-  const isImage = resolvedType === 'image' || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(mediaUrl || mediaName || '');
-  const isVideo = resolvedType === 'video' || /\.(mp4|mov|m4v|3gp|avi|mkv|webm)$/i.test(mediaUrl || mediaName || '');
+  const isYouTubeLive = resolvedType === 'youtube_live' || /youtube\.com|youtu\.be/i.test(mediaUrl || '') || /^[a-zA-Z0-9_-]{11}$/.test(mediaName || '');
+  const isImage = !isYouTubeLive && (resolvedType === 'image' || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(mediaUrl || mediaName || ''));
+  const isVideo = !isYouTubeLive && (resolvedType === 'video' || /\.(mp4|mov|m4v|3gp|avi|mkv|webm)$/i.test(mediaUrl || mediaName || ''));
   const isSbp = resolvedType === 'sbp' || /\.(sbp|sbpbackup)$/i.test(mediaUrl || mediaName || '');
   const isPdf = resolvedType === 'pdf' || /\.(pdf|pdf\.html)$/i.test(mediaUrl || mediaName || '');
+
+  const getYouTubeId = (url, name) => {
+    if (name && /^[a-zA-Z0-9_-]{11}$/.test(name)) return name;
+    const match = (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*?v=|live\/|embed\/))([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : (name || null);
+  };
+  const ytid = isYouTubeLive ? getYouTubeId(mediaUrl, mediaName) : null;
 
   const formatSize = (bytes) => {
     if (!bytes) return '';
@@ -68,6 +76,38 @@ export default function MediaAttachmentCard({ mediaUrl, mediaType, mediaName, me
       setImporting(false);
     }
   };
+
+  // 0. YouTube Live Stream
+  if (isYouTubeLive && ytid) {
+    return (
+      <div className="mt-2.5 mb-2 w-full max-w-2xl rounded-2xl overflow-hidden border border-red-200 dark:border-red-900/50 bg-black/5 shadow-md">
+        <div className="bg-red-600 px-3.5 py-1.5 flex items-center justify-between text-white text-xs font-bold">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            <span>🔴 JESUS MY ROCK LIVE STREAM</span>
+          </div>
+          <a
+            href={`https://www.youtube.com/watch?v=${ytid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:underline text-[11px] opacity-90"
+          >
+            <span>Open in YouTube</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+        <div className="relative w-full aspect-video bg-black">
+          <iframe
+            src={`https://www.youtube.com/embed/${ytid}?autoplay=1&rel=0`}
+            title={mediaName || 'Jesus My Rock Live Stream'}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
+  }
 
   // 1. Photo
   if (isImage) {

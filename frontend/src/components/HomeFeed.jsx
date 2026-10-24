@@ -18,7 +18,12 @@ import {
   ChevronRight,
   Upload,
   CheckCircle2,
-  FileText
+  FileText,
+  Radio,
+  ExternalLink,
+  Play,
+  MessageSquare,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '../api';
 import MediaAttachmentCard from './MediaAttachmentCard';
@@ -26,8 +31,16 @@ import MediaAttachmentCard from './MediaAttachmentCard';
 export default function HomeFeed({ currentUser, onNavigateTab }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // 'all', 'announcement', 'event', 'media'
+  const [filter, setFilter] = useState('all'); // 'all', 'announcement', 'event', 'media', 'live'
   
+  // YouTube Live Stream State
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [checkingLive, setCheckingLive] = useState(false);
+  const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
+  const [manualLiveUrl, setManualLiveUrl] = useState('');
+  const [manualLiveTitle, setManualLiveTitle] = useState('');
+  const [liveChatTab, setLiveChatTab] = useState({}); // { [postId]: 'church' | 'youtube' }
+
   // Upcoming Service widget
   const [upcomingService, setUpcomingService] = useState(null);
 
@@ -66,7 +79,109 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
     loadFeed();
     loadUpcomingService();
     loadMinistries();
+    loadLiveStatus();
+
+    // Poll live status every 30s
+    const liveTimer = setInterval(loadLiveStatus, 30000);
+    return () => clearInterval(liveTimer);
   }, []);
+
+  async function loadLiveStatus() {
+    try {
+      const data = await api.getChurchLiveStatus();
+      setLiveStatus(data || null);
+    } catch (e) {
+      console.warn('Failed to load church live status:', e);
+    }
+  }
+
+  // Auto-refresh comments for any open live stream post every 4 seconds
+  useEffect(() => {
+    const openLivePostIds = Object.keys(activeComments).filter((id) => {
+      if (!activeComments[id]?.isOpen) return false;
+      const post = posts.find((p) => p.id === id);
+      return post?.post_type === 'live_stream' || post?.media_type === 'youtube_live';
+    });
+
+    if (openLivePostIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const id of openLivePostIds) {
+        try {
+          const latestComments = await api.getFeedPostComments(id);
+          setActiveComments((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              comments: latestComments || [],
+            },
+          }));
+        } catch (e) {
+          // ignore background polling error
+        }
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [activeComments, posts]);
+
+  async function handleCheckLiveNow() {
+    setCheckingLive(true);
+    try {
+      const res = await api.checkChurchLiveNow();
+      await loadLiveStatus();
+      await loadFeed();
+      if (res.isLive) {
+        alert('🔴 Church is currently LIVE on YouTube! Feed post and phone alerts updated.');
+      } else {
+        alert('Channel is currently offline (no active live stream detected).');
+      }
+    } catch (err) {
+      alert('Live check error: ' + err.message);
+    } finally {
+      setCheckingLive(false);
+    }
+  }
+
+  async function handleManualGoLive(e) {
+    e.preventDefault();
+    if (!manualLiveUrl.trim()) {
+      alert('Please enter a YouTube video URL or ID.');
+      return;
+    }
+    setCheckingLive(true);
+    try {
+      await api.manualGoLive({
+        urlOrVideoId: manualLiveUrl.trim(),
+        customTitle: manualLiveTitle.trim() || undefined,
+      });
+      setIsGoLiveModalOpen(false);
+      setManualLiveUrl('');
+      setManualLiveTitle('');
+      await loadLiveStatus();
+      await loadFeed();
+      alert('🔴 Live stream broadcast activated! Feed post created from "Jesus My Rock" and church members notified.');
+    } catch (err) {
+      alert('Failed to trigger live: ' + err.message);
+    } finally {
+      setCheckingLive(false);
+    }
+  }
+
+  async function handleEndLiveStream() {
+    if (!window.confirm('Are you sure you want to mark the live stream as ended? The post will remain in feed for replay.')) return;
+    setCheckingLive(true);
+    try {
+      await api.endLiveStream();
+      await loadLiveStatus();
+      await loadFeed();
+      alert('Live stream marked as ended.');
+    } catch (err) {
+      alert('Failed to end stream: ' + err.message);
+    } finally {
+      setCheckingLive(false);
+    }
+  }
 
   async function loadFeed() {
     setLoading(true);
@@ -333,9 +448,18 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
     }
   }
 
+  // Helper to extract 11-char YouTube ID
+  function parseYouTubeId(url) {
+    if (!url) return null;
+    if (/^[a-zA-Z0-9_-]{11}$/.test(url.trim())) return url.trim();
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*?v=|live\/|embed\/))([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  }
+
   // Filter posts
   const filteredPosts = posts.filter((p) => {
     if (filter === 'all') return true;
+    if (filter === 'live') return p.post_type === 'live_stream' || p.media_type === 'youtube_live' || (p.media_name && /^[a-zA-Z0-9_-]{11}$/.test(p.media_name));
     if (filter === 'announcement') return p.post_type === 'announcement';
     if (filter === 'event') return p.post_type === 'event';
     if (filter === 'media') return p.post_type === 'media' || (p.media_attachments && p.media_attachments.length > 0) || p.media_url;
@@ -388,6 +512,48 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
         </div>
       </div>
 
+      {/* 1.5. Sticky YouTube Live Stream Alert Banner */}
+      {liveStatus?.isLive && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-5 sm:p-6 shadow-xl border border-red-400/50 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-black tracking-wider uppercase">
+                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                <span className="w-2.5 h-2.5 rounded-full bg-white -ml-4" />
+                🔴 JESUS MY ROCK IS LIVE NOW
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                {liveStatus.title || 'Sunday Worship Service & Prophetic Word'}
+              </h2>
+              <p className="text-white/90 text-xs sm:text-sm">
+                Join our live praise, worship, and Sunday sermon. Watch the broadcast below and participate in live comments!
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {liveStatus.videoId && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${liveStatus.videoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-white text-red-600 font-extrabold text-xs shadow-lg hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" /> Watch on YouTube
+                </a>
+              )}
+              {canPost && (
+                <button
+                  onClick={handleEndLiveStream}
+                  disabled={checkingLive}
+                  className="px-3 py-2 rounded-xl bg-black/30 hover:bg-black/50 text-white font-bold text-xs transition-all border border-white/20 cursor-pointer"
+                >
+                  End Stream
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. Admin / Pastor / Manager Post Composer Bar */}
       {canPost && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm transition-all hover:border-[#c59c6c]/50">
@@ -422,6 +588,12 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
             >
               <ImageIcon className="w-4 h-4 text-sky-500" /> Photo / Video (<span className="text-[10px] text-amber-600">≤20MB</span>)
             </button>
+            <button
+              onClick={() => setIsGoLiveModalOpen(true)}
+              className="flex items-center gap-1.5 hover:text-red-600 transition-colors py-1 cursor-pointer text-red-600 dark:text-red-400"
+            >
+              <Radio className="w-4 h-4 animate-pulse" /> Live Stream
+            </button>
           </div>
         </div>
       )}
@@ -431,6 +603,7 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
         <div className="flex items-center gap-2">
           {[
             { id: 'all', label: 'All Updates' },
+            ...(liveStatus?.isLive ? [{ id: 'live', label: '🔴 LIVE NOW' }] : []),
             { id: 'announcement', label: '📢 Announcements' },
             { id: 'event', label: '📅 Events' },
             { id: 'media', label: '📸 Photos & Media' },
@@ -501,33 +674,52 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
               : [];
 
             const isEvent = post.post_type === 'event' || !!post.event_date;
-            const commentsOpen = activeComments[post.id]?.isOpen;
+            const isLiveStream = post.post_type === 'live_stream' || post.media_type === 'youtube_live';
+            const liveVideoId = post.media_name && /^[a-zA-Z0-9_-]{11}$/.test(post.media_name)
+              ? post.media_name
+              : parseYouTubeId(post.media_url);
+
+            const commentsOpen = isLiveStream ? true : activeComments[post.id]?.isOpen;
             const commentsList = activeComments[post.id]?.comments || [];
             const commentsLoading = activeComments[post.id]?.loading;
+            const currentChatTab = liveChatTab[post.id] || 'church';
 
             return (
               <article
                 key={post.id}
                 className={`bg-white dark:bg-slate-900 rounded-2xl border ${
-                  post.is_pinned
-                    ? 'border-[#c59c6c] ring-1 ring-[#c59c6c]/20'
-                    : 'border-slate-200 dark:border-slate-800'
-                } p-5 sm:p-6 shadow-sm transition-all`}
+                  isLiveStream
+                    ? 'border-red-500/60 ring-2 ring-red-500/20 shadow-md'
+                    : post.is_pinned
+                    ? 'border-[#c59c6c] ring-1 ring-[#c59c6c]/20 shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 shadow-sm'
+                } p-5 sm:p-6 transition-all`}
               >
                 {/* Post Top Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#c59c6c] to-[#8c6738] text-white font-bold flex items-center justify-center shrink-0 shadow-sm text-sm">
-                      {(post.author_name || 'C').slice(0, 2).toUpperCase()}
+                    <div className={`w-10 h-10 rounded-full font-black flex items-center justify-center shrink-0 shadow-sm text-sm text-white ${
+                      isLiveStream
+                        ? 'bg-gradient-to-br from-red-600 to-rose-700 ring-2 ring-red-400'
+                        : 'bg-gradient-to-br from-[#c59c6c] to-[#8c6738]'
+                    }`}>
+                      {isLiveStream ? '🔴' : (post.author_name || 'C').slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
-                          {post.author_name}
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-white truncate">
+                          {isLiveStream ? 'Jesus My Rock' : post.author_name}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold capitalize bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {post.author_role}
-                        </span>
+                        {isLiveStream ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-600 text-white flex items-center gap-1 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                            Live Broadcast
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold capitalize bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {post.author_role}
+                          </span>
+                        )}
                         {post.destination === 'both' && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
                             🏛️ {post.ministry_name || 'Ministry Hub'} • Church-wide
@@ -543,7 +735,7 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
                         <Clock className="w-3 h-3" />
                         <span>{new Date(post.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                         {post.is_pinned && (
-                          <span className="text-[#c59c6c] font-bold flex items-center gap-0.5">
+                          <span className={`${isLiveStream ? 'text-red-500' : 'text-[#c59c6c]'} font-bold flex items-center gap-0.5`}>
                             <Pin className="w-3 h-3" /> Pinned
                           </span>
                         )}
@@ -574,6 +766,78 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
                     </p>
                   )}
                 </div>
+
+                {/* YouTube Live Stream Embedded Console */}
+                {isLiveStream && liveVideoId && (
+                  <div className="mt-4 rounded-2xl overflow-hidden border border-red-200 dark:border-red-900/60 bg-black shadow-lg">
+                    {/* 16:9 Video Player */}
+                    <div className="relative w-full aspect-video bg-black">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${liveVideoId}?autoplay=1&rel=0`}
+                        title={post.title || 'Jesus My Rock Live Broadcast'}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+
+                    {/* Live Stream Tabs */}
+                    <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLiveChatTab((prev) => ({ ...prev, [post.id]: 'church' }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            currentChatTab === 'church'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          ChurchFlow Live Chat ({commentsList.length || post.comments_count || 0})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setLiveChatTab((prev) => ({ ...prev, [post.id]: 'youtube' }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            currentChatTab === 'youtube'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                          YouTube Live Chat
+                        </button>
+                      </div>
+
+                      <a
+                        href={`https://www.youtube.com/watch?v=${liveVideoId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-semibold cursor-pointer"
+                      >
+                        <span>Open on YouTube</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+
+                    {/* YouTube Live Chat Embedded Frame */}
+                    {currentChatTab === 'youtube' && (
+                      <div className="p-3 bg-slate-950 border-t border-slate-800">
+                        <div className="text-[11px] text-slate-400 mb-2 flex items-center gap-1.5">
+                          <Radio className="w-3 h-3 text-red-500" />
+                          Live YouTube Chat (sign in with your Google account on YouTube to post directly)
+                        </div>
+                        <iframe
+                          src={`https://www.youtube.com/live_chat?v=${liveVideoId}&embed_domain=${window.location.hostname}`}
+                          title="YouTube Live Chat"
+                          className="w-full h-80 rounded-xl border border-slate-800 bg-black"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Event Details Card (if post is an event) */}
                 {isEvent && (
@@ -998,6 +1262,129 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
                   className="px-5 py-2.5 rounded-xl bg-[#c59c6c] hover:bg-[#b08756] text-white text-xs font-bold transition-all shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {posting ? 'Publishing...' : 'Publish to Feed'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5.5. YouTube Live Stream Controls Modal */}
+      {isGoLiveModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setIsGoLiveModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center font-bold">
+                  <Radio className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    YouTube Live Stream Controls
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Channel: {liveStatus?.channelHandle || '@jesusmyrockchurchkl'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGoLiveModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current Status Box */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              liveStatus?.isLive
+                ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-900 dark:text-red-200'
+                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${
+                  liveStatus?.isLive ? 'bg-red-600 animate-ping' : 'bg-slate-400'
+                }`} />
+                <div>
+                  <div className="text-xs font-bold">
+                    {liveStatus?.isLive ? '🔴 Currently Streaming Live' : '⚪ Channel is Offline'}
+                  </div>
+                  {liveStatus?.isLive && liveStatus.title && (
+                    <div className="text-[11px] text-red-700 dark:text-red-300 truncate max-w-xs">
+                      {liveStatus.title}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCheckLiveNow}
+                disabled={checkingLive}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-bold shadow-sm hover:bg-slate-50 cursor-pointer"
+              >
+                {checkingLive ? 'Checking...' : 'Check Live Now'}
+              </button>
+            </div>
+
+            {/* Quick Go Live Form */}
+            <form onSubmit={handleManualGoLive} className="space-y-3.5">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <span>Quick Go Live (Paste Link or Video ID)</span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                  YouTube Live Stream URL or Video ID
+                </label>
+                <input
+                  type="text"
+                  value={manualLiveUrl}
+                  onChange={(e) => setManualLiveUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=... or ID"
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                  Broadcast Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={manualLiveTitle}
+                  onChange={(e) => setManualLiveTitle(e.target.value)}
+                  placeholder="Sunday Celebration Service & Worship"
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800">
+                {liveStatus?.isLive ? (
+                  <button
+                    type="button"
+                    onClick={handleEndLiveStream}
+                    disabled={checkingLive}
+                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                  >
+                    End Current Stream
+                  </button>
+                ) : <div />}
+
+                <button
+                  type="submit"
+                  disabled={checkingLive || !manualLiveUrl.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  Broadcast Live to Church
                 </button>
               </div>
             </form>

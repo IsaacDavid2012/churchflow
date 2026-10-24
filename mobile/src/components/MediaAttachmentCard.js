@@ -33,10 +33,18 @@ export default function MediaAttachmentCard({
     : `${baseOrigin}${mediaUrl.startsWith('/') ? '' : '/'}${mediaUrl}`;
 
   const resolvedType = (mediaType || '').toLowerCase();
-  const isImage = resolvedType === 'image' || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(mediaUrl || mediaName || '');
-  const isVideo = resolvedType === 'video' || /\.(mp4|mov|m4v|3gp|avi|mkv|webm)$/i.test(mediaUrl || mediaName || '');
+  const isYouTubeLive = resolvedType === 'youtube_live' || /youtube\.com|youtu\.be/i.test(mediaUrl || '') || /^[a-zA-Z0-9_-]{11}$/.test(mediaName || '');
+  const isImage = !isYouTubeLive && (resolvedType === 'image' || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(mediaUrl || mediaName || ''));
+  const isVideo = !isYouTubeLive && (resolvedType === 'video' || /\.(mp4|mov|m4v|3gp|avi|mkv|webm)$/i.test(mediaUrl || mediaName || ''));
   const isSbp = resolvedType === 'sbp' || /\.(sbp|sbpbackup)$/i.test(mediaUrl || mediaName || '');
   const isPdf = resolvedType === 'pdf' || /\.(pdf|pdf\.html)$/i.test(mediaUrl || mediaName || '');
+
+  const parseYtId = (url, name) => {
+    if (name && /^[a-zA-Z0-9_-]{11}$/.test(name)) return name;
+    const match = (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*?v=|live\/|embed\/))([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : (name || null);
+  };
+  const ytid = isYouTubeLive ? parseYtId(mediaUrl, mediaName) : null;
 
   const formatSize = (bytes) => {
     if (!bytes) return '';
@@ -104,6 +112,43 @@ export default function MediaAttachmentCard({
       Alert.alert('Error', 'Could not open file: ' + (err.message || 'Unknown error'));
     });
   };
+
+  // 0. Render YouTube Live Stream
+  if (isYouTubeLive && ytid) {
+    return (
+      <View style={styles.ytLiveCard}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${ytid}`).catch(() => {})}
+          style={styles.ytThumbnailWrapper}
+        >
+          <Image
+            source={{ uri: `https://img.youtube.com/vi/${ytid}/hqdefault.jpg` }}
+            style={styles.ytThumbnail}
+            resizeMode="cover"
+          />
+          <View style={styles.ytLiveBadge}>
+            <View style={styles.ytLiveDot} />
+            <Text style={styles.ytLiveBadgeText}>LIVE STREAM</Text>
+          </View>
+          <View style={styles.ytPlayCenter}>
+            <View style={styles.ytPlayCircle}>
+              <Ionicons name="play" size={26} color="#ffffff" style={{ marginLeft: 3 }} />
+            </View>
+            <Text style={styles.ytPlayText}>Tap to Watch Live</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.ytBottomBar}
+          activeOpacity={0.8}
+          onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${ytid}`).catch(() => {})}
+        >
+          <Text style={styles.ytBottomBarText}>🔴 Watch on YouTube App</Text>
+          <Ionicons name="open-outline" size={14} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // Render Image
   if (isImage) {
@@ -429,6 +474,91 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ytLiveCard: {
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+  },
+  ytThumbnailWrapper: {
+    width: '100%',
+    height: 190,
+    position: 'relative',
+    backgroundColor: '#000000',
+  },
+  ytThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  ytLiveBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  ytLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff',
+  },
+  ytLiveBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  ytPlayCenter: {
+    position: 'absolute',
+    inset: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  ytPlayCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  ytPlayText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 8,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  ytBottomBar: {
+    backgroundColor: '#1e1e1e',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ytBottomBarText: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '800',

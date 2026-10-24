@@ -78,6 +78,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  getChurchLiveStatus: () => request('/church/youtube/live'),
+  checkChurchLiveNow: () =>
+    request('/church/youtube/check-now', {
+      method: 'POST',
+    }),
+  manualGoLive: (data) =>
+    request('/church/youtube/manual-live', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  endLiveStream: () =>
+    request('/church/youtube/end-live', {
+      method: 'POST',
+    }),
 
   // Services
   getServices: () => request('/services'),

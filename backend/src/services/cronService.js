@@ -7,8 +7,10 @@
 const db = require('../config/db');
 const { checkDeadlineAndAutoPromote, parseServiceDateTime } = require('./shuffleService');
 const whatsappService = require('./whatsappService');
+const { syncLiveStreamJob } = require('./youtubeLiveService');
 
 let cronInterval = null;
+let youtubeLiveInterval = null;
 
 async function runDeadlineCheckJob() {
   try {
@@ -128,30 +130,46 @@ async function runPendingReminderJob(dbClient = db) {
   }
 }
 
+async function runYouTubeLiveCheckJob() {
+  try {
+    await syncLiveStreamJob(db);
+  } catch (err) {
+    console.error('[Cron] Error checking YouTube live status:', err);
+  }
+}
+
 async function runAllCronJobs() {
   await runDeadlineCheckJob();
   await runPendingReminderJob();
+  await runYouTubeLiveCheckJob();
 }
 
 /**
  * Start the deadline & reminder monitoring background job (runs every 15 minutes by default)
+ * Also runs YouTube live stream detection every 3 minutes.
  */
-function startDeadlineMonitor(intervalMinutes = 15) {
+function startDeadlineMonitor(intervalMinutes = 15, liveCheckIntervalMinutes = 3) {
   if (cronInterval) clearInterval(cronInterval);
+  if (youtubeLiveInterval) clearInterval(youtubeLiveInterval);
 
-  console.log(`[Cron] Starting ServeSync deadline & reminder monitor (interval: ${intervalMinutes}m)...`);
+  console.log(`[Cron] Starting ServeSync deadline & reminder monitor (interval: ${intervalMinutes}m, liveCheck: ${liveCheckIntervalMinutes}m)...`);
   
   // Run once on startup
   runAllCronJobs();
 
   cronInterval = setInterval(runAllCronJobs, intervalMinutes * 60 * 1000);
-  return cronInterval;
+  youtubeLiveInterval = setInterval(runYouTubeLiveCheckJob, liveCheckIntervalMinutes * 60 * 1000);
+  return { cronInterval, youtubeLiveInterval };
 }
 
 function stopDeadlineMonitor() {
   if (cronInterval) {
     clearInterval(cronInterval);
     cronInterval = null;
+  }
+  if (youtubeLiveInterval) {
+    clearInterval(youtubeLiveInterval);
+    youtubeLiveInterval = null;
   }
 }
 

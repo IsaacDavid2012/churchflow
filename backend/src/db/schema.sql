@@ -12,6 +12,14 @@ CREATE TABLE IF NOT EXISTS church_profile (
     address TEXT DEFAULT '18-3, Jalan PJU 8/5G, Damansara Perdana, 47820 Petaling Jaya, Selangor, Malaysia',
     website VARCHAR(255) DEFAULT 'https://www.instagram.com/jesusmyrockchurch/',
     primary_color VARCHAR(50) DEFAULT '#c59c6c',
+    youtube_channel_id VARCHAR(100) DEFAULT 'UCkgenI4IULye4vDjrGRo-aA',
+    youtube_channel_handle VARCHAR(100) DEFAULT '@jesusmyrockchurchkl',
+    youtube_auto_post_live BOOLEAN DEFAULT true,
+    youtube_api_key VARCHAR(255),
+    youtube_is_live BOOLEAN DEFAULT false,
+    youtube_current_live_video_id VARCHAR(100),
+    youtube_current_live_title VARCHAR(255),
+    youtube_last_checked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

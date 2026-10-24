@@ -308,6 +308,82 @@ export default function ChurchScreen({ user, onLogout, isDark = false, onToggleT
         </View>
       </View>
 
+      {/* YouTube Live Stream & Media */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: '#ef4444', borderWidth: 1.5 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="logo-youtube" size={18} color="#dc2626" />
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+              YouTube Live Stream
+            </Text>
+          </View>
+          <View style={{
+            backgroundColor: church?.youtube_is_live ? '#dc2626' : colors.inputBg,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 6,
+          }}>
+            <Text style={{
+              color: church?.youtube_is_live ? '#ffffff' : colors.subText,
+              fontSize: 10,
+              fontWeight: '900',
+            }}>
+              {church?.youtube_is_live ? '🔴 LIVE NOW' : 'OFFLINE'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={[styles.prefSub, { color: colors.subText, marginBottom: 12 }]}>
+          Channel: {church?.youtube_channel_handle || '@jesusmyrockchurchkl'} (Jesus My Rock Church)
+        </Text>
+
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              backgroundColor: '#dc2626',
+              paddingVertical: 9,
+              borderRadius: 8,
+            }}
+            onPress={() => Linking.openURL('https://www.youtube.com/@jesusmyrockchurchkl')}
+          >
+            <Ionicons name="open-outline" size={14} color="#ffffff" />
+            <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '800' }}>Open Channel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              backgroundColor: colors.inputBg,
+              borderWidth: 1,
+              borderColor: colors.border,
+              paddingVertical: 9,
+              borderRadius: 8,
+            }}
+            onPress={async () => {
+              try {
+                const res = await api.checkChurchLiveNow();
+                await fetchData();
+                Alert.alert(res.isLive ? '🔴 Live Stream Active!' : 'Channel is Offline', res.isLive ? 'Jesus My Rock is streaming live now.' : 'No active stream detected.');
+              } catch (e) {
+                Alert.alert('Error', e.message);
+              }
+            }}
+          >
+            <Ionicons name="refresh-outline" size={14} color={colors.text} />
+            <Text style={{ color: colors.text, fontSize: 11, fontWeight: '800' }}>Check Live</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Campuses Section */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>

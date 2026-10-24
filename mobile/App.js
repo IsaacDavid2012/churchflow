@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 
 import { api } from './src/api/client';
@@ -153,7 +154,22 @@ export default function App() {
     });
 
     const subscription = Linking.addEventListener('url', handleDeepLink);
-    return () => subscription.remove();
+
+    // FCM Push Notification Response Listener (e.g. YouTube Live Stream Notification)
+    const notifSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.type === 'youtube_live') {
+        switchTab('home');
+        if (data.url) {
+          Linking.openURL(data.url).catch(() => {});
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      notifSub.remove();
+    };
   }, []);
 
   const handleToggleTheme = () => {

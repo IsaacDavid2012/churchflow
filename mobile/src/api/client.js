@@ -750,6 +750,30 @@ class ApiClient {
     return this.request('/church/ministries');
   }
 
+  // --- YouTube Live Stream Automation ---
+  async getChurchLiveStatus() {
+    return this.request('/church/youtube/live');
+  }
+
+  async checkChurchLiveNow() {
+    return this.request('/church/youtube/check-now', {
+      method: 'POST',
+    });
+  }
+
+  async manualGoLive(data) {
+    return this.request('/church/youtube/manual-live', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async endLiveStream() {
+    return this.request('/church/youtube/end-live', {
+      method: 'POST',
+    });
+  }
+
   async getNotifications() {
     return this.request('/notifications');
   }

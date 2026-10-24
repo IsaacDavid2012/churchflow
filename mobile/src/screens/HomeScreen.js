@@ -16,6 +16,7 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -29,7 +30,14 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all', 'announcement', 'event', 'media'
+  const [filter, setFilter] = useState('all'); // 'all', 'live', 'announcement', 'event', 'media'
+
+  // YouTube Live Stream State
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [checkingLive, setCheckingLive] = useState(false);
+  const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
+  const [manualLiveUrl, setManualLiveUrl] = useState('');
+  const [manualLiveTitle, setManualLiveTitle] = useState('');
 
   // Upcoming service widget
   const [upcomingService, setUpcomingService] = useState(null);
@@ -82,7 +90,108 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
     loadFeed();
     loadUpcomingService();
     loadMinistries();
+    loadLiveStatus();
+
+    const liveTimer = setInterval(loadLiveStatus, 25000);
+    return () => clearInterval(liveTimer);
   }, []);
+
+  // Auto-poll comments if comments bottom sheet is open for a live post
+  useEffect(() => {
+    if (!activePostForComments) return;
+    const isLive = activePostForComments.post_type === 'live_stream' || activePostForComments.media_type === 'youtube_live';
+    if (!isLive) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const latest = await api.getFeedPostComments(activePostForComments.id);
+        if (Array.isArray(latest)) {
+          setComments(latest);
+        }
+      } catch (e) {}
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [activePostForComments]);
+
+  const parseYouTubeVideoId = (input) => {
+    if (!input || typeof input !== 'string') return null;
+    const clean = input.trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean;
+    const match = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*?v=|live\/|embed\/))([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  };
+
+  const loadLiveStatus = async () => {
+    try {
+      const data = await api.getChurchLiveStatus();
+      setLiveStatus(data || null);
+    } catch (e) {
+      console.warn('Failed to load mobile live status:', e);
+    }
+  };
+
+  const handleCheckLiveNow = async () => {
+    setCheckingLive(true);
+    try {
+      const res = await api.checkChurchLiveNow();
+      await loadLiveStatus();
+      await loadFeed();
+      if (res.isLive) {
+        Alert.alert('🔴 Live Now!', 'Jesus My Rock Church is currently streaming live on YouTube!');
+      } else {
+        Alert.alert('Offline', 'YouTube channel is currently offline (no active stream detected).');
+      }
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Check failed');
+    } finally {
+      setCheckingLive(false);
+    }
+  };
+
+  const handleManualGoLive = async () => {
+    if (!manualLiveUrl.trim()) {
+      Alert.alert('Required', 'Please enter a YouTube video URL or ID.');
+      return;
+    }
+    setCheckingLive(true);
+    try {
+      await api.manualGoLive({
+        urlOrVideoId: manualLiveUrl.trim(),
+        customTitle: manualLiveTitle.trim() || undefined,
+      });
+      setIsGoLiveModalOpen(false);
+      setManualLiveUrl('');
+      setManualLiveTitle('');
+      await loadLiveStatus();
+      await loadFeed();
+      Alert.alert('🔴 Live Broadcast Active!', 'Live post published from "Jesus My Rock" and church phones notified.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to trigger live');
+    } finally {
+      setCheckingLive(false);
+    }
+  };
+
+  const handleEndLiveStream = () => {
+    Alert.alert('End Live Stream', 'Are you sure you want to mark the live stream as ended? The post will stay in feed for replay.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'End Stream',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.endLiveStream();
+            await loadLiveStatus();
+            await loadFeed();
+            Alert.alert('Stream Ended', 'Live stream marked as ended.');
+          } catch (err) {
+            Alert.alert('Error', err.message || 'Failed to end stream');
+          }
+        },
+      },
+    ]);
+  };
 
   const loadFeed = async () => {
     try {
@@ -99,6 +208,7 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
   const handleRefresh = () => {
     setRefreshing(true);
     loadFeed();
+    loadLiveStatus();
     loadUpcomingService();
   };
 
@@ -335,6 +445,11 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
   // Render Post Item
   const renderPostItem = ({ item }) => {
     const isEvent = item.post_type === 'event' || !!item.event_date;
+    const isLiveStream = item.post_type === 'live_stream' || item.media_type === 'youtube_live';
+    const liveVideoId = item.media_name && /^[a-zA-Z0-9_-]{11}$/.test(item.media_name)
+      ? item.media_name
+      : parseYouTubeVideoId(item.media_url);
+
     const hasAttachments = Array.isArray(item.media_attachments) && item.media_attachments.length > 0;
     const attachmentsList = hasAttachments
       ? item.media_attachments
@@ -348,29 +463,41 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
           styles.postCard,
           {
             backgroundColor: colors.card,
-            borderColor: item.is_pinned ? colors.primary : colors.border,
-            borderWidth: item.is_pinned ? 1.5 : 1,
+            borderColor: isLiveStream ? '#ef4444' : item.is_pinned ? colors.primary : colors.border,
+            borderWidth: isLiveStream ? 2 : item.is_pinned ? 1.5 : 1,
+            shadowColor: isLiveStream ? '#ef4444' : '#000000',
+            shadowOpacity: isLiveStream ? 0.15 : 0.05,
+            shadowRadius: isLiveStream ? 8 : 4,
+            elevation: isLiveStream ? 4 : 2,
           },
         ]}
       >
         {/* Post Header */}
         <View style={styles.postHeader}>
           <View style={styles.postAuthorGroup}>
-            <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
+            <View style={[styles.avatarBadge, { backgroundColor: isLiveStream ? '#dc2626' : colors.primary }]}>
               <Text style={styles.avatarText}>
-                {(item.author_name || 'C').slice(0, 2).toUpperCase()}
+                {isLiveStream ? '🔴' : (item.author_name || 'C').slice(0, 2).toUpperCase()}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={styles.authorRow}>
-                <Text style={[styles.authorName, { color: colors.text }]} numberOfLines={1}>
-                  {item.author_name}
+                <Text style={[styles.authorName, { color: colors.text, fontWeight: isLiveStream ? '900' : '800' }]} numberOfLines={1}>
+                  {isLiveStream ? 'Jesus My Rock' : item.author_name}
                 </Text>
-                <View style={[styles.roleBadge, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.roleText, { color: colors.primaryDark }]}>
-                    {item.author_role}
-                  </Text>
-                </View>
+                {isLiveStream ? (
+                  <View style={[styles.roleBadge, { backgroundColor: '#dc2626' }]}>
+                    <Text style={[styles.roleText, { color: '#ffffff', fontWeight: '900' }]}>
+                      LIVE BROADCAST
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.roleBadge, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.roleText, { color: colors.primaryDark }]}>
+                      {item.author_role}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Destination Pill */}
@@ -394,8 +521,8 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                 </Text>
                 {item.is_pinned && (
                   <View style={styles.pinnedBadge}>
-                    <Ionicons name="pin" size={12} color={colors.primary} />
-                    <Text style={[styles.pinnedText, { color: colors.primary }]}>Pinned</Text>
+                    <Ionicons name="pin" size={12} color={isLiveStream ? '#dc2626' : colors.primary} />
+                    <Text style={[styles.pinnedText, { color: isLiveStream ? '#dc2626' : colors.primary }]}>Pinned</Text>
                   </View>
                 )}
               </View>
@@ -538,6 +665,44 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
         }
         ListHeaderComponent={
           <View style={styles.headerContainer}>
+            {/* 0. Live Now Alert Banner */}
+            {liveStatus?.isLive && (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => {
+                  if (liveStatus.videoId) {
+                    Linking.openURL(`https://www.youtube.com/watch?v=${liveStatus.videoId}`).catch(() => {});
+                  }
+                }}
+                style={styles.liveHeroBanner}
+              >
+                <View style={styles.liveHeroTop}>
+                  <View style={styles.livePulseDot} />
+                  <Text style={styles.liveHeroTag}>🔴 JESUS MY ROCK IS LIVE NOW</Text>
+                </View>
+                <Text style={styles.liveHeroTitle} numberOfLines={2}>
+                  {liveStatus.title || 'Sunday Worship Service & Prophetic Word'}
+                </Text>
+                <Text style={styles.liveHeroSub}>
+                  Streaming live on YouTube. Tap to watch with church family!
+                </Text>
+                <View style={styles.watchLiveBtnRow}>
+                  <View style={styles.watchLiveBtn}>
+                    <Ionicons name="play" size={13} color="#ffffff" />
+                    <Text style={styles.watchLiveBtnText}>Watch Live Stream</Text>
+                  </View>
+                  {canPost && (
+                    <TouchableOpacity
+                      onPress={handleEndLiveStream}
+                      style={styles.endLiveHeroBtn}
+                    >
+                      <Text style={styles.endLiveHeroBtnText}>End Stream</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* 1. Hero Upcoming Service Banner */}
             {upcomingService && (
               <TouchableOpacity
@@ -624,6 +789,16 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                       Photos (≤20MB)
                     </Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.composerActionItem}
+                    onPress={() => setIsGoLiveModalOpen(true)}
+                  >
+                    <Ionicons name="radio" size={16} color="#dc2626" />
+                    <Text style={[styles.composerActionText, { color: '#dc2626', fontWeight: '800' }]}>
+                      Live
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
@@ -632,6 +807,7 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
             <View style={styles.filterRow}>
               {[
                 { id: 'all', label: 'All Updates' },
+                ...(liveStatus?.isLive ? [{ id: 'live', label: '🔴 LIVE NOW' }] : []),
                 { id: 'announcement', label: '📢 Announcements' },
                 { id: 'event', label: '📅 Events' },
                 { id: 'media', label: '📸 Photos & Media' },
@@ -939,9 +1115,17 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                 <Text style={[styles.commentsTitle, { color: colors.text }]} numberOfLines={1}>
                   Comments: {activePostForComments?.title}
                 </Text>
-                <Text style={[styles.commentsSub, { color: colors.subText }]}>
-                  {comments.length} comment{comments.length === 1 ? '' : 's'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                  <Text style={[styles.commentsSub, { color: colors.subText }]}>
+                    {comments.length} comment{comments.length === 1 ? '' : 's'}
+                  </Text>
+                  {(activePostForComments?.post_type === 'live_stream' || activePostForComments?.media_type === 'youtube_live') && (
+                    <View style={styles.liveChatTag}>
+                      <View style={styles.liveDot} />
+                      <Text style={styles.liveChatTagText}>LIVE STREAM CHAT (REAL-TIME)</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               <TouchableOpacity
                 onPress={() => setActivePostForComments(null)}
@@ -1018,6 +1202,112 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Ionicons name="send" size={16} color="#ffffff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 5.5. Live Stream Controls Modal */}
+      <Modal visible={isGoLiveModalOpen} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.modalBg }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#dc2626', justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="radio" size={16} color="#ffffff" />
+                </View>
+                <View>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>YouTube Live Controls</Text>
+                  <Text style={{ fontSize: 10, color: colors.subText }}>Channel: {liveStatus?.channelHandle || '@jesusmyrockchurchkl'}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setIsGoLiveModalOpen(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {/* Status Box */}
+              <View style={[styles.liveStatusBox, { backgroundColor: liveStatus?.isLive ? 'rgba(220, 38, 38, 0.1)' : colors.inputBg, borderColor: liveStatus?.isLive ? '#ef4444' : colors.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: liveStatus?.isLive ? '#dc2626' : '#94a3b8' }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: liveStatus?.isLive ? '#dc2626' : colors.text }}>
+                      {liveStatus?.isLive ? '🔴 Currently Live on YouTube' : '⚪ Channel is Offline'}
+                    </Text>
+                    {liveStatus?.isLive && liveStatus.title ? (
+                      <Text style={{ fontSize: 11, color: colors.subText, marginTop: 2 }} numberOfLines={1}>{liveStatus.title}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleCheckLiveNow}
+                  disabled={checkingLive}
+                  style={[styles.checkLiveBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.checkLiveBtnText, { color: colors.text }]}>
+                    {checkingLive ? 'Checking...' : 'Check Now'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.fieldLabel, { color: colors.subText, marginTop: 16 }]}>
+                QUICK GO LIVE (PASTE YOUTUBE LINK OR ID)
+              </Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                placeholder="https://www.youtube.com/watch?v=... or 11-char ID"
+                placeholderTextColor={colors.subText}
+                value={manualLiveUrl}
+                onChangeText={setManualLiveUrl}
+                autoCapitalize="none"
+              />
+
+              <Text style={[styles.fieldLabel, { color: colors.subText, marginTop: 12 }]}>
+                BROADCAST TITLE (OPTIONAL)
+              </Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                placeholder="Sunday Celebration Service & Worship"
+                placeholderTextColor={colors.subText}
+                value={manualLiveTitle}
+                onChangeText={setManualLiveTitle}
+              />
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+              {liveStatus?.isLive ? (
+                <TouchableOpacity
+                  onPress={handleEndLiveStream}
+                  disabled={checkingLive}
+                  style={[styles.cancelBtn, { borderColor: '#ef4444' }]}
+                >
+                  <Text style={[styles.cancelBtnText, { color: '#ef4444' }]}>End Stream</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setIsGoLiveModalOpen(false)}
+                  style={[styles.cancelBtn, { borderColor: colors.border }]}
+                >
+                  <Text style={[styles.cancelBtnText, { color: colors.text }]}>Close</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                onPress={handleManualGoLive}
+                disabled={checkingLive || !manualLiveUrl.trim()}
+                style={[styles.publishBtn, { backgroundColor: '#dc2626' }]}
+              >
+                {checkingLive ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.publishBtnText}>🔴 Broadcast Live</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1725,5 +2015,121 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: 4,
+  },
+  // YouTube Live Stream Styles
+  liveHeroBanner: {
+    borderRadius: 16,
+    backgroundColor: '#b91c1c',
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#ef4444',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 1.5,
+    borderColor: '#fca5a5',
+  },
+  liveHeroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  livePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+  },
+  liveHeroTag: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  liveHeroTitle: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  liveHeroSub: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 11,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  watchLiveBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  watchLiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  watchLiveBtnText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  endLiveHeroBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  endLiveHeroBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  liveStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  checkLiveBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  checkLiveBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  liveChatTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#dc2626',
+  },
+  liveChatTagText: {
+    color: '#dc2626',
+    fontSize: 10,
+    fontWeight: '900',
   },
 });
