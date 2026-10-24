@@ -39,6 +39,7 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
   const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
   const [manualLiveUrl, setManualLiveUrl] = useState('');
   const [manualLiveTitle, setManualLiveTitle] = useState('');
+  const [manualLiveDesc, setManualLiveDesc] = useState('');
 
   // Live Theater In-App Player Modal (Watch Live Stream + Real-Time Chat In-App)
   const [liveTheaterPost, setLiveTheaterPost] = useState(null);
@@ -284,13 +285,15 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
       await api.manualGoLive({
         urlOrVideoId: manualLiveUrl.trim(),
         customTitle: manualLiveTitle.trim() || undefined,
+        customDescription: manualLiveDesc.trim() || undefined,
       });
       setIsGoLiveModalOpen(false);
       setManualLiveUrl('');
       setManualLiveTitle('');
+      setManualLiveDesc('');
       await loadLiveStatus();
       await loadFeed();
-      Alert.alert('🔴 Live Broadcast Active!', 'Live post published from "Jesus My Rock" and church phones notified.');
+      Alert.alert('Live Broadcast Active!', 'Live post published from "Jesus My Rock" with stream title and description.');
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to trigger live');
     } finally {
@@ -1439,14 +1442,27 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
               />
 
               <Text style={[styles.fieldLabel, { color: colors.subText, marginTop: 12 }]}>
-                BROADCAST TITLE (OPTIONAL)
+                BROADCAST TITLE (OPTIONAL — AUTO-FETCHES STREAM TITLE IF BLANK)
               </Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
-                placeholder="Sunday Celebration Service & Worship"
+                placeholder="Leave blank to use actual YouTube stream title"
                 placeholderTextColor={colors.subText}
                 value={manualLiveTitle}
                 onChangeText={setManualLiveTitle}
+              />
+
+              <Text style={[styles.fieldLabel, { color: colors.subText, marginTop: 12 }]}>
+                DESCRIPTION / SERMON NOTES (OPTIONAL — AUTO-FETCHES STREAM DESCRIPTION IF BLANK)
+              </Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border, height: 70, textAlignVertical: 'top' }]}
+                placeholder="Leave blank to use actual YouTube stream description"
+                placeholderTextColor={colors.subText}
+                value={manualLiveDesc}
+                onChangeText={setManualLiveDesc}
+                multiline
+                numberOfLines={3}
               />
             </ScrollView>
 

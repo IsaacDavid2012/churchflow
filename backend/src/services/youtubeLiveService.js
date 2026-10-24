@@ -68,6 +68,77 @@ function fetchHttpText(targetUrl, maxRedirects = 5) {
 }
 
 /**
+ * Fetches real video metadata (exact Title and Description) directly from YouTube.
+ * Extracts title and description together, cleaning any artificial "LIVE:" prefixes.
+ */
+async function fetchYouTubeVideoMetadata(videoId) {
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return { title: '', description: '' };
+  }
+
+  try {
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const res = await fetchHttpText(watchUrl);
+    if (!res.data) {
+      return { title: '', description: '' };
+    }
+
+    const html = res.data;
+
+    // 1. Title Extraction
+    let title = '';
+    const jsonTitleMatch = html.match(/"videoDetails":\{.*?"title":"((?:[^"\\]|\\.)*)"/);
+    if (jsonTitleMatch) {
+      try {
+        title = JSON.parse('"' + jsonTitleMatch[1] + '"');
+      } catch (e) {
+        title = jsonTitleMatch[1];
+      }
+    }
+
+    if (!title) {
+      const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) ||
+                           html.match(/<meta\s+name="title"\s+content="([^"]+)"/i);
+      if (ogTitleMatch) {
+        title = ogTitleMatch[1].replace(/ - YouTube$/i, '').trim();
+      }
+    }
+
+    // 2. Description Extraction
+    let description = '';
+    const jsonDescMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+    if (jsonDescMatch) {
+      try {
+        description = JSON.parse('"' + jsonDescMatch[1] + '"');
+      } catch (e) {
+        description = jsonDescMatch[1];
+      }
+    }
+
+    if (!description) {
+      const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i) ||
+                          html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+      if (ogDescMatch) {
+        description = ogDescMatch[1].trim();
+      }
+    }
+
+    // Clean up artificial "🔴 LIVE: " or "LIVE: " prefixes
+    if (title) {
+      title = title.replace(/^(?:🔴\s*)?(?:LIVE\s*:\s*|Live\s*:\s*)/i, '').trim();
+    }
+
+    return {
+      title: (title || '').trim(),
+      description: (description || '').trim(),
+    };
+  } catch (err) {
+    console.warn(`[YouTube Live] Failed to fetch metadata for video ${videoId}:`, err.message);
+    return { title: '', description: '' };
+  }
+}
+
+/**
  * Checks whether the configured YouTube channel is currently broadcasting live.
  */
 async function checkChannelLiveStatus({ channelId = DEFAULT_CHANNEL_ID, channelHandle = DEFAULT_CHANNEL_HANDLE, apiKey = null } = {}) {
@@ -94,15 +165,21 @@ async function checkChannelLiveStatus({ channelId = DEFAULT_CHANNEL_ID, channelH
     );
 
     if (videoIdMatch && isLive) {
-      // Extract title
-      const titleMatch = html.match(/<meta\s+name="title"\s+content="([^"]+)"/) ||
-                         html.match(/<title>([^<]+)<\/title>/);
-      let title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'Jesus My Rock Live Service';
+      // Fetch full metadata (exact title and description together)
+      const meta = await fetchYouTubeVideoMetadata(videoIdMatch);
+      let title = meta.title;
+      if (!title) {
+        const titleMatch = html.match(/<meta\s+name="title"\s+content="([^"]+)"/) ||
+                           html.match(/<title>([^<]+)<\/title>/);
+        title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'Jesus My Rock Live Service';
+        title = title.replace(/^(?:🔴\s*)?(?:LIVE\s*:\s*|Live\s*:\s*)/i, '').trim();
+      }
 
       return {
         isLive: true,
         videoId: videoIdMatch,
         title,
+        description: meta.description || '',
         source: 'youtube_live_canonical',
       };
     }
@@ -117,10 +194,12 @@ async function checkChannelLiveStatus({ channelId = DEFAULT_CHANNEL_ID, channelH
         const parsed = JSON.parse(apiRes.data);
         if (parsed.items && parsed.items.length > 0) {
           const item = parsed.items[0];
+          let title = (item.snippet?.title || 'Jesus My Rock Live Service').replace(/^(?:🔴\s*)?(?:LIVE\s*:\s*|Live\s*:\s*)/i, '').trim();
           return {
             isLive: true,
             videoId: item.id?.videoId,
-            title: item.snippet?.title || 'Jesus My Rock Live Service',
+            title,
+            description: (item.snippet?.description || '').trim(),
             source: 'youtube_data_api',
           };
         }
@@ -134,6 +213,7 @@ async function checkChannelLiveStatus({ channelId = DEFAULT_CHANNEL_ID, channelH
     isLive: false,
     videoId: null,
     title: null,
+    description: null,
     source: 'offline',
   };
 }
@@ -158,7 +238,18 @@ async function syncLiveStreamJob(dbClient = db) {
     // 3. Process Live State
     if (liveStatus.isLive && liveStatus.videoId) {
       const videoId = liveStatus.videoId;
-      const title = liveStatus.title || 'Sunday Worship Service';
+      let title = (liveStatus.title || '').trim();
+      let description = (liveStatus.description || '').trim();
+
+      // If either title or description is missing, fetch full metadata directly from YouTube
+      if (!title || !description) {
+        const meta = await fetchYouTubeVideoMetadata(videoId);
+        if (!title && meta.title) title = meta.title;
+        if (!description && meta.description) description = meta.description;
+      }
+
+      // Clean title: NEVER prepend "LIVE:" or "🔴 LIVE:" - take the real stream title!
+      title = (title || 'Jesus My Rock Worship Service').replace(/^(?:🔴\s*)?(?:LIVE\s*:\s*|Live\s*:\s*)/i, '').trim();
 
       // Update church profile
       await dbClient.query(`
@@ -179,12 +270,13 @@ async function syncLiveStreamJob(dbClient = db) {
           [videoId, `%${videoId}%`]
         );
 
-        if (existingPost.rows.length === 0) {
-          // Author strictly set to 'Jesus My Rock' as requested
-          const postTitle = `🔴 LIVE: ${title}`;
-          const postContent = `We are LIVE on YouTube right now! Join us for worship and the Word. Watch the live stream below and participate in live comments.`;
-          const mediaUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const mediaUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const postTitle = title;
+        const postContent = description;
 
+        if (existingPost.rows.length === 0) {
+          // Author strictly set to 'Jesus My Rock'
+          // Takes title and description together directly from YouTube stream - no artificial "LIVE:" prefix!
           const newPost = await dbClient.query(`
             INSERT INTO feed_posts (
               author_name, author_role, post_type, title, content,
@@ -205,6 +297,17 @@ async function syncLiveStreamJob(dbClient = db) {
           }
 
           return { live: true, posted: true, post: newPost.rows[0] };
+        } else {
+          // If post exists, update with latest real title and description together
+          await dbClient.query(`
+            UPDATE feed_posts
+            SET 
+              title = COALESCE(NULLIF($1, ''), title),
+              content = COALESCE(NULLIF($2, ''), content),
+              is_pinned = true,
+              updated_at = NOW()
+            WHERE id = $3
+          `, [postTitle, postContent, existingPost.rows[0].id]);
         }
       }
 
@@ -248,16 +351,28 @@ async function syncLiveStreamJob(dbClient = db) {
 
 /**
  * Manual Go Live Trigger (Admins & Pastors can trigger live stream anytime with link or ID)
+ * Automatically fetches the real title & description from YouTube together without artificial prefixes.
  */
-async function manualTriggerGoLive(dbClient, { urlOrVideoId, customTitle, dbUser }) {
+async function manualTriggerGoLive(dbClient, { urlOrVideoId, customTitle, customDescription, dbUser }) {
   const videoId = parseYouTubeVideoId(urlOrVideoId);
   if (!videoId) {
     throw new Error('Invalid YouTube URL or Video ID. Please provide a valid YouTube link.');
   }
 
-  const title = (customTitle || '').trim() || 'Sunday Celebration Service';
-  const postTitle = `🔴 LIVE: ${title}`;
-  const postContent = `We are LIVE on YouTube right now! Join us for worship and the Word. Watch the live stream below and participate in live comments.`;
+  // Fetch real metadata (exact Title and Description together) from YouTube
+  let meta = { title: '', description: '' };
+  try {
+    meta = await fetchYouTubeVideoMetadata(videoId);
+  } catch (e) {
+    console.warn('[YouTube Live] Metadata fetch warning:', e.message);
+  }
+
+  // Use provided custom title or fetched YouTube title (never prepend "LIVE:")
+  let title = (customTitle || '').trim() || meta.title || 'Sunday Worship Service';
+  title = title.replace(/^(?:🔴\s*)?(?:LIVE\s*:\s*|Live\s*:\s*)/i, '').trim();
+
+  // Use provided custom description or fetched YouTube description
+  const content = (customDescription || '').trim() || meta.description || '';
   const mediaUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
   // Update church profile
@@ -285,15 +400,19 @@ async function manualTriggerGoLive(dbClient, { urlOrVideoId, customTitle, dbUser
       )
       VALUES ($1, 'pastor', 'live_stream', $2, $3, 'home', $4, 'youtube_live', $5, true)
       RETURNING *
-    `, ['Jesus My Rock', postTitle, postContent, mediaUrl, videoId]);
+    `, ['Jesus My Rock', title, content, mediaUrl, videoId]);
     post = insertRes.rows[0];
   } else {
     const updateRes = await dbClient.query(`
       UPDATE feed_posts
-      SET is_pinned = true, updated_at = NOW()
-      WHERE id = $1
+      SET 
+        title = $1,
+        content = $2,
+        is_pinned = true,
+        updated_at = NOW()
+      WHERE id = $3
       RETURNING *
-    `, [checkPost.rows[0].id]);
+    `, [title, content, checkPost.rows[0].id]);
     post = updateRes.rows[0];
   }
 
@@ -332,6 +451,7 @@ module.exports = {
   DEFAULT_CHANNEL_ID,
   DEFAULT_CHANNEL_HANDLE,
   parseYouTubeVideoId,
+  fetchYouTubeVideoMetadata,
   checkChannelLiveStatus,
   syncLiveStreamJob,
   manualTriggerGoLive,

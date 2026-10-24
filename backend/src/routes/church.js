@@ -140,12 +140,12 @@ router.post('/youtube/check-now', requireAuth, async (req, res, next) => {
 // POST /api/church/youtube/manual-live - Manually trigger live stream (Admin, Pastor, Manager)
 router.post('/youtube/manual-live', requireAuth, requireRole([ROLES.ADMIN, ROLES.PASTOR, ROLES.MANAGER]), async (req, res, next) => {
   try {
-    const { urlOrVideoId, customTitle } = req.body;
+    const { urlOrVideoId, customTitle, customDescription } = req.body;
     if (!urlOrVideoId) {
       return res.status(400).json({ error: 'Please provide a YouTube URL or Video ID' });
     }
     const { manualTriggerGoLive } = require('../services/youtubeLiveService');
-    const result = await manualTriggerGoLive(db, { urlOrVideoId, customTitle, dbUser: req.user });
+    const result = await manualTriggerGoLive(db, { urlOrVideoId, customTitle, customDescription, dbUser: req.user });
     res.json(result);
   } catch (err) {
     next(err);

@@ -39,6 +39,7 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
   const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
   const [manualLiveUrl, setManualLiveUrl] = useState('');
   const [manualLiveTitle, setManualLiveTitle] = useState('');
+  const [manualLiveDesc, setManualLiveDesc] = useState('');
   const [liveChatTab, setLiveChatTab] = useState({}); // { [postId]: 'church' | 'youtube' }
 
   // Upcoming Service widget
@@ -154,13 +155,15 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
       await api.manualGoLive({
         urlOrVideoId: manualLiveUrl.trim(),
         customTitle: manualLiveTitle.trim() || undefined,
+        customDescription: manualLiveDesc.trim() || undefined,
       });
       setIsGoLiveModalOpen(false);
       setManualLiveUrl('');
       setManualLiveTitle('');
+      setManualLiveDesc('');
       await loadLiveStatus();
       await loadFeed();
-      alert('🔴 Live stream broadcast activated! Feed post created from "Jesus My Rock" and church members notified.');
+      alert('Live broadcast active! Post published from "Jesus My Rock" with stream title and description.');
     } catch (err) {
       alert('Failed to trigger live: ' + err.message);
     } finally {
@@ -1363,13 +1366,26 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  Broadcast Title (Optional)
+                  Broadcast Title (Optional — auto-fetches real YouTube stream title if left blank)
                 </label>
                 <input
                   type="text"
                   value={manualLiveTitle}
                   onChange={(e) => setManualLiveTitle(e.target.value)}
-                  placeholder="Sunday Celebration Service & Worship"
+                  placeholder="Leave blank to use actual YouTube stream title"
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                  Description / Sermon Notes (Optional — auto-fetches YouTube description if left blank)
+                </label>
+                <textarea
+                  value={manualLiveDesc}
+                  onChange={(e) => setManualLiveDesc(e.target.value)}
+                  placeholder="Leave blank to use actual YouTube stream description"
+                  rows={3}
                   className="w-full text-xs px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-red-500"
                 />
               </div>

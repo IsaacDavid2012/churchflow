@@ -151,6 +151,21 @@ describe('YouTube Live Stream Detection, Auto-Posting & Member Notifications', (
       assert.strictEqual(postRes.rows[0].is_pinned, true);
     });
 
+    test('manualTriggerGoLive takes title and description together without artificial LIVE prefix', async () => {
+      const result = await manualTriggerGoLive(dbClient, {
+        urlOrVideoId: 'https://www.youtube.com/watch?v=JMRSUNDAY01',
+        customTitle: 'JMR SUNDAY CELEBRATION SERVICE | 25 OCT 2026',
+        customDescription: 'Join us for praise and worship followed by Ps Jerry sermon.',
+        dbUser: adminUser,
+      });
+
+      assert.strictEqual(result.success, true);
+      const post = result.post;
+      // Must NOT prepend "LIVE:" or "🔴 LIVE:"
+      assert.strictEqual(post.title, 'JMR SUNDAY CELEBRATION SERVICE | 25 OCT 2026');
+      assert.strictEqual(post.content, 'Join us for praise and worship followed by Ps Jerry sermon.');
+    });
+
     test('manualEndLive unpins post but keeps replay available in feed', async () => {
       await manualTriggerGoLive(dbClient, {
         urlOrVideoId: 'LIVESVC2026',
