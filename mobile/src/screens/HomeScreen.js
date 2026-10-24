@@ -19,6 +19,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { api } from '../api/client';
 import { ROLES, normalizeRole, hasRole } from '../utils/roles';
 import { pickMultipleMediaAttachments, pickMediaAttachment } from '../utils/mediaPicker';
@@ -38,6 +39,14 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
   const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
   const [manualLiveUrl, setManualLiveUrl] = useState('');
   const [manualLiveTitle, setManualLiveTitle] = useState('');
+
+  // Live Theater In-App Player Modal (Watch Live Stream + Real-Time Chat In-App)
+  const [liveTheaterPost, setLiveTheaterPost] = useState(null);
+  const [theaterComments, setTheaterComments] = useState([]);
+  const [theaterCommentText, setTheaterCommentText] = useState('');
+  const [sendingTheaterComment, setSendingTheaterComment] = useState(false);
+  const [loadingTheaterComments, setLoadingTheaterComments] = useState(false);
+  const [theaterChatTab, setTheaterChatTab] = useState('church'); // 'church' or 'youtube'
 
   // Upcoming service widget
   const [upcomingService, setUpcomingService] = useState(null);
@@ -114,12 +123,128 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
     return () => clearInterval(interval);
   }, [activePostForComments]);
 
+  // Auto-poll theater comments while in-app Live Theater is open
+  useEffect(() => {
+    if (!liveTheaterPost || !liveTheaterPost.id || liveTheaterPost.id === 'live_stream_active') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const latest = await api.getFeedPostComments(liveTheaterPost.id);
+        if (Array.isArray(latest)) {
+          setTheaterComments(latest);
+        }
+      } catch (e) {}
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [liveTheaterPost]);
+
   const parseYouTubeVideoId = (input) => {
     if (!input || typeof input !== 'string') return null;
     const clean = input.trim();
     if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean;
     const match = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*?v=|live\/|embed\/))([a-zA-Z0-9_-]{11})/);
     return match ? match[1] : null;
+  };
+
+  const handleOpenLiveTheater = (postOrStatus) => {
+    let targetPost = null;
+    let targetVideoId = null;
+
+    if (postOrStatus?.id && postOrStatus.id !== 'live_stream_active') {
+      targetPost = postOrStatus;
+      targetVideoId = postOrStatus.media_name && /^[a-zA-Z0-9_-]{11}$/.test(postOrStatus.media_name)
+        ? postOrStatus.media_name
+        : parseYouTubeVideoId(postOrStatus.media_url);
+    } else {
+      const matched = posts.find(
+        (p) =>
+          (p.post_type === 'live_stream' || p.media_type === 'youtube_live') &&
+          (p.media_name === liveStatus?.videoId || parseYouTubeVideoId(p.media_url) === liveStatus?.videoId)
+      );
+      if (matched) {
+        targetPost = matched;
+        targetVideoId = liveStatus?.videoId || matched.media_name || parseYouTubeVideoId(matched.media_url);
+      } else if (liveStatus?.activePost) {
+        targetPost = liveStatus.activePost;
+        targetVideoId = liveStatus.videoId || liveStatus.activePost.media_name || parseYouTubeVideoId(liveStatus.activePost.media_url);
+      } else {
+        targetPost = {
+          id: 'live_stream_active',
+          title: liveStatus?.title || 'Jesus My Rock Church - Live Service',
+          media_name: liveStatus?.videoId,
+          media_url: liveStatus?.videoId ? `https://www.youtube.com/watch?v=${liveStatus.videoId}` : null,
+          post_type: 'live_stream',
+        };
+        targetVideoId = liveStatus?.videoId;
+      }
+    }
+
+    if (!targetVideoId && liveStatus?.videoId) {
+      targetVideoId = liveStatus.videoId;
+    }
+
+    if (!targetVideoId) {
+      Alert.alert('Live Stream', 'No active live stream video ID found.');
+      return;
+    }
+
+    setLiveTheaterPost({
+      ...targetPost,
+      videoId: targetVideoId,
+    });
+    setTheaterChatTab('church');
+    setTheaterCommentText('');
+    loadTheaterComments(targetPost.id);
+  };
+
+  const loadTheaterComments = async (postId) => {
+    if (!postId || postId === 'live_stream_active') return;
+    setLoadingTheaterComments(true);
+    try {
+      const data = await api.getFeedPostComments(postId);
+      setTheaterComments(data || []);
+    } catch (e) {
+      console.warn('Failed to load theater comments:', e);
+    } finally {
+      setLoadingTheaterComments(false);
+    }
+  };
+
+  const handleAddTheaterComment = async () => {
+    if (!theaterCommentText.trim() || !liveTheaterPost) return;
+    const textToSend = theaterCommentText.trim();
+    setSendingTheaterComment(true);
+
+    try {
+      let targetPostId = liveTheaterPost.id;
+      if (targetPostId === 'live_stream_active') {
+        const matched = posts.find((p) => p.post_type === 'live_stream' || p.media_type === 'youtube_live');
+        if (matched) {
+          targetPostId = matched.id;
+        } else {
+          Alert.alert('Notice', 'Comments will be available once the live post appears in the feed.');
+          setSendingTheaterComment(false);
+          return;
+        }
+      }
+
+      const newComment = await api.addFeedPostComment(targetPostId, textToSend);
+      setTheaterComments((prev) => [...prev, newComment]);
+      setTheaterCommentText('');
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === targetPostId
+            ? { ...p, comments_count: (p.comments_count || 0) + 1 }
+            : p
+        )
+      );
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Could not post comment');
+    } finally {
+      setSendingTheaterComment(false);
+    }
   };
 
   const loadLiveStatus = async () => {
@@ -576,6 +701,23 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
           </View>
         )}
 
+        {/* Live Stream Quick Action Banner for In-App Watch & Chat */}
+        {isLiveStream && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => handleOpenLiveTheater(item)}
+            style={styles.watchLiveCardBanner}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.livePulseDot} />
+              <Text style={styles.watchLiveCardBannerText}>
+                🔴 Tap to Watch In-App & Join Church Chat
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#ffffff" />
+          </TouchableOpacity>
+        )}
+
         {/* Media Attachments Gallery */}
         {attachmentsList.length > 0 && (
           <View style={styles.mediaContainer}>
@@ -585,6 +727,7 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                 mediaType={attachmentsList[0].type}
                 mediaName={attachmentsList[0].name}
                 mediaSize={attachmentsList[0].size}
+                onOpenLiveTheater={isLiveStream ? () => handleOpenLiveTheater(item) : undefined}
               />
             ) : (
               // Multi-Photo Gallery (up to 10 photos)
@@ -632,13 +775,25 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
 
           <TouchableOpacity
             style={styles.socialActionBtn}
-            onPress={() => handleOpenComments(item)}
+            onPress={() => {
+              if (isLiveStream) {
+                handleOpenLiveTheater(item);
+              } else {
+                handleOpenComments(item);
+              }
+            }}
           >
-            <Ionicons name="chatbubble-outline" size={16} color={colors.subText} />
-            <Text style={[styles.socialActionCount, { color: colors.text }]}>
+            <Ionicons
+              name={isLiveStream ? 'chatbubbles' : 'chatbubble-outline'}
+              size={16}
+              color={isLiveStream ? '#dc2626' : colors.subText}
+            />
+            <Text style={[styles.socialActionCount, { color: isLiveStream ? '#dc2626' : colors.text }]}>
               {item.comments_count || 0}
             </Text>
-            <Text style={[styles.socialActionLabel, { color: colors.subText }]}>Comments</Text>
+            <Text style={[styles.socialActionLabel, { color: isLiveStream ? '#dc2626' : colors.subText }]}>
+              {isLiveStream ? 'Live Chat' : 'Comments'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -669,11 +824,7 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
             {liveStatus?.isLive && (
               <TouchableOpacity
                 activeOpacity={0.9}
-                onPress={() => {
-                  if (liveStatus.videoId) {
-                    Linking.openURL(`https://www.youtube.com/watch?v=${liveStatus.videoId}`).catch(() => {});
-                  }
-                }}
+                onPress={() => handleOpenLiveTheater(liveStatus)}
                 style={styles.liveHeroBanner}
               >
                 <View style={styles.liveHeroTop}>
@@ -684,13 +835,16 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
                   {liveStatus.title || 'Sunday Worship Service & Prophetic Word'}
                 </Text>
                 <Text style={styles.liveHeroSub}>
-                  Streaming live on YouTube. Tap to watch with church family!
+                  Streaming live on YouTube. Tap to watch in-app with church chat!
                 </Text>
                 <View style={styles.watchLiveBtnRow}>
-                  <View style={styles.watchLiveBtn}>
-                    <Ionicons name="play" size={13} color="#ffffff" />
-                    <Text style={styles.watchLiveBtnText}>Watch Live Stream</Text>
-                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleOpenLiveTheater(liveStatus)}
+                    style={styles.watchLiveBtn}
+                  >
+                    <Ionicons name="play" size={13} color="#dc2626" />
+                    <Text style={styles.watchLiveBtnText}>Watch Live & Chat</Text>
+                  </TouchableOpacity>
                   {canPost && (
                     <TouchableOpacity
                       onPress={handleEndLiveStream}
@@ -1312,6 +1466,228 @@ export default function HomeScreen({ user, isDark = false, onSelectService, onNa
               </TouchableOpacity>
             </View>
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 5.6. In-App Live Service Theater Modal (Watch + Live Chat) */}
+      <Modal
+        visible={!!liveTheaterPost}
+        animationType="slide"
+        onRequestClose={() => setLiveTheaterPost(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.theaterContainer}
+        >
+          {/* Top Bar Header */}
+          <View style={styles.theaterHeader}>
+            <TouchableOpacity
+              onPress={() => setLiveTheaterPost(null)}
+              style={styles.theaterCloseBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+
+            <View style={styles.theaterTitleGroup}>
+              <View style={styles.theaterLiveBadge}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.theaterLiveBadgeText}>LIVE SERVICE</Text>
+              </View>
+              <Text style={styles.theaterTitleText} numberOfLines={1}>
+                {liveTheaterPost?.title || 'Jesus My Rock Live Service'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => {
+                if (liveTheaterPost?.videoId) {
+                  Linking.openURL(`https://www.youtube.com/watch?v=${liveTheaterPost.videoId}`).catch(() => {});
+                }
+              }}
+              style={styles.theaterYtBtn}
+            >
+              <Ionicons name="logo-youtube" size={16} color="#ef4444" />
+              <Ionicons name="open-outline" size={12} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+
+          {/* 16:9 Video Player embedded via react-native-webview */}
+          {liveTheaterPost?.videoId && (
+            <View style={styles.theaterPlayerBox}>
+              <WebView
+                source={{
+                  html: `
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                        <style>
+                          * { margin: 0; padding: 0; box-sizing: border-box; }
+                          body { background: #000; overflow: hidden; }
+                          .container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+                          iframe { width: 100%; height: 100%; border: 0; }
+                        </style>
+                      </head>
+                      <body>
+                        <div class="container">
+                          <iframe
+                            src="https://www.youtube.com/embed/${liveTheaterPost.videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                          </iframe>
+                        </div>
+                      </body>
+                    </html>
+                  `,
+                }}
+                style={styles.theaterWebView}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                allowsFullscreenVideo={true}
+              />
+            </View>
+          )}
+
+          {/* Chat Section Header & Tabs */}
+          <View style={styles.theaterChatTabsRow}>
+            <TouchableOpacity
+              onPress={() => setTheaterChatTab('church')}
+              style={[
+                styles.theaterChatTabBtn,
+                theaterChatTab === 'church' && styles.theaterChatTabBtnActive,
+              ]}
+            >
+              <Ionicons
+                name="chatbubbles"
+                size={14}
+                color={theaterChatTab === 'church' ? '#ffffff' : '#94a3b8'}
+              />
+              <Text
+                style={[
+                  styles.theaterChatTabText,
+                  theaterChatTab === 'church' && styles.theaterChatTabTextActive,
+                ]}
+              >
+                ⛪ Church Live Chat ({theaterComments.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setTheaterChatTab('youtube')}
+              style={[
+                styles.theaterChatTabBtn,
+                theaterChatTab === 'youtube' && styles.theaterChatTabBtnActive,
+              ]}
+            >
+              <Ionicons
+                name="logo-youtube"
+                size={14}
+                color={theaterChatTab === 'youtube' ? '#ef4444' : '#94a3b8'}
+              />
+              <Text
+                style={[
+                  styles.theaterChatTabText,
+                  theaterChatTab === 'youtube' && styles.theaterChatTabTextActive,
+                ]}
+              >
+                YouTube Chat
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Chat Body */}
+          {theaterChatTab === 'church' ? (
+            <View style={{ flex: 1, backgroundColor: '#090d16' }}>
+              {loadingTheaterComments && theaterComments.length === 0 ? (
+                <View style={styles.theaterLoadingBox}>
+                  <ActivityIndicator size="small" color="#c59c6c" />
+                  <Text style={styles.theaterLoadingText}>Connecting to church live chat...</Text>
+                </View>
+              ) : theaterComments.length === 0 ? (
+                <View style={styles.theaterEmptyBox}>
+                  <Text style={{ fontSize: 28, marginBottom: 6 }}>🙏</Text>
+                  <Text style={styles.theaterEmptyTitle}>Welcome to the Live Stream!</Text>
+                  <Text style={styles.theaterEmptySub}>
+                    Be the first to share an Amen, praise report, or say hello to church family.
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={theaterComments}
+                  keyExtractor={(c) => c.id}
+                  contentContainerStyle={styles.theaterCommentsList}
+                  renderItem={({ item }) => (
+                    <View style={styles.theaterCommentItem}>
+                      <View style={styles.theaterAvatarBadge}>
+                        <Text style={styles.theaterAvatarText}>
+                          {(item.user_name || 'U').slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.theaterBubble}>
+                        <View style={styles.theaterBubbleHeader}>
+                          <Text style={styles.theaterAuthorName}>{item.user_name}</Text>
+                          <Text style={styles.theaterTimeText}>
+                            {new Date(item.created_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </Text>
+                        </View>
+                        <Text style={styles.theaterCommentContent}>{item.content}</Text>
+                      </View>
+                    </View>
+                  )}
+                />
+              )}
+
+              {/* Sticky Input Bar */}
+              <View style={styles.theaterInputBar}>
+                <TextInput
+                  style={styles.theaterTextInput}
+                  placeholder={`Share an Amen or chat as ${user?.name || 'Member'}...`}
+                  placeholderTextColor="#64748b"
+                  value={theaterCommentText}
+                  onChangeText={setTheaterCommentText}
+                />
+                <TouchableOpacity
+                  onPress={handleAddTheaterComment}
+                  disabled={sendingTheaterComment || !theaterCommentText.trim()}
+                  style={[
+                    styles.theaterSendBtn,
+                    { opacity: sendingTheaterComment || !theaterCommentText.trim() ? 0.5 : 1 },
+                  ]}
+                >
+                  {sendingTheaterComment ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Ionicons name="send" size={16} color="#ffffff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            // YouTube Live Chat Tab
+            <View style={{ flex: 1, backgroundColor: '#000000' }}>
+              <WebView
+                source={{
+                  uri: `https://www.youtube.com/live_chat?v=${liveTheaterPost.videoId}&embed_domain=serve.creativeclicks.art`,
+                }}
+                style={{ flex: 1, backgroundColor: '#000000' }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                startInLoadingState={true}
+                renderLoading={() => (
+                  <View style={styles.theaterLoadingBox}>
+                    <ActivityIndicator size="small" color="#ef4444" />
+                    <Text style={styles.theaterLoadingText}>Loading YouTube Live Chat...</Text>
+                  </View>
+                )}
+              />
+            </View>
+          )}
         </KeyboardAvoidingView>
       </Modal>
 
@@ -2131,5 +2507,232 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 10,
     fontWeight: '900',
+  },
+  // In-Card Live Stream Action Banner
+  watchLiveCardBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#dc2626',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#ef4444',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  watchLiveCardBannerText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  // In-App Live Service Theater Modal Styles
+  theaterContainer: {
+    flex: 1,
+    backgroundColor: '#05070d',
+  },
+  theaterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#0a0e1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  theaterCloseBtn: {
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  theaterTitleGroup: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 10,
+  },
+  theaterLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginBottom: 3,
+  },
+  theaterLiveBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  theaterTitleText: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  theaterYtBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  theaterPlayerBox: {
+    width: '100%',
+    height: SCREEN_WIDTH * (9 / 16),
+    backgroundColor: '#000000',
+  },
+  theaterWebView: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  theaterChatTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#0f172a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  theaterChatTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  theaterChatTabBtnActive: {
+    borderBottomColor: '#c59c6c',
+    backgroundColor: 'rgba(197, 156, 108, 0.1)',
+  },
+  theaterChatTabText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  theaterChatTabTextActive: {
+    color: '#ffffff',
+    fontWeight: '900',
+  },
+  theaterLoadingBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    padding: 20,
+  },
+  theaterLoadingText: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  theaterEmptyBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  theaterEmptyTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  theaterEmptySub: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  theaterCommentsList: {
+    padding: 14,
+    paddingBottom: 20,
+  },
+  theaterCommentItem: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  theaterAvatarBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#c59c6c',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  theaterAvatarText: {
+    color: '#c59c6c',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  theaterBubble: {
+    flex: 1,
+    backgroundColor: '#131b2e',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+  },
+  theaterBubbleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  theaterAuthorName: {
+    color: '#f1f5f9',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  theaterTimeText: {
+    color: '#64748b',
+    fontSize: 10,
+  },
+  theaterCommentContent: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  theaterInputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    backgroundColor: '#0a0e1a',
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  theaterTextInput: {
+    flex: 1,
+    backgroundColor: '#131b2e',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: '#f8fafc',
+    fontSize: 12,
+  },
+  theaterSendBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

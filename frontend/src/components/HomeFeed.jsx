@@ -865,8 +865,8 @@ export default function HomeFeed({ currentUser, onNavigateTab }) {
                   </div>
                 )}
 
-                {/* Media Gallery (Up to 10 photos/media items, <= 20MB each) */}
-                {attachmentsList.length > 0 && (
+                {/* Media Gallery (Up to 10 photos/media items, <= 20MB each) - Do not duplicate for live stream posts */}
+                {!isLiveStream && attachmentsList.length > 0 && (
                   <div className="mt-3.5">
                     {attachmentsList.length === 1 ? (
                       <MediaAttachmentCard

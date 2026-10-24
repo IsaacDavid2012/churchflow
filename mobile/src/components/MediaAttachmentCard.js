@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
 import { api, API_BASE_URL } from '../api/client';
 
@@ -21,9 +22,11 @@ export default function MediaAttachmentCard({
   mediaSize,
   isMe = false,
   colors = {},
+  onOpenLiveTheater,
 }) {
   const [importing, setImporting] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isPlayingInApp, setIsPlayingInApp] = useState(false);
 
   if (!mediaUrl) return null;
 
@@ -113,39 +116,101 @@ export default function MediaAttachmentCard({
     });
   };
 
-  // 0. Render YouTube Live Stream
+  // 0. Render YouTube Live Stream (In-App Player with Full Native Embedding)
   if (isYouTubeLive && ytid) {
     return (
       <View style={styles.ytLiveCard}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${ytid}`).catch(() => {})}
-          style={styles.ytThumbnailWrapper}
-        >
-          <Image
-            source={{ uri: `https://img.youtube.com/vi/${ytid}/hqdefault.jpg` }}
-            style={styles.ytThumbnail}
-            resizeMode="cover"
-          />
-          <View style={styles.ytLiveBadge}>
-            <View style={styles.ytLiveDot} />
-            <Text style={styles.ytLiveBadgeText}>LIVE STREAM</Text>
+        {isPlayingInApp && !onOpenLiveTheater ? (
+          <View style={{ width: '100%', height: 210, backgroundColor: '#000000' }}>
+            <WebView
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                      <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body { background: #000; overflow: hidden; }
+                        .container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+                        iframe { width: 100%; height: 100%; border: 0; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="container">
+                        <iframe
+                          src="https://www.youtube.com/embed/${ytid}?autoplay=1&playsinline=1&rel=0&modestbranding=1"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowfullscreen>
+                        </iframe>
+                      </div>
+                    </body>
+                  </html>
+                `,
+              }}
+              style={{ flex: 1, backgroundColor: '#000000' }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              allowsFullscreenVideo={true}
+            />
           </View>
-          <View style={styles.ytPlayCenter}>
-            <View style={styles.ytPlayCircle}>
-              <Ionicons name="play" size={26} color="#ffffff" style={{ marginLeft: 3 }} />
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              if (onOpenLiveTheater) {
+                onOpenLiveTheater();
+              } else {
+                setIsPlayingInApp(true);
+              }
+            }}
+            style={styles.ytThumbnailWrapper}
+          >
+            <Image
+              source={{ uri: `https://img.youtube.com/vi/${ytid}/hqdefault.jpg` }}
+              style={styles.ytThumbnail}
+              resizeMode="cover"
+            />
+            <View style={styles.ytLiveBadge}>
+              <View style={styles.ytLiveDot} />
+              <Text style={styles.ytLiveBadgeText}>LIVE STREAM</Text>
             </View>
-            <Text style={styles.ytPlayText}>Tap to Watch Live</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.ytBottomBar}
-          activeOpacity={0.8}
-          onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${ytid}`).catch(() => {})}
-        >
-          <Text style={styles.ytBottomBarText}>🔴 Watch on YouTube App</Text>
-          <Ionicons name="open-outline" size={14} color="#ffffff" />
-        </TouchableOpacity>
+            <View style={styles.ytPlayCenter}>
+              <View style={styles.ytPlayCircle}>
+                <Ionicons name="play" size={26} color="#ffffff" style={{ marginLeft: 3 }} />
+              </View>
+              <Text style={styles.ytPlayText}>▶ Watch & Chat In-App</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        <View style={styles.ytBottomBar}>
+          <TouchableOpacity
+            onPress={() => {
+              if (onOpenLiveTheater) {
+                onOpenLiveTheater();
+              } else {
+                setIsPlayingInApp(!isPlayingInApp);
+              }
+            }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+          >
+            <Ionicons name="play-circle" size={16} color="#ef4444" />
+            <Text style={styles.ytBottomBarText}>
+              {isPlayingInApp && !onOpenLiveTheater
+                ? 'Playing in App (Tap to Close)'
+                : '🔴 Watch Live & In-App Chat'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${ytid}`).catch(() => {})}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '700' }}>YouTube App</Text>
+            <Ionicons name="open-outline" size={13} color="#94a3b8" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
