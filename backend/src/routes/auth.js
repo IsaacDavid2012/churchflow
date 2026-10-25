@@ -15,33 +15,81 @@ const { ROLES } = require('../../../shared/roles');
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, email, password } = req.body;
-  const identifier = (username || email || '').trim();
+  const rawIdentifier = (username || email || '').trim();
 
-  if (!identifier || !password) {
+  if (!rawIdentifier || !password) {
     return res.status(400).json({ error: 'Username/Email and password are required' });
   }
 
   try {
+    const identifier = rawIdentifier.toLowerCase();
+    const phoneDigits = rawIdentifier.replace(/\D/g, '');
+
+    // Support:
+    // 1. username
+    // 2. email
+    // 3. full name (e.g. "Daniel Raj")
+    // 4. first name (e.g. "Daniel")
+    // 5. phone number (digits matched against musicians table)
+    const queryParams = [identifier];
+    let phoneCondition = 'FALSE';
+    if (phoneDigits.length >= 7) {
+      const coreDigits = phoneDigits.replace(/^(60|0)/, '');
+      let normDigits = phoneDigits;
+      if (normDigits.startsWith('600')) normDigits = '60' + normDigits.slice(3);
+      else if (normDigits.startsWith('60')) { /* already 60 */ }
+      else if (normDigits.startsWith('0')) normDigits = '60' + normDigits.slice(1);
+      else if (normDigits.startsWith('1')) normDigits = '60' + normDigits;
+
+      const p1 = queryParams.length + 1;
+      const p2 = queryParams.length + 2;
+      queryParams.push(normDigits, coreDigits);
+
+      phoneCondition = `u.id IN (
+        SELECT user_id FROM musicians 
+        WHERE user_id IS NOT NULL 
+          AND (
+            REGEXP_REPLACE(phone, '\\D', '', 'g') = $${p1}
+            OR REGEXP_REPLACE(phone, '\\D', '', 'g') LIKE '%' || $${p2}
+          )
+      )`;
+    }
+
     const result = await db.query(
-      `SELECT id, email, username, password_hash, role, name, status, force_password_reset 
-       FROM users 
-       WHERE LOWER(username) = LOWER($1) OR (email IS NOT NULL AND LOWER(email) = LOWER($1))`,
-      [identifier]
+      `SELECT u.id, u.email, u.username, u.password_hash, u.role, u.name, u.status, u.force_password_reset 
+       FROM users u
+       WHERE LOWER(u.username) = $1 
+          OR (u.email IS NOT NULL AND LOWER(u.email) = $1)
+          OR LOWER(u.name) = $1
+          OR LOWER(u.name) LIKE $1 || ' %'
+          OR ${phoneCondition}`,
+      queryParams
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user = result.rows[0];
+    // Try password against candidate user(s)
+    let matchedUser = null;
+    for (const candidate of result.rows) {
+      if (candidate.password_hash) {
+        const isMatch = await bcrypt.compare(password, candidate.password_hash);
+        if (isMatch) {
+          matchedUser = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!matchedUser) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = matchedUser;
 
     if (user.status === 'disabled') {
       return res.status(403).json({ error: 'This account has been disabled. Please contact an administrator.' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const token = generateAccessToken(user);

@@ -339,9 +339,30 @@ router.get('/join', async (req, res) => {
 
 const bcrypt = require('bcryptjs');
 
+// Helper to normalize Malaysian mobile numbers to +601XXXXXXXX
+function normalizeMalaysianPhone(rawPhone) {
+  if (!rawPhone) return '';
+  let digits = String(rawPhone).replace(/[^0-9]/g, '');
+  if (!digits) return '';
+
+  // Handle double prefix cases like +60 016...
+  if (digits.startsWith('600')) {
+    digits = '60' + digits.substring(3);
+  } else if (digits.startsWith('60')) {
+    // already starts with 60
+  } else if (digits.startsWith('0')) {
+    digits = '60' + digits.substring(1);
+  } else if (digits.startsWith('1')) {
+    digits = '60' + digits;
+  } else {
+    digits = '60' + digits;
+  }
+  return '+' + digits;
+}
+
 // POST /api/public/join - Public volunteer sign-up / team registration with password creation
 router.post('/join', async (req, res) => {
-  const { name, phone, email, password, roles, notes } = req.body;
+  const { name, phone, email, username, password, roles, notes } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Full name is required' });
@@ -359,8 +380,34 @@ router.post('/join', async (req, res) => {
   try {
     let createdUserId = null;
     const cleanEmail = email && email.trim() ? email.trim().toLowerCase() : null;
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizeMalaysianPhone(phone);
+    const phoneDigits = cleanPhone.replace(/[^0-9]/g, '');
     const cleanName = name.trim();
+
+    if (phoneDigits.length < 9) {
+      return res.status(400).json({ error: 'Please enter a valid Malaysian mobile number (e.g. 016 315 1671 or 16 315 1671)' });
+    }
+
+    // Determine and validate username
+    let chosenUsername = username ? username.trim().toLowerCase() : '';
+    if (chosenUsername) {
+      if (chosenUsername.length < 3) {
+        return res.status(400).json({ error: 'Username must be at least 3 characters long' });
+      }
+      if (!/^[a-z0-9._-]+$/.test(chosenUsername)) {
+        return res.status(400).json({ error: 'Username can only contain lowercase letters, numbers, dots, hyphens, and underscores' });
+      }
+    } else {
+      // Auto-generate fallback from name, email, or phone digits
+      let base = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!base || base.length < 3) {
+        base = cleanEmail ? cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '') : '';
+      }
+      if (!base || base.length < 3) {
+        base = 'volunteer' + phoneDigits.slice(-4);
+      }
+      chosenUsername = base.slice(0, 30);
+    }
 
     // If password provided, create unified User login account
     if (password && password.trim()) {
@@ -369,40 +416,71 @@ router.post('/join', async (req, res) => {
       }
 
       const passwordHash = await bcrypt.hash(password.trim(), 10);
-      let baseUsername = cleanEmail ? cleanEmail.split('@')[0] : cleanPhone.replace(/[^0-9]/g, '');
-      baseUsername = baseUsername.slice(0, 50).toLowerCase();
 
-      // Check if user already exists
+      // Check if user already exists by email
       let existingUser = null;
       if (cleanEmail) {
-        const userCheck = await db.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+        const userCheck = await db.query('SELECT id, username FROM users WHERE LOWER(email) = $1', [cleanEmail]);
         if (userCheck.rows.length > 0) existingUser = userCheck.rows[0];
       }
 
+      // Also check if user exists by phone
+      if (!existingUser && cleanPhone) {
+        const phoneUserCheck = await db.query(
+          `SELECT u.id, u.username FROM users u
+           JOIN musicians m ON m.user_id = u.id
+           WHERE m.phone = $1 OR REGEXP_REPLACE(m.phone, '\\D', '', 'g') = $2
+           LIMIT 1`,
+          [cleanPhone, phoneDigits]
+        );
+        if (phoneUserCheck.rows.length > 0) existingUser = phoneUserCheck.rows[0];
+      }
+
       if (existingUser) {
-        // Update existing user password
+        // Update existing user
+        let targetUsername = existingUser.username;
+        if (username && username.trim().toLowerCase() !== (existingUser.username || '').toLowerCase()) {
+          const uTaken = await db.query('SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2', [chosenUsername, existingUser.id]);
+          if (uTaken.rows.length > 0) {
+            return res.status(409).json({ error: `The username "${chosenUsername}" is already taken. Please choose another.` });
+          }
+          targetUsername = chosenUsername;
+        }
+
         await db.query(`
           UPDATE users 
-          SET password_hash = $1, name = $2, updated_at = NOW()
-          WHERE id = $3
-        `, [passwordHash, cleanName, existingUser.id]);
+          SET password_hash = $1, name = $2, username = COALESCE($3, username), updated_at = NOW()
+          WHERE id = $4
+        `, [passwordHash, cleanName, targetUsername, existingUser.id]);
         createdUserId = existingUser.id;
+        chosenUsername = targetUsername;
       } else {
-        // Generate unique username
-        let uniqueUsername = baseUsername || 'volunteer';
-        let suffix = 1;
-        while (true) {
-          const uCheck = await db.query('SELECT id FROM users WHERE LOWER(username) = $1', [uniqueUsername.toLowerCase()]);
-          if (uCheck.rows.length === 0) break;
-          uniqueUsername = `${baseUsername}${suffix++}`;
+        // Verify chosen username is not taken
+        const uCheck = await db.query('SELECT id FROM users WHERE LOWER(username) = $1', [chosenUsername]);
+        if (uCheck.rows.length > 0) {
+          if (username && username.trim()) {
+            return res.status(409).json({ error: `The username "${chosenUsername}" is already taken. Please choose another.` });
+          }
+          // Suffix collision resolver if auto-generated
+          let suffix = 1;
+          let candidate = chosenUsername;
+          while (true) {
+            const check2 = await db.query('SELECT id FROM users WHERE LOWER(username) = $1', [candidate]);
+            if (check2.rows.length === 0) {
+              chosenUsername = candidate;
+              break;
+            }
+            candidate = `${chosenUsername.slice(0, 25)}${suffix++}`;
+          }
         }
 
         const newUserRes = await db.query(`
           INSERT INTO users (username, email, password_hash, role, name, status)
           VALUES ($1, $2, $3, 'member', $4, 'active')
-          RETURNING id
-        `, [uniqueUsername, cleanEmail, passwordHash, cleanName]);
+          RETURNING id, username
+        `, [chosenUsername, cleanEmail, passwordHash, cleanName]);
         createdUserId = newUserRes.rows[0].id;
+        chosenUsername = newUserRes.rows[0].username;
       }
     }
 
@@ -483,6 +561,11 @@ router.post('/join', async (req, res) => {
       message: `Welcome to the team, ${newMusician.name}! Your volunteer registration and account have been created.`,
       member: newMusician,
       hasAccount: !!createdUserId,
+      credentials: {
+        username: chosenUsername,
+        phone: cleanPhone,
+        email: cleanEmail,
+      },
     });
   } catch (err) {
     console.error('Volunteer registration error:', err);

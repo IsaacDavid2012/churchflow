@@ -177,6 +177,116 @@
       resize: vertical;
     }
 
+    /* Malaysian Phone Input Group */
+    .phone-input-group {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+    }
+
+    .phone-prefix {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-right: none;
+      border-radius: 10px 0 0 10px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .phone-prefix .flag {
+      font-size: 16px;
+    }
+
+    .phone-field {
+      border-radius: 0 10px 10px 0 !important;
+      flex: 1;
+    }
+
+    /* Username Input Wrap */
+    .username-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+
+    .username-prefix {
+      position: absolute;
+      left: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .username-field {
+      padding-left: 32px !important;
+      font-family: 'Plus Jakarta Sans', monospace;
+      font-weight: 600;
+    }
+
+    .field-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    /* Confirmed Credentials Display Card */
+    .credentials-box {
+      background: var(--card-inner);
+      border: 1.5px dashed var(--border-strong);
+      border-radius: 14px;
+      padding: 14px 18px;
+      text-align: left;
+      margin: 18px auto;
+      max-width: 440px;
+    }
+
+    .cred-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cred-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .cred-row:last-child {
+      border-bottom: none;
+    }
+
+    .cred-label {
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .cred-val {
+      color: var(--text);
+      font-weight: 800;
+      font-family: 'Plus Jakarta Sans', monospace;
+    }
+
     /* Positions Toggle Chips Section */
     .roles-section {
       background: var(--card-inner);
@@ -402,25 +512,41 @@
       <form id="joinForm" onsubmit="handleSubmit(event)">
         <div class="form-group">
           <label class="form-label">Full Name <span>*</span></label>
-          <input type="text" id="nameInput" class="form-input" placeholder="e.g. Isaac David" required>
+          <input type="text" id="nameInput" class="form-input" placeholder="e.g. Daniel Raj" required autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Choose Username <span>*</span></label>
+          <div class="username-input-wrap">
+            <span class="username-prefix">@</span>
+            <input type="text" id="usernameInput" class="form-input username-field" placeholder="e.g. danielraj" required autocomplete="username" autocapitalize="none" spellcheck="false">
+          </div>
+          <p class="field-hint" id="usernameHint">Your handle to sign in. Auto-generated from your name, or customize it (min 3 chars).</p>
         </div>
 
         <div class="form-group">
           <label class="form-label">Phone Number / WhatsApp <span>*</span></label>
-          <input type="tel" id="phoneInput" class="form-input" placeholder="e.g. +60 17-600 1484" required>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Email Address (Optional)</label>
-          <input type="email" id="emailInput" class="form-input" placeholder="e.g. isaac@example.com">
+          <div class="phone-input-group">
+            <div class="phone-prefix">
+              <span class="flag">🇲🇾</span>
+              <span class="code">+60</span>
+            </div>
+            <input type="tel" id="phoneInput" class="form-input phone-field" placeholder="16 315 1671" required autocomplete="tel">
+          </div>
+          <p class="field-hint">Malaysian mobile number (+60). Used for scheduling notifications & roster alerts via WhatsApp.</p>
         </div>
 
         <div class="form-group">
           <label class="form-label">Create App Password <span>*</span></label>
           <input type="password" id="passwordInput" class="form-input" placeholder="Min 6 characters (for Web & Mobile login)" required minlength="6">
-          <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-            You can use this password to sign into the ChurchFlow mobile app or web dashboard.
+          <p class="field-hint">
+            You can use this password with your <strong>Username</strong> or <strong>First Name</strong> to sign into ChurchFlow.
           </p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email Address (Optional)</label>
+          <input type="email" id="emailInput" class="form-input" placeholder="e.g. daniel@example.com" autocomplete="email">
         </div>
 
         <!-- Toggle List of Positions -->
@@ -452,10 +578,20 @@
       <p class="success-text" id="welcomeText">
         Thank you for submitting your volunteer registration. Our worship and ministry team leaders will review your application and contact you soon.
       </p>
+
+      <!-- Credentials Box injected via JS -->
+      <div id="confirmedCredentials"></div>
+
       <div class="success-roles-list" id="selectedRolesSummary"></div>
-      <p style="font-size: 12px; color: var(--text-muted);">
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 18px;">
         Jesus My Rock Church • Serving together for God's glory
       </p>
+
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+        <a href="/" style="display:inline-flex;align-items:center;gap:6px;background:var(--primary);color:#fff;text-decoration:none;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(197, 156, 108, 0.3);">
+          💻 Sign In to ChurchFlow Dashboard →
+        </a>
+      </div>
     </div>
 
     <div class="footer">
@@ -465,6 +601,7 @@
 
   <script>
     let selectedRoles = new Set();
+    let usernameTouched = false;
     const DEFAULT_POSITIONS = [
       'Drums',
       'Bass',
@@ -477,6 +614,29 @@
       'Media / Lyrics Slides',
       'Cameras / Stream'
     ];
+
+    function initUsernameListeners() {
+      const nameEl = document.getElementById('nameInput');
+      const userEl = document.getElementById('usernameInput');
+
+      if (nameEl && userEl) {
+        nameEl.addEventListener('input', () => {
+          if (!usernameTouched) {
+            const raw = nameEl.value.trim().toLowerCase();
+            const suggestion = raw.replace(/[^a-z0-9]/g, '').slice(0, 30);
+            userEl.value = suggestion;
+          }
+        });
+
+        userEl.addEventListener('input', () => {
+          usernameTouched = true;
+          const clean = userEl.value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+          if (userEl.value !== clean) {
+            userEl.value = clean;
+          }
+        });
+      }
+    }
 
     async function loadPositions() {
       const grid = document.getElementById('rolesGrid');
@@ -527,15 +687,45 @@
       errorBox.style.display = 'none';
 
       const name = document.getElementById('nameInput').value.trim();
-      const phone = document.getElementById('phoneInput').value.trim();
+      const username = document.getElementById('usernameInput').value.trim().toLowerCase();
+      const rawPhone = document.getElementById('phoneInput').value.trim();
       const email = document.getElementById('emailInput').value.trim();
       const password = document.getElementById('passwordInput').value.trim();
       const notes = document.getElementById('notesInput').value.trim();
 
-      if (!name || !phone) {
-        showError('Please enter your full name and phone number.');
+      if (!name) {
+        showError('Please enter your full name.');
         return;
       }
+
+      if (!username || username.length < 3) {
+        showError('Please choose a username of at least 3 characters.');
+        return;
+      }
+
+      if (!/^[a-z0-9._-]+$/.test(username)) {
+        showError('Username can only contain lowercase letters, numbers, dots, hyphens, and underscores.');
+        return;
+      }
+
+      if (!rawPhone) {
+        showError('Please enter your Malaysian mobile number.');
+        return;
+      }
+
+      // Normalize Malaysian phone number to +601XXXXXXXX
+      let digits = rawPhone.replace(/\D/g, '');
+      if (digits.startsWith('600')) digits = '60' + digits.substring(3);
+      else if (digits.startsWith('60')) { /* already 60 */ }
+      else if (digits.startsWith('0')) digits = '60' + digits.substring(1);
+      else if (digits.startsWith('1')) digits = '60' + digits;
+      else if (digits) digits = '60' + digits;
+
+      if (digits.length < 9) {
+        showError('Please enter a valid Malaysian mobile number (e.g. 16 315 1671 or 016 315 1671).');
+        return;
+      }
+      const cleanPhone = '+' + digits;
 
       if (!password || password.length < 6) {
         showError('Please enter a password of at least 6 characters.');
@@ -557,7 +747,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name,
-            phone,
+            username,
+            phone: cleanPhone,
             email,
             password,
             roles: Array.from(selectedRoles),
@@ -576,8 +767,34 @@
         document.getElementById('welcomeTitle').textContent = `Welcome to the Team, ${name}!`;
         document.getElementById('welcomeText').innerHTML = `
           Thank you for registering! Your volunteer profile and member account have been created.<br><br>
-          You can now download the <strong>ChurchFlow Mobile App</strong> or log into the <strong>Web App</strong> using your phone/email and the password you just set.
+          You can now log into <strong>ChurchFlow</strong> using your username (<strong>@${data.credentials?.username || username}</strong>) or first name and the password you set.
         `;
+
+        // Render confirmed credentials
+        const credsWrap = document.getElementById('confirmedCredentials');
+        credsWrap.innerHTML = `
+          <div class="credentials-box">
+            <div class="cred-title">🔑 Your Confirmed Login Credentials</div>
+            <div class="cred-row">
+              <span class="cred-label">Username:</span>
+              <span class="cred-val">@${data.credentials?.username || username}</span>
+            </div>
+            <div class="cred-row">
+              <span class="cred-label">WhatsApp Mobile:</span>
+              <span class="cred-val">${data.credentials?.phone || cleanPhone}</span>
+            </div>
+            ${data.credentials?.email ? `
+            <div class="cred-row">
+              <span class="cred-label">Email:</span>
+              <span class="cred-val">${data.credentials.email}</span>
+            </div>` : ''}
+            <div class="cred-row">
+              <span class="cred-label">Password:</span>
+              <span class="cred-val">•••••••• (as set)</span>
+            </div>
+          </div>
+        `;
+
         const summaryWrap = document.getElementById('selectedRolesSummary');
         summaryWrap.innerHTML = '';
         Array.from(selectedRoles).forEach(r => {
@@ -587,20 +804,7 @@
           summaryWrap.appendChild(badge);
         });
 
-        // Add action buttons
-        const actionBtns = document.createElement('div');
-        actionBtns.style.cssText = 'display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;margin-bottom:20px;';
-        actionBtns.innerHTML = `
-          <a href="/churchflow.apk" style="display:inline-flex;align-items:center;gap:6px;background:var(--primary);color:#fff;text-decoration:none;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:700;">
-            📱 Download Mobile App
-          </a>
-          <a href="/" style="display:inline-flex;align-items:center;gap:6px;background:var(--card-inner);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:700;">
-            💻 Sign In on Web
-          </a>
-        `;
-        successCard.appendChild(actionBtns);
         successCard.style.display = 'block';
-
       } catch (err) {
         showError(err.message || 'Submission failed. Please check your connection.');
         submitBtn.disabled = false;
@@ -614,7 +818,10 @@
       errorBox.style.display = 'block';
     }
 
-    window.addEventListener('DOMContentLoaded', loadPositions);
+    window.addEventListener('DOMContentLoaded', () => {
+      loadPositions();
+      initUsernameListeners();
+    });
   </script>
 </body>
 </html>

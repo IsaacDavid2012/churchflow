@@ -76,10 +76,10 @@ export default function LoginScreen({ onLoginSuccess, isDark = false }) {
 
           {/* Form */}
           <View style={styles.form}>
-            <Text style={[styles.label, { color: textPrimary }]}>USERNAME</Text>
+            <Text style={[styles.label, { color: textPrimary }]}>USERNAME OR FIRST NAME</Text>
             <TextInput
               style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: textPrimary }]}
-              placeholder="Enter your username"
+              placeholder="e.g. danielraj or Daniel"
               placeholderTextColor="#94a3b8"
               value={username}
               onChangeText={setUsername}
